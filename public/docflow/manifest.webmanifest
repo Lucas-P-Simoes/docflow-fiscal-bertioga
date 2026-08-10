@@ -1,0 +1,10 @@
+{
+  "name": "DocFlow — Assistente de Documentos",
+  "short_name": "DocFlow",
+  "description": "Crie relatórios fotográficos e folhas de cota em Word direto do navegador.",
+  "lang": "pt-BR",
+  "start_url": "./",
+  "display": "standalone",
+  "background_color": "#f3f5f2",
+  "theme_color": "#17211d"
+}
