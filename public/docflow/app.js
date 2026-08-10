@@ -437,7 +437,6 @@ function renderHome() {
   return `<section class="document-section">
     <div class="section-intro">
       <div><span class="eyebrow eyebrow-dark">Escolha o documento</span><h2>O que você quer preparar?</h2></div>
-      <p>Seus arquivos são processados no dispositivo. A OpenAI só recebe uma imagem ou texto quando você aciona um recurso de IA.</p>
     </div>
     <div class="document-grid">
       <article class="document-card" tabindex="0" role="button" data-action="start-report">
