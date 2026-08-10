@@ -2,8 +2,40 @@
 
 const REPORT_STEPS = ["Informações", "Fotografias", "Conteúdo e formato", "Revisão"];
 const COTA_STEPS = ["Conteúdo", "Revisão e download"];
+const CORRESPONDENCE_STEPS = ["Dados do documento", "Conteúdo", "Revisão e download"];
+const CORRESPONDENCE_TYPES = {
+  memorando: {
+    label: "Memorando",
+    article: "o",
+    completed: "concluído",
+    description: "Comunicação interna objetiva entre setores, unidades ou responsáveis.",
+    recipientPrefix: "Ao(À)",
+  },
+  oficio: {
+    label: "Ofício",
+    article: "o",
+    completed: "concluído",
+    description: "Comunicação formal dirigida a órgãos, entidades ou destinatários externos.",
+    recipientPrefix: "Ao(À) Senhor(a)",
+  },
+  notificacao: {
+    label: "Notificação",
+    article: "a",
+    completed: "concluída",
+    description: "Comunicação formal de ciência, solicitação, ocorrência ou providência.",
+    recipientPrefix: "Destinatário",
+  },
+  advertencia: {
+    label: "Advertência",
+    article: "a",
+    completed: "concluída",
+    description: "Registro formal de orientação ou advertência, com fatos informados pelo usuário.",
+    recipientPrefix: "Destinatário",
+  },
+};
 const MAX_COTA_TEXT = 2500;
 const MAX_COTA_LINES = 32;
+const MAX_CORRESPONDENCE_TEXT = 7000;
 const ACCEPTED_IMAGES = ["image/jpeg", "image/png", "image/bmp", "image/gif", "image/webp"];
 
 const DEFAULT_RESPONSIBLES = [
@@ -31,6 +63,12 @@ const COTA_PROMPT = `Você é exclusivamente um revisor de texto administrativo,
 Preserve rigorosamente o significado e todas as informações existentes. Não acrescente fato, nome, cargo, setor, local, endereço, data, número, protocolo, lei, prazo, causa, risco, diagnóstico, medida técnica ou conclusão que não esteja no texto-base. Não transforme uma constatação simples em laudo técnico. Não acrescente título, saudação, assunto, assinatura nem comentários sobre a revisão.
 
 Mantenha aproximadamente o mesmo tamanho do original e retorne somente o texto final, sem aspas e sem introdução.`;
+
+const CORRESPONDENCE_PROMPT = `Você é exclusivamente um revisor de correspondência administrativa, não um autor criativo. Reescreva o texto-base em português formal, claro, objetivo e adequado ao tipo de documento informado. Faça apenas correções de ortografia, concordância, pontuação, coesão e formalidade.
+
+Preserve rigorosamente o significado e todas as informações existentes. Não acrescente fato, nome, cargo, setor, local, endereço, data, número, protocolo, lei, prazo, causa, penalidade, obrigação, risco, diagnóstico ou conclusão que não esteja no texto-base. Não acrescente cabeçalho, título, assunto, destinatário, saudação, despedida, assinatura nem comentários sobre a revisão.
+
+Retorne somente o corpo do texto revisado, sem aspas e sem introdução.`;
 
 const elements = {
   view: document.querySelector("#view"),
@@ -75,6 +113,7 @@ const state = {
   },
   report: createReportState(persisted),
   cota: createCotaState(persisted),
+  correspondence: createCorrespondenceState(persisted),
   analysis: { running: false, total: 0, done: 0 },
   generation: { running: false, progress: 0, message: "" },
   lastDownload: null,
@@ -115,6 +154,25 @@ function createCotaState(saved = {}) {
     year: String(new Date().getFullYear()),
     baseText: "",
     finalText: "",
+    complete: false,
+  };
+}
+
+function createCorrespondenceState(saved = {}) {
+  return {
+    kind: "memorando",
+    organization: saved.organization || "",
+    department: saved.department || "",
+    number: "",
+    place: "",
+    date: todayInputValue(),
+    recipient: "",
+    recipientRole: "",
+    subject: "",
+    baseText: "",
+    finalText: "",
+    signer: "",
+    signerRole: "",
     complete: false,
   };
 }
@@ -163,8 +221,8 @@ function scheduleSave() {
       const preferences = {
         model: state.api.model,
         customModel: state.api.customModel,
-        organization: state.report.organization || state.cota.organization,
-        department: state.report.department || state.cota.department,
+        organization: state.report.organization || state.cota.organization || state.correspondence.organization,
+        department: state.report.department || state.cota.department || state.correspondence.department,
         responsibleOptions: state.report.responsibleOptions,
         responsibles: state.report.responsibles,
         onePerPage: state.report.onePerPage,
@@ -317,26 +375,42 @@ function render() {
     elements.view.innerHTML = renderSuccess();
   } else {
     elements.actionBar.classList.remove("is-hidden");
-    elements.view.innerHTML = state.flow === "report" ? renderReport() : renderCota();
+    elements.view.innerHTML = state.flow === "report"
+      ? renderReport()
+      : state.flow === "cota"
+        ? renderCota()
+        : renderCorrespondence();
     configureActionBar();
   }
 }
 
 function currentData() {
-  return state.flow === "report" ? state.report : state.cota;
+  if (state.flow === "report") return state.report;
+  if (state.flow === "cota") return state.cota;
+  return state.correspondence;
 }
 
 function currentSteps() {
-  return state.flow === "report" ? REPORT_STEPS : COTA_STEPS;
+  if (state.flow === "report") return REPORT_STEPS;
+  if (state.flow === "cota") return COTA_STEPS;
+  return CORRESPONDENCE_STEPS;
 }
 
 function renderSidebar() {
-  const report = state.flow === "report";
-  elements.flowEyebrow.textContent = report ? "Relatório fotográfico" : "Folha de cota";
-  elements.flowTitle.textContent = report ? "Monte seu relatório" : "Prepare o despacho";
-  elements.flowDescription.textContent = report
-    ? "Organize informações, fotos e assinaturas."
-    : "Revise a redação e baixe o Word pronto.";
+  if (state.flow === "report") {
+    elements.flowEyebrow.textContent = "Relatório fotográfico";
+    elements.flowTitle.textContent = "Monte seu relatório";
+    elements.flowDescription.textContent = "Organize informações, fotos e assinaturas.";
+  } else if (state.flow === "cota") {
+    elements.flowEyebrow.textContent = "Folha de cota";
+    elements.flowTitle.textContent = "Prepare o despacho";
+    elements.flowDescription.textContent = "Revise a redação e baixe o Word pronto.";
+  } else {
+    const type = correspondenceType();
+    elements.flowEyebrow.textContent = type.label;
+    elements.flowTitle.textContent = `Prepare ${type.article} ${type.label.toLowerCase()}`;
+    elements.flowDescription.textContent = "Preencha os dados, revise o conteúdo e baixe o Word.";
+  }
 
   elements.stepNav.innerHTML = currentSteps()
     .map((label, index) => {
@@ -360,31 +434,7 @@ function configureActionBar() {
 }
 
 function renderHome() {
-  return `<section class="hero">
-    <div class="hero-copy">
-      <span class="eyebrow eyebrow-dark">Assistente de documentos</span>
-      <h1>Do campo ao Word, <em>sem complicação.</em></h1>
-      <p>Organize fotografias, revise textos com a sua própria IA e gere documentos profissionais direto do navegador.</p>
-      <div class="hero-points">
-        <span class="hero-point">Sem instalação</span>
-        <span class="hero-point">IA opcional</span>
-        <span class="hero-point">Download em Word</span>
-      </div>
-    </div>
-    <div class="hero-preview" aria-hidden="true">
-      <div class="paper-preview">
-        <div class="paper-kicker"></div><div class="paper-title"></div>
-        <div class="paper-line"></div><div class="paper-line short"></div>
-        <div class="paper-photo"></div><div class="paper-line"></div><div class="paper-line short"></div>
-      </div>
-      <div class="paper-preview">
-        <div class="paper-kicker"></div><div class="paper-title"></div>
-        <div class="paper-line short"></div><div class="paper-photo"></div>
-        <div class="paper-line"></div><div class="paper-line"></div><div class="paper-line short"></div>
-      </div>
-    </div>
-  </section>
-  <section class="document-section">
+  return `<section class="document-section">
     <div class="section-intro">
       <div><span class="eyebrow eyebrow-dark">Escolha o documento</span><h2>O que você quer preparar?</h2></div>
       <p>Seus arquivos são processados no dispositivo. A OpenAI só recebe uma imagem ou texto quando você aciona um recurso de IA.</p>
@@ -401,6 +451,30 @@ function renderHome() {
         <h3>Folha de cota</h3>
         <p>Transforme uma anotação em redação administrativa e distribua o texto em uma folha pautada.</p>
         <span class="card-link">Preparar folha <span aria-hidden="true">→</span></span>
+      </article>
+      <article class="document-card is-admin" tabindex="0" role="button" data-action="start-correspondence" data-kind="memorando">
+        <span class="card-number" aria-hidden="true">03</span><span class="card-icon" aria-hidden="true">M</span>
+        <h3>Memorando</h3>
+        <p>Crie uma comunicação interna objetiva entre setores, unidades ou responsáveis.</p>
+        <span class="card-link">Criar memorando <span aria-hidden="true">→</span></span>
+      </article>
+      <article class="document-card is-admin" tabindex="0" role="button" data-action="start-correspondence" data-kind="oficio">
+        <span class="card-number" aria-hidden="true">04</span><span class="card-icon" aria-hidden="true">O</span>
+        <h3>Ofício</h3>
+        <p>Prepare uma comunicação formal para órgãos, entidades ou destinatários externos.</p>
+        <span class="card-link">Criar ofício <span aria-hidden="true">→</span></span>
+      </article>
+      <article class="document-card is-alert" tabindex="0" role="button" data-action="start-correspondence" data-kind="notificacao">
+        <span class="card-number" aria-hidden="true">05</span><span class="card-icon" aria-hidden="true">N</span>
+        <h3>Notificação</h3>
+        <p>Formalize uma ciência, solicitação, ocorrência ou providência em um documento claro.</p>
+        <span class="card-link">Criar notificação <span aria-hidden="true">→</span></span>
+      </article>
+      <article class="document-card is-alert" tabindex="0" role="button" data-action="start-correspondence" data-kind="advertencia">
+        <span class="card-number" aria-hidden="true">06</span><span class="card-icon" aria-hidden="true">A</span>
+        <h3>Advertência</h3>
+        <p>Registre uma orientação ou advertência formal usando apenas os fatos informados.</p>
+        <span class="card-link">Criar advertência <span aria-hidden="true">→</span></span>
       </article>
     </div>
   </section>`;
@@ -597,6 +671,75 @@ function renderCotaReview() {
   ${!isApiReady() ? `<div class="notice is-warning"><span aria-hidden="true">✦</span><span>Configure sua chave da OpenAI para usar a revisão automática, ou continue com a edição manual.</span></div>` : `<div class="notice"><span aria-hidden="true">✓</span><span>IA configurada com <strong>${e(modelDisplayName(getSelectedModel()))}</strong>. A revisão só será enviada quando você clicar no botão.</span></div>`}`;
 }
 
+function correspondenceType() {
+  return CORRESPONDENCE_TYPES[state.correspondence.kind] || CORRESPONDENCE_TYPES.memorando;
+}
+
+function renderCorrespondence() {
+  const renders = [renderCorrespondenceInfo, renderCorrespondenceContent, renderCorrespondenceReview];
+  return renders[state.step]();
+}
+
+function renderCorrespondenceInfo() {
+  const c = state.correspondence;
+  const type = correspondenceType();
+  return `${pageHeading("Etapa 1", `Dados d${type.article === "a" ? "a" : "o"} ${type.label.toLowerCase()}`, type.description)}
+  <section class="panel">
+    ${panelHeader("Identificação institucional", "Estes dados serão usados no cabeçalho do arquivo Word.")}
+    <div class="field-grid">
+      <label class="field"><span>Órgão ou empresa</span><input type="text" data-bind="correspondence.organization" value="${e(c.organization)}" placeholder="Ex.: Secretaria Municipal de Obras" /></label>
+      <label class="field"><span>Departamento ou setor</span><input type="text" data-bind="correspondence.department" value="${e(c.department)}" placeholder="Ex.: Departamento Administrativo" /></label>
+    </div>
+    <div class="field-grid three" style="margin-top: 18px">
+      <label class="field"><span>Número do documento</span><input type="text" data-bind="correspondence.number" value="${e(c.number)}" placeholder="Ex.: 015/2026" /></label>
+      <label class="field"><span>Local</span><input type="text" data-bind="correspondence.place" value="${e(c.place)}" placeholder="Ex.: São Paulo" /></label>
+      <label class="field"><span>Data *</span><input type="date" data-bind="correspondence.date" value="${e(c.date)}" /></label>
+    </div>
+  </section>
+  <section class="panel">
+    ${panelHeader("Destinatário e assunto", "Informe a quem o documento se destina e o tema principal.")}
+    <div class="field-grid">
+      <label class="field"><span>Destinatário *</span><input type="text" data-bind="correspondence.recipient" value="${e(c.recipient)}" placeholder="Nome da pessoa, setor ou entidade" /></label>
+      <label class="field"><span>Cargo, setor ou endereço</span><input type="text" data-bind="correspondence.recipientRole" value="${e(c.recipientRole)}" placeholder="Opcional" /></label>
+    </div>
+    <label class="field stacked"><span>Assunto *</span><input type="text" maxlength="220" data-bind="correspondence.subject" value="${e(c.subject)}" placeholder="Resuma o motivo do documento" /></label>
+  </section>`;
+}
+
+function renderCorrespondenceContent() {
+  const c = state.correspondence;
+  const type = correspondenceType();
+  return `${pageHeading("Etapa 2", `Escreva ${type.article} ${type.label.toLowerCase()}`, "Registre somente os fatos, solicitações e orientações que devem constar no documento.")}
+  <section class="panel">
+    ${panelHeader("Conteúdo", "Você poderá editar o texto e solicitar uma revisão opcional da IA na próxima etapa.")}
+    <label class="field"><span>Corpo do documento *</span><textarea data-bind="correspondence.baseText" maxlength="${MAX_CORRESPONDENCE_TEXT}" placeholder="Escreva o conteúdo do documento…">${e(c.baseText)}</textarea><span class="text-counter"><span>Use parágrafos para organizar as informações</span><span>${c.baseText.length}/${MAX_CORRESPONDENCE_TEXT}</span></span></label>
+  </section>
+  <section class="panel">
+    ${panelHeader("Assinatura", "Identifique a pessoa responsável pela emissão do documento.")}
+    <div class="field-grid">
+      <label class="field"><span>Nome do signatário *</span><input type="text" data-bind="correspondence.signer" value="${e(c.signer)}" placeholder="Nome completo" /></label>
+      <label class="field"><span>Cargo ou função</span><input type="text" data-bind="correspondence.signerRole" value="${e(c.signerRole)}" placeholder="Ex.: Diretor do Departamento" /></label>
+    </div>
+  </section>
+  <div class="notice is-warning"><span aria-hidden="true">!</span><span>A IA será orientada a revisar a linguagem sem inventar fatos, datas, leis, prazos ou penalidades. Confira o texto antes de gerar o Word.</span></div>`;
+}
+
+function renderCorrespondenceReview() {
+  const c = state.correspondence;
+  const type = correspondenceType();
+  return `${pageHeading("Etapa 3", `Revise ${type.article} ${type.label.toLowerCase()}`, "Edite livremente, solicite uma revisão opcional da IA ou gere o Word com o texto atual.")}
+  <section class="panel">
+    ${panelHeader("Texto final", "Somente o conteúdo deste campo será incluído como corpo do documento.", `<button class="button button-secondary" type="button" data-action="improve-correspondence">✦ Revisar com IA</button>`)}
+    <label class="field"><span>Redação final *</span><textarea data-bind="correspondence.finalText" maxlength="${MAX_CORRESPONDENCE_TEXT}">${e(c.finalText)}</textarea><span class="text-counter"><span>Revise nomes, datas e informações sensíveis</span><span>${c.finalText.length}/${MAX_CORRESPONDENCE_TEXT}</span></span></label>
+  </section>
+  <div class="summary-grid">
+    ${summaryCard("Documento", type.label, c.number || "Sem número")}
+    ${summaryCard("Destinatário", c.recipient, c.recipientRole || "Sem complemento")}
+    ${summaryCard("Emissão", formatDate(c.date), c.place || "Local não informado")}
+  </div>
+  ${!isApiReady() ? `<div class="notice is-warning"><span aria-hidden="true">✦</span><span>Configure sua chave da OpenAI para usar a revisão automática, ou continue com a edição manual.</span></div>` : `<div class="notice"><span aria-hidden="true">✓</span><span>IA configurada com <strong>${e(modelDisplayName(getSelectedModel()))}</strong>. O texto só será enviado quando você clicar no botão.</span></div>`}`;
+}
+
 function renderProgress() {
   return `<section class="panel progress-card">
     <div class="progress-orbit"><div class="progress-mark">D</div></div>
@@ -607,11 +750,15 @@ function renderProgress() {
 }
 
 function renderSuccess() {
-  const report = state.flow === "report";
+  const documentLabel = state.flow === "report"
+    ? "O relatório fotográfico"
+    : state.flow === "cota"
+      ? "A folha de cota"
+      : `${correspondenceType().article.toUpperCase()} ${correspondenceType().label.toLowerCase()}`;
   return `<section class="panel success-card">
     <div class="success-mark">✓</div>
     <h2>Documento criado</h2>
-    <p>${report ? "O relatório fotográfico foi gerado e o download foi iniciado." : "A folha de cota foi gerada e o download foi iniciado."} Se necessário, use o botão abaixo para baixar novamente.</p>
+    <p>${documentLabel} foi gerado e o download foi iniciado. Se necessário, use o botão abaixo para baixar novamente.</p>
     <div class="success-actions">
       <button class="button button-secondary" type="button" data-action="home">Voltar ao início</button>
       <button class="button button-secondary" type="button" data-action="new-document">Criar outro</button>
@@ -646,8 +793,15 @@ function wrapCotaText(text) {
   return lines;
 }
 
-function startFlow(flow) {
+function startFlow(flow, kind = "") {
   state.flow = flow;
+  if (flow === "correspondence" && CORRESPONDENCE_TYPES[kind]) {
+    if (state.correspondence.kind !== kind) {
+      state.correspondence = createCorrespondenceState(readStorage("docflow-preferences", {}));
+    }
+    state.correspondence.kind = kind;
+    state.correspondence.complete = false;
+  }
   state.step = 0;
   state.generation = { running: false, progress: 0, message: "" };
   currentData().complete = false;
@@ -674,13 +828,17 @@ function nextStep() {
     if (state.flow === "cota" && state.step === 0 && !state.cota.finalText.trim()) {
       state.cota.finalText = state.cota.baseText.trim();
     }
+    if (state.flow === "correspondence" && state.step === 1 && !state.correspondence.finalText.trim()) {
+      state.correspondence.finalText = state.correspondence.baseText.trim();
+    }
     state.step += 1;
     render();
     focusMain();
     return;
   }
   if (state.flow === "report") generateReport();
-  else generateCota();
+  else if (state.flow === "cota") generateCota();
+  else generateCorrespondence();
 }
 
 function previousStep() {
@@ -716,6 +874,23 @@ function validateCurrentStep() {
         showMessage({ title: "Selecione um responsável", text: "Escolha pelo menos uma pessoa para a área de assinaturas." });
         return false;
       }
+    }
+    return true;
+  }
+
+  if (state.flow === "correspondence") {
+    const c = state.correspondence;
+    if (state.step === 0 && (!c.date || !c.recipient.trim() || !c.subject.trim())) {
+      showMessage({ title: "Complete os dados do documento", text: "Informe a data, o destinatário e o assunto antes de continuar." });
+      return false;
+    }
+    if (state.step === 1 && (!c.baseText.trim() || !c.signer.trim())) {
+      showMessage({ title: "Complete o conteúdo", text: "Informe o corpo do documento e o nome do signatário antes de continuar." });
+      return false;
+    }
+    if (state.step === 2 && !c.finalText.trim()) {
+      showMessage({ title: "Texto final vazio", text: "Mantenha algum conteúdo antes de gerar o documento." });
+      return false;
     }
     return true;
   }
@@ -769,6 +944,10 @@ function updateCounter(target) {
     const chars = document.querySelector("#cotaCharCount");
     if (line) line.textContent = `${metrics.lines} de ${MAX_COTA_LINES} linhas estimadas`;
     if (chars) chars.textContent = `${metrics.characters}/${MAX_COTA_TEXT}`;
+  }
+  if (["correspondence.baseText", "correspondence.finalText"].includes(target.dataset.bind)) {
+    const counter = target.parentElement.querySelector(".text-counter span:last-child");
+    if (counter) counter.textContent = `${target.value.length}/${MAX_CORRESPONDENCE_TEXT}`;
   }
 }
 
@@ -1123,6 +1302,36 @@ async function improveCota() {
   }
 }
 
+async function improveCorrespondence() {
+  if (!isApiReady()) {
+    openApiConfiguration();
+    showToast("Configure sua API para revisar o texto.");
+    return;
+  }
+  const c = state.correspondence;
+  const source = c.finalText.trim() || c.baseText.trim();
+  if (!source) return;
+  state.generation = { running: true, progress: 32, message: `Revisando ${correspondenceType().article} ${correspondenceType().label.toLowerCase()} com a IA…` };
+  render();
+  try {
+    const reviewed = await callOpenAI({
+      prompt: `${CORRESPONDENCE_PROMPT}\n\nTIPO DE DOCUMENTO: ${correspondenceType().label}\n\nTEXTO-BASE:\n${source}`,
+      maxOutputTokens: 2200,
+    });
+    if (reviewed.length > MAX_CORRESPONDENCE_TEXT) {
+      throw new Error("A revisão ficou maior que o limite do documento. O texto anterior foi mantido.");
+    }
+    c.finalText = reviewed.trim();
+    state.generation.running = false;
+    render();
+    showToast("Texto revisado. Confira cada informação antes de gerar o Word.");
+  } catch (error) {
+    state.generation.running = false;
+    render();
+    showMessage({ title: "A revisão não foi concluída", text: error.message, kind: "error" });
+  }
+}
+
 function setGenerationProgress(progress, message) {
   state.generation.progress = progress;
   state.generation.message = message;
@@ -1174,6 +1383,30 @@ async function generateCota() {
     state.generation.running = false;
     render();
     showMessage({ title: "Não foi possível gerar a folha de cota", text: error.message, kind: "error" });
+  }
+}
+
+async function generateCorrespondence() {
+  if (!validateCurrentStep()) return;
+  if (!window.docx) {
+    showMessage({ title: "Gerador indisponível", text: "O componente de criação do Word não foi carregado. Atualize a página e tente novamente.", kind: "error" });
+    return;
+  }
+  const type = correspondenceType();
+  state.generation = { running: true, progress: 12, message: `Montando ${type.article} ${type.label.toLowerCase()}…` };
+  render();
+  try {
+    const blob = await buildCorrespondenceDocument((progress, message) => setGenerationProgress(progress, message));
+    const suffix = state.correspondence.number || state.correspondence.date;
+    const filename = `${slugify(type.label)}${suffix ? `-${slugify(suffix)}` : ""}.docx`;
+    finishDownload(blob, filename);
+    state.correspondence.complete = true;
+    state.generation.running = false;
+    render();
+  } catch (error) {
+    state.generation.running = false;
+    render();
+    showMessage({ title: `Não foi possível gerar ${type.article} ${type.label.toLowerCase()}`, text: error.message, kind: "error" });
   }
 }
 
@@ -1449,6 +1682,73 @@ async function buildCotaDocument(onProgress) {
   return blob;
 }
 
+async function buildCorrespondenceDocument(onProgress) {
+  const {
+    Document, Packer, Paragraph, TextRun, AlignmentType,
+  } = window.docx;
+  const c = state.correspondence;
+  const type = correspondenceType();
+  onProgress(28, "Organizando os dados do documento…");
+
+  const documentNumber = c.number.trim() ? ` nº ${c.number.trim()}` : "";
+  const placeAndDate = [c.place.trim(), formatDate(c.date)].filter(Boolean).join(", ");
+  const recipientLine = `${type.recipientPrefix}: ${c.recipient.trim()}`;
+  const children = [
+    new Paragraph({
+      alignment: AlignmentType.CENTER,
+      spacing: { before: 120, after: 260 },
+      children: [new TextRun({ text: `${type.label.toUpperCase()}${documentNumber}`, bold: true, size: 28 })],
+    }),
+    new Paragraph({
+      alignment: AlignmentType.RIGHT,
+      spacing: { after: 260 },
+      children: [new TextRun({ text: placeAndDate, size: 21 })],
+    }),
+    new Paragraph({ spacing: { after: 70 }, children: [new TextRun({ text: recipientLine, bold: true, size: 21 })] }),
+  ];
+
+  if (c.recipientRole.trim()) {
+    children.push(new Paragraph({ spacing: { after: 180 }, children: [new TextRun({ text: c.recipientRole.trim(), size: 21, color: "405049" })] }));
+  }
+
+  children.push(new Paragraph({
+    spacing: { before: 120, after: 220 },
+    children: [
+      new TextRun({ text: "Assunto: ", bold: true, size: 21 }),
+      new TextRun({ text: c.subject.trim(), size: 21 }),
+    ],
+  }));
+
+  onProgress(55, "Formatando o conteúdo…");
+  children.push(...paragraphsFromText(c.finalText));
+  children.push(
+    new Paragraph({ spacing: { before: 420, after: 70 }, alignment: AlignmentType.CENTER, children: [new TextRun({ text: "________________________________________", color: "68756F", size: 20 })] }),
+    new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 20 }, children: [new TextRun({ text: c.signer.trim(), bold: true, size: 21 })] }),
+  );
+  if (c.signerRole.trim()) {
+    children.push(new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: c.signerRole.trim(), size: 20, color: "405049" })] }));
+  }
+
+  onProgress(82, "Aplicando cabeçalho e paginação…");
+  const header = await headerFor({ organization: c.organization, department: c.department, logo: null });
+  const documentFile = new Document({
+    creator: "DocFlow",
+    title: `${type.label}${documentNumber}`,
+    description: `${type.label} gerado no DocFlow`,
+    styles: defaultDocumentStyles(),
+    sections: [{
+      properties: { page: { size: { width: 11906, height: 16838 }, margin: { top: 1134, right: 1134, bottom: 1134, left: 1134, header: 500, footer: 500 }, pageNumbers: { start: 1 } } },
+      headers: { default: header },
+      footers: { default: footer() },
+      children,
+    }],
+  });
+  onProgress(96, "Compactando o arquivo Word…");
+  const blob = await Packer.toBlob(documentFile);
+  onProgress(100, `${type.label} ${type.completed}.`);
+  return blob;
+}
+
 function resetCurrentDocument() {
   if (state.flow === "report") {
     state.report.photos.forEach((photo) => URL.revokeObjectURL(photo.url));
@@ -1456,8 +1756,12 @@ function resetCurrentDocument() {
     if (state.report.introImage?.url) URL.revokeObjectURL(state.report.introImage.url);
     state.report.topics.forEach((topic) => topic.image?.url && URL.revokeObjectURL(topic.image.url));
     state.report = createReportState(readStorage("docflow-preferences", {}));
-  } else {
+  } else if (state.flow === "cota") {
     state.cota = createCotaState(readStorage("docflow-preferences", {}));
+  } else {
+    const kind = state.correspondence.kind;
+    state.correspondence = createCorrespondenceState(readStorage("docflow-preferences", {}));
+    state.correspondence.kind = kind;
   }
   state.step = 0;
   state.generation = { running: false, progress: 0, message: "" };
@@ -1475,6 +1779,7 @@ async function handleAction(action, target) {
   if (action === "home") return goHome();
   if (action === "start-report") return startFlow("report");
   if (action === "start-cota") return startFlow("cota");
+  if (action === "start-correspondence") return startFlow("correspondence", target.dataset.kind);
   if (action === "previous-step") return previousStep();
   if (action === "next-step") return nextStep();
   if (action === "go-step") {
@@ -1522,6 +1827,7 @@ async function handleAction(action, target) {
     return;
   }
   if (action === "improve-cota") return improveCota();
+  if (action === "improve-correspondence") return improveCorrespondence();
   if (action === "download-again" && state.lastDownload) return triggerDownload(state.lastDownload.url, state.lastDownload.filename);
   if (action === "new-document") return resetCurrentDocument();
 }

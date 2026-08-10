@@ -1,7 +1,7 @@
 {
   "name": "DocFlow — Assistente de Documentos",
   "short_name": "DocFlow",
-  "description": "Crie relatórios fotográficos e folhas de cota em Word direto do navegador.",
+  "description": "Crie relatórios, folhas de cota, memorandos, ofícios, notificações e advertências em Word.",
   "lang": "pt-BR",
   "start_url": "./",
   "display": "standalone",
