@@ -35,6 +35,14 @@ test("ships the standard letterhead template and fills it in place", async () =>
   assert.match(app, /const processNumber = String\(c\.processNumber \|\| ""\)\.trim\(\)/);
   assert.doesNotMatch(app, /c\.sheetNumber \? ` \$\{c\.sheetNumber\}`/);
   assert.match(app, /Arial 12 e alinhamento justificado/);
+  assert.match(app, /useAI:\s*false/);
+  assert.match(app, /contextImage:\s*null/);
+  assert.match(app, /data-bind="cota\.useAI"/);
+  assert.match(app, /renderSingleImageUpload\("cota-context"/);
+  assert.match(app, /imageDataUrl = await optimizeImage\(c\.contextImage\.file\)/);
+  assert.match(app, /imageDataUrl,/);
+  assert.match(app, /state\.cota\.finalText = state\.cota\.baseText\.trim\(\)/);
+  assert.match(app, /A imagem será enviada somente para a análise e não aparecerá no Word/);
   assert.match(app, /line_\$\{String\(index \+ 1\)\.padStart\(2, "0"\)\}/);
   assert.doesNotMatch(app, /Montando a folha pautada/);
 });

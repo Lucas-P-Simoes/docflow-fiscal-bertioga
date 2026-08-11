@@ -158,6 +158,8 @@ function createCotaState(saved = {}) {
     year: String(new Date().getFullYear()),
     baseText: "",
     finalText: "",
+    useAI: false,
+    contextImage: null,
     complete: false,
   };
 }
@@ -638,7 +640,7 @@ function renderCota() {
 function renderCotaContent() {
   const c = state.cota;
   const metrics = cotaMetrics(c.baseText);
-  return `${pageHeading("Etapa 1", "Escreva a ideia principal", "Informe o texto-base e os dados do processo. A IA pode revisar a redação na próxima etapa.")}
+  return `${pageHeading("Etapa 1", "Escreva a ideia principal", "Informe o texto-base, escolha se deseja assistência da IA e revise o resultado antes de gerar o Word.")}
   <section class="panel">
     ${panelHeader("Identificação do documento", "O timbre, o cabeçalho, as margens e a pauta virão do modelo padrão fornecido. O conteúdo será formatado em Arial 12 e justificado.")}
     <div class="field-grid three">
@@ -651,15 +653,28 @@ function renderCotaContent() {
     ${panelHeader("Texto-base", "Escreva somente os fatos e encaminhamentos que devem constar no processo.")}
     <label class="field"><span>Conteúdo *</span><textarea data-bind="cota.baseText" maxlength="${MAX_COTA_TEXT}" placeholder="Ex.: Em vistoria realizada no local, foi constatado…">${e(c.baseText)}</textarea><span class="text-counter"><span id="cotaLineCount">${metrics.lines} de ${MAX_COTA_LINES} linhas estimadas</span><span id="cotaCharCount">${metrics.characters}/${MAX_COTA_TEXT}</span></span></label>
   </section>
-  <div class="notice is-warning"><span aria-hidden="true">!</span><span>A IA será orientada a corrigir a redação sem inventar fatos. Ainda assim, a revisão final é responsabilidade do usuário.</span></div>`;
+  <section class="panel">
+    ${panelHeader("Assistência opcional da IA", "Escolha se o texto deve ser analisado e melhorado antes de preencher a folha de cota.")}
+    <div class="switch-row ai-switch-row">
+      <div class="switch-copy"><strong>Analisar e melhorar com IA</strong><small>Desligado: o texto digitado será usado diretamente, sem envio à OpenAI.</small></div>
+      <label class="switch"><input type="checkbox" data-bind="cota.useAI" ${c.useAI ? "checked" : ""} aria-label="Analisar e melhorar o texto com IA" /><span class="switch-track" aria-hidden="true"></span></label>
+    </div>
+    ${c.useAI ? `<div class="ai-assistance-details">
+      <div><strong class="subsection-label">Imagem de contexto (opcional)</strong><p class="field-help">Anexe uma foto para ajudar a IA a compreender o problema. A imagem será enviada somente para a análise e não aparecerá no Word.</p></div>
+      ${renderSingleImageUpload("cota-context", c.contextImage, "Anexar imagem para a IA", "JPEG, PNG, BMP, GIF ou WebP • até 20 MB")}
+      ${!isApiReady() ? `<div class="notice is-warning compact-notice"><span aria-hidden="true">✦</span><span>Configure sua chave da OpenAI antes de continuar. <button class="inline-button" type="button" data-action="open-api">Configurar agora</button></span></div>` : `<div class="notice compact-notice"><span aria-hidden="true">✓</span><span>A análise usará <strong>${e(modelDisplayName(getSelectedModel()))}</strong>${c.contextImage ? ` e a imagem <strong>${e(c.contextImage.file.name)}</strong>` : ""}.</span></div>`}
+    </div>` : `<div class="notice compact-notice direct-mode-notice"><span aria-hidden="true">✓</span><span><strong>Modo direto.</strong> Ao continuar, somente a sua digitação será levada para a folha de cota.</span></div>`}
+  </section>
+  ${c.useAI ? `<div class="notice is-warning"><span aria-hidden="true">!</span><span>A IA será orientada a melhorar a redação e usar a imagem apenas como contexto, sem inventar fatos. Confira o texto final antes de gerar o Word.</span></div>` : ""}`;
 }
 
 function renderCotaReview() {
   const c = state.cota;
   const metrics = cotaMetrics(c.finalText);
-  return `${pageHeading("Etapa 2", "Revise a redação final", "Você pode editar livremente, pedir uma revisão à IA ou gerar o Word com o texto atual.")}
+  const reviewAction = c.useAI ? `<button class="button button-secondary" type="button" data-action="improve-cota">✦ Analisar novamente com IA</button>` : "";
+  return `${pageHeading("Etapa 2", "Revise a redação final", c.useAI ? "Confira o texto analisado pela IA e faça qualquer ajuste necessário." : "Confira o texto digitado antes de gerar o Word.")}
   <section class="panel">
-    ${panelHeader("Texto final", "O conteúdo será distribuído em até 32 linhas na folha pautada.", `<button class="button button-secondary" type="button" data-action="improve-cota">✦ Revisar com IA</button>`)}
+    ${panelHeader("Texto final", "O conteúdo será distribuído em até 32 linhas na folha pautada.", reviewAction)}
     <label class="field"><span>Redação administrativa *</span><textarea data-bind="cota.finalText" maxlength="${MAX_COTA_TEXT}">${e(c.finalText)}</textarea><span class="text-counter"><span id="cotaLineCount">${metrics.lines} de ${MAX_COTA_LINES} linhas estimadas</span><span id="cotaCharCount">${metrics.characters}/${MAX_COTA_TEXT}</span></span></label>
   </section>
   <div class="summary-grid">
@@ -667,7 +682,7 @@ function renderCotaReview() {
     ${summaryCard("Folha", c.sheetNumber || "Em branco", "Campo editável no Word")}
     ${summaryCard("Capacidade", `${metrics.lines}/${MAX_COTA_LINES} linhas`, `${metrics.characters} caracteres`)}
   </div>
-  ${!isApiReady() ? `<div class="notice is-warning"><span aria-hidden="true">✦</span><span>Configure sua chave da OpenAI para usar a revisão automática, ou continue com a edição manual.</span></div>` : `<div class="notice"><span aria-hidden="true">✓</span><span>IA configurada com <strong>${e(modelDisplayName(getSelectedModel()))}</strong>. A revisão só será enviada quando você clicar no botão.</span></div>`}`;
+  ${c.useAI ? `<div class="notice"><span aria-hidden="true">✦</span><span>Texto analisado com <strong>${e(modelDisplayName(getSelectedModel()))}</strong>${c.contextImage ? ` usando <strong>${e(c.contextImage.file.name)}</strong> como contexto visual` : ""}. Revise todas as informações.</span></div>` : `<div class="notice"><span aria-hidden="true">✓</span><span><strong>Modo direto:</strong> este é o texto digitado por você, sem análise da IA.</span></div>`}`;
 }
 
 function correspondenceType() {
@@ -821,10 +836,14 @@ function focusMain() {
   setTimeout(() => elements.main.focus({ preventScroll: true }), 0);
 }
 
-function nextStep() {
+async function nextStep() {
   if (!validateCurrentStep()) return;
   if (state.step < currentSteps().length - 1) {
-    if (state.flow === "cota" && state.step === 0 && !state.cota.finalText.trim()) {
+    if (state.flow === "cota" && state.step === 0) {
+      if (state.cota.useAI) {
+        await improveCota({ advanceOnSuccess: true });
+        return;
+      }
       state.cota.finalText = state.cota.baseText.trim();
     }
     if (state.flow === "correspondence" && state.step === 1 && !state.correspondence.finalText.trim()) {
@@ -984,6 +1003,7 @@ async function handleFiles(kind, files, id = "") {
   const record = { file, url: URL.createObjectURL(file) };
   if (kind === "report-logo") replaceImageRecord(state.report, "logo", record);
   if (kind === "report-intro") replaceImageRecord(state.report, "introImage", record);
+  if (kind === "cota-context") replaceImageRecord(state.cota, "contextImage", record);
   if (kind === "topic-image") {
     const topic = state.report.topics.find((item) => item.id === id);
     if (topic) replaceImageRecord(topic, "image", record);
@@ -999,6 +1019,7 @@ function replaceImageRecord(owner, key, record) {
 function removeFile(kind, id) {
   if (kind === "report-logo") replaceImageRecord(state.report, "logo", null);
   if (kind === "report-intro") replaceImageRecord(state.report, "introImage", null);
+  if (kind === "cota-context") replaceImageRecord(state.cota, "contextImage", null);
   if (kind === "topic-image") {
     const topic = state.report.topics.find((item) => item.id === id);
     if (topic) replaceImageRecord(topic, "image", null);
@@ -1275,29 +1296,55 @@ function updateAnalysisProgress() {
   }
 }
 
-async function improveCota() {
+async function improveCota({ advanceOnSuccess = false } = {}) {
+  const c = state.cota;
+  if (!c.useAI) {
+    c.finalText = c.baseText.trim();
+    if (advanceOnSuccess) {
+      state.step += 1;
+      render();
+      focusMain();
+    }
+    return true;
+  }
   if (!isApiReady()) {
     openApiConfiguration();
     showToast("Configure sua API para revisar o texto.");
-    return;
+    return false;
   }
-  const source = state.cota.finalText.trim() || state.cota.baseText.trim();
-  if (!source) return;
-  state.generation = { running: true, progress: 32, message: "Revisando a redação com a IA…" };
+  const source = advanceOnSuccess ? c.baseText.trim() : (c.finalText.trim() || c.baseText.trim());
+  if (!source) return false;
+  state.generation = { running: true, progress: 28, message: c.contextImage ? "Preparando a imagem de contexto…" : "Analisando a redação com a IA…" };
   render();
   try {
-    const reviewed = await callOpenAI({ prompt: `${COTA_PROMPT}\n\nTEXTO-BASE:\n${source}`, maxOutputTokens: 1200 });
+    let imageDataUrl = "";
+    if (c.contextImage) {
+      imageDataUrl = await optimizeImage(c.contextImage.file);
+      setGenerationProgress(48, "Imagem preparada. Analisando texto e contexto…");
+    }
+    const imageInstruction = imageDataUrl
+      ? "\n\nCONTEXTO VISUAL: Use a imagem anexada somente para compreender o problema descrito. Não mencione detalhes incertos nem invente fatos que não estejam claros no texto ou na imagem."
+      : "";
+    const reviewed = await callOpenAI({
+      prompt: `${COTA_PROMPT}${imageInstruction}\n\nTEXTO-BASE:\n${source}`,
+      imageDataUrl,
+      maxOutputTokens: 1200,
+    });
     if (reviewed.length > MAX_COTA_TEXT || wrapCotaText(reviewed).length > MAX_COTA_LINES) {
       throw new Error("A revisão ficou maior que a capacidade da folha. O texto anterior foi mantido.");
     }
-    state.cota.finalText = reviewed.trim();
+    c.finalText = reviewed.trim();
     state.generation.running = false;
+    if (advanceOnSuccess) state.step += 1;
     render();
+    if (advanceOnSuccess) focusMain();
     showToast("Texto revisado. Confira cada informação antes de gerar o Word.");
+    return true;
   } catch (error) {
     state.generation.running = false;
     render();
     showMessage({ title: "A revisão não foi concluída", text: error.message, kind: "error" });
+    return false;
   }
 }
 
@@ -1771,6 +1818,7 @@ function resetCurrentDocument() {
     state.report.topics.forEach((topic) => topic.image?.url && URL.revokeObjectURL(topic.image.url));
     state.report = createReportState(readStorage("docflow-preferences", {}));
   } else if (state.flow === "cota") {
+    if (state.cota.contextImage?.url) URL.revokeObjectURL(state.cota.contextImage.url);
     state.cota = createCotaState(readStorage("docflow-preferences", {}));
   } else {
     const kind = state.correspondence.kind;
@@ -1893,6 +1941,7 @@ document.addEventListener("change", (event) => {
       sortPhotos();
       render();
     }
+    if (target.dataset.bind === "cota.useAI") render();
     scheduleSave();
   }
   if (target.dataset.responsible) {

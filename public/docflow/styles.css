@@ -1096,6 +1096,55 @@ textarea::placeholder {
   transform: translateX(18px);
 }
 
+.ai-switch-row {
+  padding-top: 4px;
+}
+
+.ai-assistance-details {
+  display: grid;
+  gap: 14px;
+  padding-top: 18px;
+}
+
+.subsection-label {
+  display: block;
+  font-size: 12px;
+}
+
+.field-help {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 10.5px;
+  line-height: 1.5;
+}
+
+.compact-notice {
+  margin-top: 2px;
+  padding: 11px 13px;
+}
+
+.direct-mode-notice {
+  margin-top: 15px;
+}
+
+.inline-button {
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.inline-button:focus-visible {
+  border-radius: 3px;
+  outline: 2px solid currentColor;
+  outline-offset: 3px;
+}
+
 .responsible-list {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
