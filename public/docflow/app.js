@@ -37,6 +37,7 @@ const MAX_COTA_TEXT = 2500;
 const MAX_COTA_LINES = 32;
 const COTA_TEMPLATE_URL = "templates/MODELO_FOLHA_COTA.docx";
 const COTA_TEXT_STYLE = { font: "Arial", size: 24, language: { value: "pt-BR" } };
+const COTA_HEADER_FIELD_STYLE = { ...COTA_TEXT_STYLE, bold: true, italics: false };
 const MAX_CORRESPONDENCE_TEXT = 7000;
 const ACCEPTED_IMAGES = ["image/jpeg", "image/png", "image/bmp", "image/gif", "image/webp"];
 
@@ -1632,18 +1633,21 @@ async function buildCotaDocument(onProgress) {
 
   onProgress(24, "Carregando o modelo timbrado padrão…");
   const template = await loadCotaTemplate();
+  const sheetNumber = String(c.sheetNumber || "").trim();
+  const processNumber = String(c.processNumber || "").trim();
+  const processYear = String(c.year || "").trim();
   const patches = {
     sheet_number: {
       type: PatchType.PARAGRAPH,
-      children: [new TextRun({ text: c.sheetNumber ? ` ${c.sheetNumber}` : "________", ...COTA_TEXT_STYLE })],
+      children: [new TextRun({ text: sheetNumber || "________", ...COTA_HEADER_FIELD_STYLE })],
     },
     process_number: {
       type: PatchType.PARAGRAPH,
-      children: [new TextRun({ text: c.processNumber || "______________", ...COTA_TEXT_STYLE })],
+      children: [new TextRun({ text: processNumber || "______________", ...COTA_HEADER_FIELD_STYLE })],
     },
     process_year: {
       type: PatchType.PARAGRAPH,
-      children: [new TextRun({ text: c.year || "______", ...COTA_TEXT_STYLE })],
+      children: [new TextRun({ text: processYear || "______", ...COTA_HEADER_FIELD_STYLE })],
     },
   };
   for (let index = 0; index < MAX_COTA_LINES; index += 1) {

@@ -31,6 +31,9 @@ test("ships the standard letterhead template and fills it in place", async () =>
   assert.match(app, /patchDocument/);
   assert.match(app, /keepOriginalStyles:\s*true/);
   assert.match(app, /COTA_TEXT_STYLE\s*=\s*\{\s*font:\s*"Arial",\s*size:\s*24/);
+  assert.match(app, /COTA_HEADER_FIELD_STYLE\s*=\s*\{[^}]*bold:\s*true,\s*italics:\s*false/);
+  assert.match(app, /const processNumber = String\(c\.processNumber \|\| ""\)\.trim\(\)/);
+  assert.doesNotMatch(app, /c\.sheetNumber \? ` \$\{c\.sheetNumber\}`/);
   assert.match(app, /Arial 12 e alinhamento justificado/);
   assert.match(app, /line_\$\{String\(index \+ 1\)\.padStart\(2, "0"\)\}/);
   assert.doesNotMatch(app, /Montando a folha pautada/);
