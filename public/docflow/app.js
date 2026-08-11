@@ -429,36 +429,42 @@ function renderHome() {
     </div>
     <div class="document-grid">
       <article class="document-card" tabindex="0" role="button" data-action="start-report">
+        <span class="card-status is-development">Em desenvolvimento</span>
         <span class="card-number" aria-hidden="true">01</span><span class="card-icon" aria-hidden="true">▧</span>
         <h3>Relatório fotográfico</h3>
         <p>Monte um relatório técnico com introdução, seções, fotografias, descrições e assinaturas.</p>
         <span class="card-link">Começar relatório <span aria-hidden="true">→</span></span>
       </article>
       <article class="document-card is-cota" tabindex="0" role="button" data-action="start-cota">
+        <span class="card-status is-ready">Pronto</span>
         <span class="card-number" aria-hidden="true">02</span><span class="card-icon" aria-hidden="true">≡</span>
         <h3>Folha de cota</h3>
         <p>Transforme uma anotação em redação administrativa e distribua o texto em uma folha pautada.</p>
         <span class="card-link">Preparar folha <span aria-hidden="true">→</span></span>
       </article>
       <article class="document-card is-admin" tabindex="0" role="button" data-action="start-correspondence" data-kind="memorando">
+        <span class="card-status is-development">Em desenvolvimento</span>
         <span class="card-number" aria-hidden="true">03</span><span class="card-icon" aria-hidden="true">M</span>
         <h3>Memorando</h3>
         <p>Crie uma comunicação interna objetiva entre setores, unidades ou responsáveis.</p>
         <span class="card-link">Criar memorando <span aria-hidden="true">→</span></span>
       </article>
       <article class="document-card is-admin" tabindex="0" role="button" data-action="start-correspondence" data-kind="oficio">
+        <span class="card-status is-development">Em desenvolvimento</span>
         <span class="card-number" aria-hidden="true">04</span><span class="card-icon" aria-hidden="true">O</span>
         <h3>Ofício</h3>
         <p>Prepare uma comunicação formal para órgãos, entidades ou destinatários externos.</p>
         <span class="card-link">Criar ofício <span aria-hidden="true">→</span></span>
       </article>
       <article class="document-card is-alert" tabindex="0" role="button" data-action="start-correspondence" data-kind="notificacao">
+        <span class="card-status is-development">Em desenvolvimento</span>
         <span class="card-number" aria-hidden="true">05</span><span class="card-icon" aria-hidden="true">N</span>
         <h3>Notificação</h3>
         <p>Formalize uma ciência, solicitação, ocorrência ou providência em um documento claro.</p>
         <span class="card-link">Criar notificação <span aria-hidden="true">→</span></span>
       </article>
       <article class="document-card is-alert" tabindex="0" role="button" data-action="start-correspondence" data-kind="advertencia">
+        <span class="card-status is-development">Em desenvolvimento</span>
         <span class="card-number" aria-hidden="true">06</span><span class="card-icon" aria-hidden="true">A</span>
         <h3>Advertência</h3>
         <p>Registre uma orientação ou advertência formal usando apenas os fatos informados.</p>

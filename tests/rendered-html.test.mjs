@@ -83,3 +83,17 @@ test("proxies OpenAI requests and keeps API keys out of browser storage", async 
   assert.match(worker, /https:\/\/api\.openai\.com\/v1\/responses/);
   assert.match(worker, /"Cache-Control": "no-store"/);
 });
+
+
+test("labels the cota as ready and all other document cards as in development", async () => {
+  const [app, styles] = await Promise.all([
+    readFile(new URL("public/docflow/app.js", siteRoot), "utf8"),
+    readFile(new URL("public/docflow/styles.css", siteRoot), "utf8"),
+  ]);
+
+  assert.equal((app.match(/card-status is-ready/g) || []).length, 1);
+  assert.equal((app.match(/card-status is-development/g) || []).length, 5);
+  assert.match(app, /card-status is-ready">Pronto<\/span>[\s\S]*?<h3>Folha de cota<\/h3>/);
+  assert.match(styles, /\.card-status\s*\{/);
+  assert.match(styles, /\.card-status\.is-ready\s*\{/);
+});
