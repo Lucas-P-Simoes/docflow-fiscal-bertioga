@@ -110,7 +110,7 @@ const state = {
   flow: null,
   step: 0,
   api: {
-    key: readSession("docflow-api-key", ""),
+    key: "",
     model: persisted.model || "gpt-5.6-terra",
     customModel: persisted.customModel || "",
   },
@@ -199,23 +199,6 @@ function readStorage(key, fallback) {
     return value ? JSON.parse(value) : fallback;
   } catch {
     return fallback;
-  }
-}
-
-function readSession(key, fallback) {
-  try {
-    return sessionStorage.getItem(key) || fallback;
-  } catch {
-    return fallback;
-  }
-}
-
-function writeSession(key, value) {
-  try {
-    if (value) sessionStorage.setItem(key, value);
-    else sessionStorage.removeItem(key);
-  } catch {
-    // A aplicação continua funcionando mesmo quando o armazenamento é bloqueado.
   }
 }
 
@@ -1067,7 +1050,6 @@ function saveApiConfiguration() {
     return false;
   }
   state.api = values;
-  writeSession("docflow-api-key", values.key);
   scheduleSave();
   updateApiBadge();
   closeDialog(elements.apiDialog);
@@ -1092,7 +1074,12 @@ async function testApiConfiguration() {
   elements.testApiButton.textContent = "Testando…";
   showApiFeedback("Verificando a conexão com a OpenAI…");
   try {
-    await callOpenAI({ api: values, prompt: "Responda somente com a palavra OK.", maxOutputTokens: 24 });
+    await callOpenAI({
+      api: values,
+      prompt: "Responda somente com a palavra OK.",
+      maxOutputTokens: 256,
+      reasoningEffort: "none",
+    });
     showApiFeedback(`Conexão confirmada com ${modelDisplayName(model)}.`);
   } catch (error) {
     showApiFeedback(error.message, true);
@@ -1115,7 +1102,13 @@ function getSafetyIdentifier() {
   }
 }
 
-async function callOpenAI({ api = state.api, prompt, imageDataUrl = "", maxOutputTokens = 600 }) {
+async function callOpenAI({
+  api = state.api,
+  prompt,
+  imageDataUrl = "",
+  maxOutputTokens = 600,
+  reasoningEffort = "low",
+}) {
   const model = getSelectedModel(api);
   if (!api.key?.trim() || !model) throw new Error("Configure a chave da OpenAI e escolha um modelo.");
 
@@ -1128,13 +1121,13 @@ async function callOpenAI({ api = state.api, prompt, imageDataUrl = "", maxOutpu
     safety_identifier: getSafetyIdentifier(),
   };
   if (model.startsWith("gpt-5.6")) {
-    body.reasoning = { effort: "low" };
+    body.reasoning = { effort: reasoningEffort };
     body.text = { verbosity: "low" };
   }
 
   let response;
   try {
-    response = await fetch("https://api.openai.com/v1/responses", {
+    response = await fetch("/api/openai", {
       method: "POST",
       headers: { "Content-Type": "application/json", Authorization: `Bearer ${api.key.trim()}` },
       body: JSON.stringify(body),
@@ -1152,6 +1145,9 @@ async function callOpenAI({ api = state.api, prompt, imageDataUrl = "", maxOutpu
   if (!response.ok) throw new Error(openAIErrorMessage(response.status, data));
 
   const text = extractResponseText(data);
+  if (!text && data?.status === "incomplete" && data?.incomplete_details?.reason) {
+    throw new Error("A resposta foi interrompida pelo limite de tokens. Tente novamente.");
+  }
   if (!text) throw new Error("A OpenAI não retornou um texto utilizável.");
   return text.trim();
 }

@@ -64,3 +64,22 @@ test("keeps the editable and deployable DocFlow assets synchronized", async () =
   assert.deepEqual(builtApp, sourceApp);
   assert.deepEqual(builtTemplate, sourceTemplate);
 });
+
+
+test("proxies OpenAI requests and keeps API keys out of browser storage", async () => {
+  const [app, page, worker] = await Promise.all([
+    readFile(new URL("public/docflow/app.js", siteRoot), "utf8"),
+    readFile(new URL("public/docflow/index.html", siteRoot), "utf8"),
+    readFile(new URL("worker/index.ts", siteRoot), "utf8"),
+  ]);
+
+  assert.match(app, /fetch\("\/api\/openai"/);
+  assert.doesNotMatch(app, /fetch\("https:\/\/api\.openai\.com/);
+  assert.doesNotMatch(app, /docflow-api-key|sessionStorage/);
+  assert.match(app, /maxOutputTokens:\s*256/);
+  assert.match(app, /reasoningEffort:\s*"none"/);
+  assert.match(page, /A chave não é salva no navegador/);
+  assert.match(worker, /url\.pathname === "\/api\/openai"/);
+  assert.match(worker, /https:\/\/api\.openai\.com\/v1\/responses/);
+  assert.match(worker, /"Cache-Control": "no-store"/);
+});
