@@ -4,7 +4,6 @@ import test from "node:test";
 
 
 const siteRoot = new URL("../", import.meta.url);
-const workspaceRoot = new URL("../../", import.meta.url);
 
 
 test("routes the site to the DocFlow interface", async () => {
@@ -31,24 +30,23 @@ test("ships the standard letterhead template and fills it in place", async () =>
   assert.match(app, /COTA_TEMPLATE_URL\s*=\s*"templates\/MODELO_FOLHA_COTA\.docx"/);
   assert.match(app, /patchDocument/);
   assert.match(app, /keepOriginalStyles:\s*true/);
+  assert.match(app, /COTA_TEXT_STYLE\s*=\s*\{\s*font:\s*"Arial",\s*size:\s*24/);
+  assert.match(app, /Arial 12 e alinhamento justificado/);
   assert.match(app, /line_\$\{String\(index \+ 1\)\.padStart\(2, "0"\)\}/);
   assert.doesNotMatch(app, /Montando a folha pautada/);
 });
 
 
-test("keeps the local and hosted DocFlow assets synchronized", async () => {
-  const [localApp, hostedApp, localTemplate, hostedTemplate] = await Promise.all([
-    readFile(new URL("web/app.js", workspaceRoot)),
-    readFile(new URL("site/public/docflow/app.js", workspaceRoot)),
-    readFile(new URL("web/templates/MODELO_FOLHA_COTA.docx", workspaceRoot)),
+test("keeps the editable and deployable DocFlow assets synchronized", async () => {
+  const [sourceApp, builtApp, sourceTemplate, builtTemplate] = await Promise.all([
+    readFile(new URL("public/docflow/app.js", siteRoot)),
+    readFile(new URL("dist/client/docflow/app.js", siteRoot)),
+    readFile(new URL("public/docflow/templates/MODELO_FOLHA_COTA.docx", siteRoot)),
     readFile(
-      new URL(
-        "site/public/docflow/templates/MODELO_FOLHA_COTA.docx",
-        workspaceRoot,
-      ),
+      new URL("dist/client/docflow/templates/MODELO_FOLHA_COTA.docx", siteRoot),
     ),
   ]);
 
-  assert.deepEqual(hostedApp, localApp);
-  assert.deepEqual(hostedTemplate, localTemplate);
+  assert.deepEqual(builtApp, sourceApp);
+  assert.deepEqual(builtTemplate, sourceTemplate);
 });

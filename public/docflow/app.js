@@ -36,6 +36,7 @@ const CORRESPONDENCE_TYPES = {
 const MAX_COTA_TEXT = 2500;
 const MAX_COTA_LINES = 32;
 const COTA_TEMPLATE_URL = "templates/MODELO_FOLHA_COTA.docx";
+const COTA_TEXT_STYLE = { font: "Arial", size: 24, language: { value: "pt-BR" } };
 const MAX_CORRESPONDENCE_TEXT = 7000;
 const ACCEPTED_IMAGES = ["image/jpeg", "image/png", "image/bmp", "image/gif", "image/webp"];
 
@@ -638,7 +639,7 @@ function renderCotaContent() {
   const metrics = cotaMetrics(c.baseText);
   return `${pageHeading("Etapa 1", "Escreva a ideia principal", "Informe o texto-base e os dados do processo. A IA pode revisar a redação na próxima etapa.")}
   <section class="panel">
-    ${panelHeader("Identificação do documento", "O timbre, o cabeçalho, as margens e a pauta virão do modelo padrão fornecido.")}
+    ${panelHeader("Identificação do documento", "O timbre, o cabeçalho, as margens e a pauta virão do modelo padrão fornecido. O conteúdo será formatado em Arial 12 e justificado.")}
     <div class="field-grid three">
       <label class="field"><span>Número do processo</span><input type="text" data-bind="cota.processNumber" value="${e(c.processNumber)}" placeholder="Ex.: 12345" /></label>
       <label class="field"><span>Ano</span><input type="text" inputmode="numeric" maxlength="4" data-bind="cota.year" value="${e(c.year)}" /></label>
@@ -1634,25 +1635,25 @@ async function buildCotaDocument(onProgress) {
   const patches = {
     sheet_number: {
       type: PatchType.PARAGRAPH,
-      children: [new TextRun(c.sheetNumber ? ` ${c.sheetNumber}` : "________")],
+      children: [new TextRun({ text: c.sheetNumber ? ` ${c.sheetNumber}` : "________", ...COTA_TEXT_STYLE })],
     },
     process_number: {
       type: PatchType.PARAGRAPH,
-      children: [new TextRun(c.processNumber || "______________")],
+      children: [new TextRun({ text: c.processNumber || "______________", ...COTA_TEXT_STYLE })],
     },
     process_year: {
       type: PatchType.PARAGRAPH,
-      children: [new TextRun(c.year || "______")],
+      children: [new TextRun({ text: c.year || "______", ...COTA_TEXT_STYLE })],
     },
   };
   for (let index = 0; index < MAX_COTA_LINES; index += 1) {
     patches[`line_${String(index + 1).padStart(2, "0")}`] = {
       type: PatchType.PARAGRAPH,
-      children: [new TextRun(lines[index] || "")],
+      children: [new TextRun({ text: lines[index] || "", ...COTA_TEXT_STYLE })],
     };
   }
 
-  onProgress(70, "Preenchendo os campos sem alterar a formatação…");
+  onProgress(70, "Aplicando Arial 12 e alinhamento justificado…");
   const blob = await patchDocument({
     outputType: "blob",
     data: template,
