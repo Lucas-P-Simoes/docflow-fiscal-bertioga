@@ -35,6 +35,7 @@ const CORRESPONDENCE_TYPES = {
 };
 const MAX_COTA_TEXT = 2500;
 const MAX_COTA_LINES = 32;
+const COTA_TEMPLATE_URL = "templates/MODELO_FOLHA_COTA.docx";
 const MAX_CORRESPONDENCE_TEXT = 7000;
 const ACCEPTED_IMAGES = ["image/jpeg", "image/png", "image/bmp", "image/gif", "image/webp"];
 
@@ -122,6 +123,7 @@ const state = {
 
 let toastTimer = null;
 let saveTimer = null;
+let cotaTemplatePromise = null;
 
 function createReportState(saved = {}) {
   return {
@@ -636,12 +638,8 @@ function renderCotaContent() {
   const metrics = cotaMetrics(c.baseText);
   return `${pageHeading("Etapa 1", "Escreva a ideia principal", "Informe o texto-base e os dados do processo. A IA pode revisar a redação na próxima etapa.")}
   <section class="panel">
-    ${panelHeader("Identificação do documento", "Os campos em branco continuarão disponíveis para preenchimento manual no Word.")}
-    <div class="field-grid">
-      <label class="field"><span>Órgão ou empresa</span><input type="text" data-bind="cota.organization" value="${e(c.organization)}" placeholder="Ex.: Secretaria Municipal de Obras" /></label>
-      <label class="field"><span>Departamento ou setor</span><input type="text" data-bind="cota.department" value="${e(c.department)}" placeholder="Ex.: Divisão de Fiscalização" /></label>
-    </div>
-    <div class="field-grid three" style="margin-top: 18px">
+    ${panelHeader("Identificação do documento", "O timbre, o cabeçalho, as margens e a pauta virão do modelo padrão fornecido.")}
+    <div class="field-grid three">
       <label class="field"><span>Número do processo</span><input type="text" data-bind="cota.processNumber" value="${e(c.processNumber)}" placeholder="Ex.: 12345" /></label>
       <label class="field"><span>Ano</span><input type="text" inputmode="numeric" maxlength="4" data-bind="cota.year" value="${e(c.year)}" /></label>
       <label class="field"><span>Folha nº</span><input type="text" data-bind="cota.sheetNumber" value="${e(c.sheetNumber)}" placeholder="Opcional" /></label>
@@ -1623,62 +1621,74 @@ function captionParagraph(number, description) {
 }
 
 async function buildCotaDocument(onProgress) {
-  const {
-    Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, WidthType,
-    AlignmentType, VerticalAlign, HeightRule, BorderStyle,
-  } = window.docx;
+  const { patchDocument, PatchType, TextRun } = window.docx;
   const c = state.cota;
   const lines = wrapCotaText(c.finalText);
   if (lines.length > MAX_COTA_LINES) throw new Error(`O texto ocupa ${lines.length} linhas; o limite é ${MAX_COTA_LINES}.`);
-  onProgress(35, "Montando a folha pautada…");
-  const border = { style: BorderStyle.SINGLE, size: 4, color: "9EA9A3" };
-  const rows = Array.from({ length: MAX_COTA_LINES }, (_, index) => new TableRow({
-    cantSplit: true,
-    height: { value: 330, rule: HeightRule.EXACT },
-    children: [
-      new TableCell({
-        width: { size: 57, type: WidthType.PERCENTAGE },
-        verticalAlign: VerticalAlign.CENTER,
-        margins: { top: 0, bottom: 0, left: 80, right: 80 },
-        borders: { top: border, bottom: border, left: border, right: border },
-        children: [new Paragraph({ spacing: { before: 0, after: 0, line: 240 }, children: [new TextRun({ text: lines[index] || "", size: 20 })] })],
-      }),
-      new TableCell({
-        width: { size: 43, type: WidthType.PERCENTAGE },
-        verticalAlign: VerticalAlign.CENTER,
-        margins: { top: 0, bottom: 0, left: 80, right: 80 },
-        borders: { top: border, bottom: border, left: border, right: border },
-        children: [new Paragraph({ spacing: { before: 0, after: 0 }, children: [new TextRun("")] })],
-      }),
-    ],
-  }));
+  if (typeof patchDocument !== "function" || !PatchType) {
+    throw new Error("O componente de preenchimento do modelo Word não está disponível.");
+  }
 
-  const header = await headerFor({ organization: c.organization, department: c.department, logo: null });
-  const processLine = [
-    `Fl. n.º ${c.sheetNumber || "________"}`,
-    `Processo n.º ${c.processNumber || "______________"}${c.year ? ` de ${c.year}` : " de ______"}`,
-  ].join("        ");
-  const children = [
-    new Paragraph({ alignment: AlignmentType.RIGHT, spacing: { after: 140 }, children: [new TextRun({ text: processLine, size: 19 })] }),
-    new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, rows }),
-  ];
-  onProgress(82, "Aplicando o cabeçalho e a paginação…");
-  const documentFile = new Document({
-    creator: "DocFlow",
-    title: "Folha de cota",
-    description: "Folha de cota gerada no DocFlow",
-    styles: defaultDocumentStyles(),
-    sections: [{
-      properties: { page: { size: { width: 11906, height: 16838 }, margin: { top: 850, right: 850, bottom: 850, left: 850, header: 360, footer: 360 }, pageNumbers: { start: 1 } } },
-      headers: { default: header },
-      footers: { default: footer() },
-      children,
-    }],
+  onProgress(24, "Carregando o modelo timbrado padrão…");
+  const template = await loadCotaTemplate();
+  const patches = {
+    sheet_number: {
+      type: PatchType.PARAGRAPH,
+      children: [new TextRun(c.sheetNumber ? ` ${c.sheetNumber}` : "________")],
+    },
+    process_number: {
+      type: PatchType.PARAGRAPH,
+      children: [new TextRun(c.processNumber || "______________")],
+    },
+    process_year: {
+      type: PatchType.PARAGRAPH,
+      children: [new TextRun(c.year || "______")],
+    },
+  };
+  for (let index = 0; index < MAX_COTA_LINES; index += 1) {
+    patches[`line_${String(index + 1).padStart(2, "0")}`] = {
+      type: PatchType.PARAGRAPH,
+      children: [new TextRun(lines[index] || "")],
+    };
+  }
+
+  onProgress(70, "Preenchendo os campos sem alterar a formatação…");
+  const blob = await patchDocument({
+    outputType: "blob",
+    data: template,
+    patches,
+    keepOriginalStyles: true,
+    recursive: false,
   });
-  onProgress(96, "Compactando o arquivo Word…");
-  const blob = await Packer.toBlob(documentFile);
   onProgress(100, "Folha de cota concluída.");
   return blob;
+}
+
+async function loadCotaTemplate() {
+  if (!cotaTemplatePromise) {
+    cotaTemplatePromise = (async () => {
+      const bridge = window.pywebview?.api;
+      if (bridge?.get_cota_template) {
+        const result = await bridge.get_cota_template();
+        if (!result?.ok || !result.base64) {
+          throw new Error(result?.error || "O modelo timbrado padrão não foi encontrado.");
+        }
+        const binary = atob(result.base64);
+        const bytes = new Uint8Array(binary.length);
+        for (let index = 0; index < binary.length; index += 1) bytes[index] = binary.charCodeAt(index);
+        return bytes.buffer;
+      }
+
+      const response = await fetch(COTA_TEMPLATE_URL);
+      if (!response.ok) throw new Error("O modelo timbrado padrão não pôde ser carregado.");
+      return response.arrayBuffer();
+    })().catch((error) => {
+      cotaTemplatePromise = null;
+      throw error;
+    });
+  }
+  const template = await cotaTemplatePromise;
+  return template.slice(0);
 }
 
 async function buildCorrespondenceDocument(onProgress) {
