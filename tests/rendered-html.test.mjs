@@ -66,22 +66,49 @@ test("keeps the editable and deployable DocFlow assets synchronized", async () =
 });
 
 
-test("proxies OpenAI requests and keeps API keys out of browser storage", async () => {
-  const [app, page, worker] = await Promise.all([
+test("requires an account and keeps each encrypted API key in D1", async () => {
+  const [app, page, worker, authWorker, schema, hosting, migration] = await Promise.all([
     readFile(new URL("public/docflow/app.js", siteRoot), "utf8"),
     readFile(new URL("public/docflow/index.html", siteRoot), "utf8"),
     readFile(new URL("worker/index.ts", siteRoot), "utf8"),
+    readFile(new URL("worker/auth.ts", siteRoot), "utf8"),
+    readFile(new URL("db/schema.ts", siteRoot), "utf8"),
+    readFile(new URL(".openai/hosting.json", siteRoot), "utf8"),
+    readFile(new URL("drizzle/0000_vengeful_zodiak.sql", siteRoot), "utf8"),
   ]);
 
+  assert.match(page, /id="authGate"/);
+  assert.match(page, /id="loginForm"/);
+  assert.match(page, /id="registerForm"/);
+  assert.match(page, /id="siteShell"[^>]*is-hidden[^>]*hidden/);
+  assert.match(page, /criptografada antes de ser salva no D1/);
+  assert.match(app, /bootstrapAuth\(\)/);
+  assert.match(app, /fetch\("\/api\/auth\/session"|apiRequest\("\/api\/auth\/session"/);
+  assert.match(app, /apiRequest\("\/api\/account\/api-key"/);
   assert.match(app, /fetch\("\/api\/openai"/);
   assert.doesNotMatch(app, /fetch\("https:\/\/api\.openai\.com/);
   assert.doesNotMatch(app, /docflow-api-key|sessionStorage/);
+  assert.doesNotMatch(app, /Authorization:\s*`Bearer/);
   assert.match(app, /maxOutputTokens:\s*256/);
   assert.match(app, /reasoningEffort:\s*"none"/);
-  assert.match(page, /A chave não é salva no navegador/);
+  assert.match(page, /chave será criptografada no servidor/);
+  assert.match(worker, /url\.pathname === "\/api\/auth\/register"/);
+  assert.match(worker, /url\.pathname === "\/api\/auth\/login"/);
+  assert.match(worker, /url\.pathname === "\/api\/account\/api-key"/);
   assert.match(worker, /url\.pathname === "\/api\/openai"/);
   assert.match(worker, /https:\/\/api\.openai\.com\/v1\/responses/);
+  assert.match(worker, /openAICredentialForUser/);
   assert.match(worker, /"Cache-Control": "no-store"/);
+  assert.match(authWorker, /PBKDF2/);
+  assert.match(authWorker, /PASSWORD_ITERATIONS = 600_000/);
+  assert.match(authWorker, /timingSafeEqual/);
+  assert.match(authWorker, /AES-GCM/);
+  assert.match(authWorker, /HttpOnly; SameSite=Lax/);
+  assert.match(schema, /openaiCredentials/);
+  assert.match(schema, /sessions/);
+  assert.match(hosting, /"d1": "DB"/);
+  assert.match(migration, /CREATE TABLE `users`/);
+  assert.match(migration, /CREATE TABLE `openai_credentials`/);
 });
 
 

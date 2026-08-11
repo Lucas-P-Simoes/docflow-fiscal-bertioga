@@ -74,6 +74,21 @@ Preserve rigorosamente o significado e todas as informações existentes. Não a
 Retorne somente o corpo do texto revisado, sem aspas e sem introdução.`;
 
 const elements = {
+  authGate: document.querySelector("#authGate"),
+  siteShell: document.querySelector("#siteShell"),
+  loginTab: document.querySelector("#loginTab"),
+  registerTab: document.querySelector("#registerTab"),
+  loginForm: document.querySelector("#loginForm"),
+  registerForm: document.querySelector("#registerForm"),
+  loginEmail: document.querySelector("#loginEmail"),
+  loginPassword: document.querySelector("#loginPassword"),
+  registerName: document.querySelector("#registerName"),
+  registerEmail: document.querySelector("#registerEmail"),
+  registerPassword: document.querySelector("#registerPassword"),
+  registerPasswordConfirmation: document.querySelector("#registerPasswordConfirmation"),
+  loginFeedback: document.querySelector("#loginFeedback"),
+  registerFeedback: document.querySelector("#registerFeedback"),
+  accountName: document.querySelector("#accountName"),
   view: document.querySelector("#view"),
   main: document.querySelector("#main"),
   sidebar: document.querySelector("#sidebar"),
@@ -90,11 +105,13 @@ const elements = {
   apiDialog: document.querySelector("#apiDialog"),
   apiForm: document.querySelector("#apiForm"),
   apiKeyInput: document.querySelector("#apiKeyInput"),
+  apiKeyHelp: document.querySelector("#apiKeyHelp"),
   modelSelect: document.querySelector("#modelSelect"),
   customModelField: document.querySelector("#customModelField"),
   customModelInput: document.querySelector("#customModelInput"),
   apiFeedback: document.querySelector("#apiFeedback"),
   testApiButton: document.querySelector("#testApiButton"),
+  removeApiButton: document.querySelector("#removeApiButton"),
   messageDialog: document.querySelector("#messageDialog"),
   messageIcon: document.querySelector("#messageIcon"),
   messageTitle: document.querySelector("#messageTitle"),
@@ -107,12 +124,16 @@ const elements = {
 const persisted = readStorage("docflow-preferences", {});
 
 const state = {
+  auth: {
+    user: null,
+  },
   flow: null,
   step: 0,
   api: {
-    key: "",
-    model: persisted.model || "gpt-5.6-terra",
-    customModel: persisted.customModel || "",
+    hasKey: false,
+    lastFour: "",
+    model: "gpt-5.6-terra",
+    customModel: "",
   },
   report: createReportState(persisted),
   cota: createCotaState(persisted),
@@ -208,8 +229,6 @@ function scheduleSave() {
   saveTimer = setTimeout(() => {
     try {
       const preferences = {
-        model: state.api.model,
-        customModel: state.api.customModel,
         organization: state.report.organization || state.cota.organization || state.correspondence.organization,
         department: state.report.department || state.cota.department || state.correspondence.department,
         responsibleOptions: state.report.responsibleOptions,
@@ -267,7 +286,7 @@ function getSelectedModel(api = state.api) {
 }
 
 function isApiReady() {
-  return Boolean(state.api.key.trim() && getSelectedModel());
+  return Boolean(state.api.hasKey && getSelectedModel());
 }
 
 function updateApiBadge() {
@@ -283,6 +302,165 @@ function modelDisplayName(model) {
     "gpt-5.6-luna": "GPT-5.6 Luna",
   };
   return labels[model] || model || "Configurar IA";
+}
+
+class ApiRequestError extends Error {
+  constructor(message, status) {
+    super(message);
+    this.name = "ApiRequestError";
+    this.status = status;
+  }
+}
+
+async function apiRequest(url, options = {}) {
+  const requestOptions = { ...options };
+  const headers = new Headers(requestOptions.headers || {});
+  headers.set("Accept", "application/json");
+  if (requestOptions.body && typeof requestOptions.body !== "string") {
+    headers.set("Content-Type", "application/json");
+    requestOptions.body = JSON.stringify(requestOptions.body);
+  }
+  requestOptions.headers = headers;
+
+  let response;
+  try {
+    response = await fetch(url, requestOptions);
+  } catch {
+    throw new ApiRequestError("Não foi possível acessar o servidor. Verifique sua conexão.", 0);
+  }
+
+  let data = {};
+  try {
+    data = await response.json();
+  } catch {
+    // Mantém uma mensagem segura quando a resposta não é JSON.
+  }
+  if (!response.ok) {
+    throw new ApiRequestError(data?.error?.message || "Não foi possível concluir a solicitação.", response.status);
+  }
+  return data;
+}
+
+function showAuthView(view) {
+  const isRegister = view === "register";
+  elements.loginForm.classList.toggle("is-hidden", isRegister);
+  elements.registerForm.classList.toggle("is-hidden", !isRegister);
+  elements.loginTab.classList.toggle("is-active", !isRegister);
+  elements.registerTab.classList.toggle("is-active", isRegister);
+  elements.loginTab.setAttribute("aria-selected", String(!isRegister));
+  elements.registerTab.setAttribute("aria-selected", String(isRegister));
+  setAuthFeedback(elements.loginFeedback, "");
+  setAuthFeedback(elements.registerFeedback, "");
+  setTimeout(() => (isRegister ? elements.registerName : elements.loginEmail).focus(), 50);
+}
+
+function setAuthFeedback(element, message) {
+  element.textContent = message;
+  element.classList.toggle("is-hidden", !message);
+}
+
+function setFormBusy(form, busy, busyLabel) {
+  const submit = form.querySelector("button[type='submit']");
+  if (!submit) return;
+  if (!submit.dataset.defaultLabel) submit.dataset.defaultLabel = submit.textContent;
+  submit.disabled = busy;
+  submit.textContent = busy ? busyLabel : submit.dataset.defaultLabel;
+}
+
+function applyAccount(payload) {
+  state.auth.user = payload.user;
+  const selectedModel = payload.api?.model || "gpt-5.6-terra";
+  const knownModels = new Set(["gpt-5.6-terra", "gpt-5.6-sol", "gpt-5.6-luna"]);
+  state.api = {
+    hasKey: Boolean(payload.api?.hasKey),
+    lastFour: payload.api?.lastFour || "",
+    model: knownModels.has(selectedModel) ? selectedModel : "custom",
+    customModel: knownModels.has(selectedModel) ? "" : selectedModel,
+  };
+  elements.accountName.textContent = payload.user?.name || payload.user?.email || "";
+  elements.authGate.classList.add("is-hidden");
+  elements.siteShell.hidden = false;
+  elements.siteShell.classList.remove("is-hidden");
+  render();
+}
+
+function showAuthGate(view = "login") {
+  state.auth.user = null;
+  elements.siteShell.hidden = true;
+  elements.siteShell.classList.add("is-hidden");
+  elements.authGate.classList.remove("is-hidden");
+  elements.loginPassword.value = "";
+  elements.registerPassword.value = "";
+  elements.registerPasswordConfirmation.value = "";
+  showAuthView(view);
+}
+
+async function bootstrapAuth() {
+  try {
+    const account = await apiRequest("/api/auth/session");
+    applyAccount(account);
+  } catch (error) {
+    showAuthGate("login");
+    if (error.status && error.status !== 401) {
+      setAuthFeedback(elements.loginFeedback, error.message);
+    }
+  }
+}
+
+async function submitLogin() {
+  setAuthFeedback(elements.loginFeedback, "");
+  setFormBusy(elements.loginForm, true, "Entrando…");
+  try {
+    const account = await apiRequest("/api/auth/login", {
+      method: "POST",
+      body: {
+        email: elements.loginEmail.value.trim(),
+        password: elements.loginPassword.value,
+      },
+    });
+    applyAccount(account);
+    elements.loginForm.reset();
+  } catch (error) {
+    setAuthFeedback(elements.loginFeedback, error.message);
+  } finally {
+    setFormBusy(elements.loginForm, false, "");
+  }
+}
+
+async function submitRegistration() {
+  setAuthFeedback(elements.registerFeedback, "");
+  if (elements.registerPassword.value !== elements.registerPasswordConfirmation.value) {
+    setAuthFeedback(elements.registerFeedback, "As senhas informadas não coincidem.");
+    return;
+  }
+  setFormBusy(elements.registerForm, true, "Criando conta…");
+  try {
+    const account = await apiRequest("/api/auth/register", {
+      method: "POST",
+      body: {
+        name: elements.registerName.value.trim(),
+        email: elements.registerEmail.value.trim(),
+        password: elements.registerPassword.value,
+      },
+    });
+    applyAccount(account);
+    elements.registerForm.reset();
+    showToast("Conta criada com sucesso.");
+  } catch (error) {
+    setAuthFeedback(elements.registerFeedback, error.message);
+  } finally {
+    setFormBusy(elements.registerForm, false, "");
+  }
+}
+
+async function logout() {
+  try {
+    await apiRequest("/api/auth/logout", { method: "POST" });
+  } catch {
+    // A sessão local também é encerrada quando o servidor está indisponível.
+  }
+  state.flow = null;
+  showAuthGate("login");
 }
 
 function showToast(message) {
@@ -1030,10 +1208,17 @@ function removePhoto(id) {
 }
 
 function openApiConfiguration() {
-  elements.apiKeyInput.value = state.api.key;
+  elements.apiKeyInput.value = "";
+  elements.apiKeyInput.placeholder = state.api.hasKey
+    ? `Nova chave (a atual termina em ••••${state.api.lastFour})`
+    : "sk-...";
+  elements.apiKeyHelp.textContent = state.api.hasKey
+    ? `Já existe uma chave salva terminada em ••••${state.api.lastFour}. Deixe o campo vazio para mantê-la.`
+    : "A chave não será exibida novamente. Nunca a inclua em prints, documentos ou mensagens.";
   elements.modelSelect.value = state.api.model;
   elements.customModelInput.value = state.api.customModel;
   elements.customModelField.classList.toggle("is-hidden", state.api.model !== "custom");
+  elements.removeApiButton.classList.toggle("is-hidden", !state.api.hasKey);
   elements.apiFeedback.className = "inline-feedback is-hidden";
   elements.apiFeedback.textContent = "";
   openDialog(elements.apiDialog);
@@ -1042,26 +1227,47 @@ function openApiConfiguration() {
 
 function apiFormValues() {
   return {
-    key: elements.apiKeyInput.value.trim(),
+    apiKey: elements.apiKeyInput.value.trim(),
     model: elements.modelSelect.value,
     customModel: elements.customModelInput.value.trim(),
   };
 }
 
-function saveApiConfiguration() {
+async function saveApiConfiguration({ close = true } = {}) {
   const values = apiFormValues();
   const model = getSelectedModel(values);
-  if (values.key && !model) {
+  if (!model) {
     showApiFeedback("Informe o ID do modelo personalizado.", true);
     return false;
   }
-  state.api = values;
-  scheduleSave();
-  updateApiBadge();
-  closeDialog(elements.apiDialog);
-  showToast(values.key ? `IA configurada com ${modelDisplayName(model)}.` : "Configuração da IA removida.");
-  if (state.flow) render();
-  return true;
+  if (!values.apiKey && !state.api.hasKey) {
+    showApiFeedback("Informe sua chave da API da OpenAI.", true);
+    return false;
+  }
+
+  try {
+    const api = await apiRequest("/api/account/api-key", {
+      method: "PUT",
+      body: { apiKey: values.apiKey, model },
+    });
+    state.api = {
+      hasKey: Boolean(api.hasKey),
+      lastFour: api.lastFour || state.api.lastFour,
+      model: values.model,
+      customModel: values.customModel,
+    };
+    elements.apiKeyInput.value = "";
+    elements.removeApiButton.classList.remove("is-hidden");
+    updateApiBadge();
+    if (close) closeDialog(elements.apiDialog);
+    showToast(`IA configurada com ${modelDisplayName(model)}.`);
+    if (state.flow) render();
+    return true;
+  } catch (error) {
+    if (error.status === 401) showAuthGate("login");
+    showApiFeedback(error.message, true);
+    return false;
+  }
 }
 
 function showApiFeedback(message, error = false) {
@@ -1072,16 +1278,19 @@ function showApiFeedback(message, error = false) {
 async function testApiConfiguration() {
   const values = apiFormValues();
   const model = getSelectedModel(values);
-  if (!values.key || !model) {
+  if ((!values.apiKey && !state.api.hasKey) || !model) {
     showApiFeedback("Informe a chave e o modelo antes de testar.", true);
     return;
   }
   elements.testApiButton.disabled = true;
-  elements.testApiButton.textContent = "Testando…";
-  showApiFeedback("Verificando a conexão com a OpenAI…");
+  elements.testApiButton.textContent = "Salvando…";
+  showApiFeedback("Salvando a configuração com segurança…");
   try {
+    const saved = await saveApiConfiguration({ close: false });
+    if (!saved) return;
+    elements.testApiButton.textContent = "Testando…";
+    showApiFeedback("Verificando a conexão com a OpenAI…");
     await callOpenAI({
-      api: values,
       prompt: "Responda somente com a palavra OK.",
       maxOutputTokens: 256,
       reasoningEffort: "none",
@@ -1091,32 +1300,41 @@ async function testApiConfiguration() {
     showApiFeedback(error.message, true);
   } finally {
     elements.testApiButton.disabled = false;
-    elements.testApiButton.textContent = "Testar conexão";
+    elements.testApiButton.textContent = "Salvar e testar";
   }
 }
 
-function getSafetyIdentifier() {
+async function removeApiConfiguration() {
+  elements.removeApiButton.disabled = true;
+  showApiFeedback("Removendo a chave salva…");
   try {
-    let id = localStorage.getItem("docflow-safety-id");
-    if (!id) {
-      id = makeId("browser");
-      localStorage.setItem("docflow-safety-id", id);
-    }
-    return id;
-  } catch {
-    return "docflow-browser-session";
+    await apiRequest("/api/account/api-key", { method: "DELETE" });
+    state.api = {
+      hasKey: false,
+      lastFour: "",
+      model: "gpt-5.6-terra",
+      customModel: "",
+    };
+    closeDialog(elements.apiDialog);
+    updateApiBadge();
+    if (state.flow) render();
+    showToast("Chave da OpenAI removida da sua conta.");
+  } catch (error) {
+    if (error.status === 401) showAuthGate("login");
+    showApiFeedback(error.message, true);
+  } finally {
+    elements.removeApiButton.disabled = false;
   }
 }
 
 async function callOpenAI({
-  api = state.api,
   prompt,
   imageDataUrl = "",
   maxOutputTokens = 600,
   reasoningEffort = "low",
 }) {
-  const model = getSelectedModel(api);
-  if (!api.key?.trim() || !model) throw new Error("Configure a chave da OpenAI e escolha um modelo.");
+  const model = getSelectedModel();
+  if (!state.api.hasKey || !model) throw new Error("Configure a chave da OpenAI e escolha um modelo.");
 
   const content = [{ type: "input_text", text: prompt }];
   if (imageDataUrl) content.push({ type: "input_image", image_url: imageDataUrl, detail: "high" });
@@ -1124,7 +1342,6 @@ async function callOpenAI({
     model,
     input: [{ role: "user", content }],
     max_output_tokens: maxOutputTokens,
-    safety_identifier: getSafetyIdentifier(),
   };
   if (model.startsWith("gpt-5.6")) {
     body.reasoning = { effort: reasoningEffort };
@@ -1135,7 +1352,7 @@ async function callOpenAI({
   try {
     response = await fetch("/api/openai", {
       method: "POST",
-      headers: { "Content-Type": "application/json", Authorization: `Bearer ${api.key.trim()}` },
+      headers: { "Content-Type": "application/json" },
       body: JSON.stringify(body),
     });
   } catch {
@@ -1148,7 +1365,10 @@ async function callOpenAI({
   } catch {
     // Mantém a mensagem baseada no status quando a resposta não é JSON.
   }
-  if (!response.ok) throw new Error(openAIErrorMessage(response.status, data));
+  if (!response.ok) {
+    if (response.status === 401) showAuthGate("login");
+    throw new Error(openAIErrorMessage(response.status, data));
+  }
 
   const text = extractResponseText(data);
   if (!text && data?.status === "incomplete" && data?.incomplete_details?.reason) {
@@ -1838,6 +2058,7 @@ async function handleAction(action, target) {
     return;
   }
   if (action === "home") return goHome();
+  if (action === "logout") return logout();
   if (action === "start-report") return startFlow("report");
   if (action === "start-cota") return startFlow("cota");
   if (action === "start-correspondence") return startFlow("correspondence", target.dataset.kind);
@@ -1861,6 +2082,7 @@ async function handleAction(action, target) {
     return;
   }
   if (action === "test-api") return testApiConfiguration();
+  if (action === "remove-api") return removeApiConfiguration();
   if (action === "remove-file") return removeFile(target.dataset.kind, target.dataset.id);
   if (action === "remove-photo") return removePhoto(target.dataset.id);
   if (action === "analyze-photo") return analyzePhoto(target.dataset.id);
@@ -1894,6 +2116,12 @@ async function handleAction(action, target) {
 }
 
 document.addEventListener("click", (event) => {
+  const authTarget = event.target.closest("[data-auth-view]");
+  if (authTarget) {
+    event.preventDefault();
+    showAuthView(authTarget.dataset.authView);
+    return;
+  }
   const target = event.target.closest("[data-action]");
   if (!target) return;
   event.preventDefault();
@@ -1977,9 +2205,19 @@ elements.modelSelect.addEventListener("change", () => {
   if (elements.modelSelect.value === "custom") elements.customModelInput.focus();
 });
 
-elements.apiForm.addEventListener("submit", (event) => {
+elements.loginForm.addEventListener("submit", async (event) => {
   event.preventDefault();
-  saveApiConfiguration();
+  await submitLogin();
+});
+
+elements.registerForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  await submitRegistration();
+});
+
+elements.apiForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  await saveApiConfiguration();
 });
 
 elements.apiDialog.addEventListener("click", (event) => {
@@ -1995,4 +2233,4 @@ window.addEventListener("beforeunload", () => {
   if (state.lastDownload?.url) URL.revokeObjectURL(state.lastDownload.url);
 });
 
-render();
+bootstrapAuth();

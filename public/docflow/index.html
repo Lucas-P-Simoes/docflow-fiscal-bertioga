@@ -21,7 +21,84 @@
     <link rel="stylesheet" href="styles.css" />
   </head>
   <body>
-    <div class="site-shell">
+    <section id="authGate" class="auth-gate" aria-labelledby="authTitle">
+      <div class="auth-brand">
+        <span class="brand-mark auth-brand-mark" aria-hidden="true">D</span>
+        <span class="brand-copy">
+          <strong>DocFlow</strong>
+          <small>Documentos inteligentes</small>
+        </span>
+      </div>
+
+      <div class="auth-layout">
+        <article class="auth-card">
+          <span class="eyebrow eyebrow-dark">Acesso seguro</span>
+          <h1 id="authTitle">Entre para preparar seus documentos</h1>
+          <p class="auth-lead">
+            Sua conta mantém as configurações da IA disponíveis nos próximos acessos, sem expor sua chave no navegador.
+          </p>
+
+          <div class="auth-tabs" role="tablist" aria-label="Acesso à conta">
+            <button id="loginTab" class="auth-tab is-active" type="button" role="tab" aria-selected="true" aria-controls="loginForm" data-auth-view="login">Entrar</button>
+            <button id="registerTab" class="auth-tab" type="button" role="tab" aria-selected="false" aria-controls="registerForm" data-auth-view="register">Criar conta</button>
+          </div>
+
+          <form id="loginForm" class="auth-form" autocomplete="on">
+            <label class="field">
+              <span>E-mail</span>
+              <input id="loginEmail" type="email" name="email" autocomplete="username" inputmode="email" required />
+            </label>
+            <label class="field">
+              <span>Senha</span>
+              <input id="loginPassword" type="password" name="password" autocomplete="current-password" required />
+            </label>
+            <div id="loginFeedback" class="inline-feedback is-error is-hidden" role="alert"></div>
+            <button class="button button-primary auth-submit" type="submit">Entrar no DocFlow</button>
+            <p class="auth-switch">Ainda não possui acesso? <button type="button" data-auth-view="register">Criar minha conta</button></p>
+          </form>
+
+          <form id="registerForm" class="auth-form is-hidden" autocomplete="on">
+            <label class="field">
+              <span>Nome</span>
+              <input id="registerName" type="text" name="name" autocomplete="name" maxlength="80" required />
+            </label>
+            <label class="field">
+              <span>E-mail</span>
+              <input id="registerEmail" type="email" name="email" autocomplete="username" inputmode="email" maxlength="254" required />
+            </label>
+            <div class="field-grid auth-password-grid">
+              <label class="field">
+                <span>Senha</span>
+                <input id="registerPassword" type="password" name="password" autocomplete="new-password" minlength="8" maxlength="128" required />
+              </label>
+              <label class="field">
+                <span>Confirmar senha</span>
+                <input id="registerPasswordConfirmation" type="password" name="passwordConfirmation" autocomplete="new-password" minlength="8" maxlength="128" required />
+              </label>
+            </div>
+            <small class="auth-password-help">Use pelo menos 8 caracteres.</small>
+            <div id="registerFeedback" class="inline-feedback is-error is-hidden" role="alert"></div>
+            <button class="button button-primary auth-submit" type="submit">Criar conta e continuar</button>
+            <p class="auth-switch">Já possui uma conta? <button type="button" data-auth-view="login">Entrar</button></p>
+          </form>
+        </article>
+
+        <aside class="auth-assurance" aria-label="Proteção dos seus dados">
+          <span class="auth-assurance-number">01</span>
+          <div>
+            <span class="eyebrow">Sua área de trabalho</span>
+            <h2>Configuração pessoal, acesso protegido.</h2>
+            <ul>
+              <li><span aria-hidden="true">✓</span> Senha protegida com derivação criptográfica e salt individual.</li>
+              <li><span aria-hidden="true">✓</span> Sessão segura, encerrável a qualquer momento.</li>
+              <li><span aria-hidden="true">✓</span> Chave da OpenAI criptografada antes de ser salva no D1.</li>
+            </ul>
+          </div>
+        </aside>
+      </div>
+    </section>
+
+    <div id="siteShell" class="site-shell is-hidden" hidden>
       <header class="topbar">
         <button class="brand" type="button" data-action="home" aria-label="Voltar ao início">
           <span class="brand-mark" aria-hidden="true">D</span>
@@ -37,6 +114,8 @@
             <span class="api-dot" aria-hidden="true"></span>
             <span id="apiButtonLabel">Configurar IA</span>
           </button>
+          <span id="accountName" class="account-name"></span>
+          <button class="logout-button" type="button" data-action="logout">Sair</button>
         </div>
       </header>
 
@@ -55,7 +134,7 @@
             <span class="privacy-icon" aria-hidden="true">✓</span>
             <div>
               <strong>Privacidade primeiro</strong>
-              <small>Arquivos e chave não são armazenados pelo site.</small>
+              <small>A chave da IA fica criptografada e vinculada à sua conta.</small>
             </div>
           </div>
         </aside>
@@ -88,7 +167,7 @@
         <span class="eyebrow eyebrow-dark">Inteligência artificial</span>
         <h2>Conecte sua API da OpenAI</h2>
         <p class="dialog-lead">
-          Cada pessoa usa a própria chave e escolhe o modelo. A chave fica somente na memória desta página e é apagada ao recarregar ou fechá-la.
+          Cada pessoa usa a própria chave e escolhe o modelo. A chave será criptografada no servidor e vinculada somente à sua conta.
         </p>
 
         <label class="field">
@@ -97,7 +176,7 @@
             <input id="apiKeyInput" type="password" name="apiKey" autocomplete="off" placeholder="sk-..." />
             <button class="password-toggle" type="button" data-action="toggle-key" aria-label="Mostrar ou ocultar chave">Mostrar</button>
           </span>
-          <small>A chave não é salva no navegador. Nunca a inclua em prints, documentos ou mensagens.</small>
+          <small id="apiKeyHelp">A chave não será exibida novamente. Nunca a inclua em prints, documentos ou mensagens.</small>
         </label>
 
         <label class="field">
@@ -118,7 +197,8 @@
         <div id="apiFeedback" class="inline-feedback is-hidden" role="status"></div>
 
         <div class="dialog-actions">
-          <button id="testApiButton" class="button button-secondary" type="button" data-action="test-api">Testar conexão</button>
+          <button id="removeApiButton" class="button button-quiet is-hidden" type="button" data-action="remove-api">Remover chave</button>
+          <button id="testApiButton" class="button button-secondary" type="button" data-action="test-api">Salvar e testar</button>
           <button class="button button-primary" type="submit">Salvar configuração</button>
         </div>
       </form>

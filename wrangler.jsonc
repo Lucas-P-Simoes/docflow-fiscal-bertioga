@@ -1,0 +1,28 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "docflow-fiscal-bertioga",
+  "main": "./worker/index.ts",
+  "compatibility_date": "2026-05-22",
+  "compatibility_flags": ["nodejs_compat"],
+  "assets": {
+    "binding": "ASSETS",
+    "directory": "./public"
+  },
+  "images": {
+    "binding": "IMAGES"
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "docflow-fiscal-bertioga",
+      "database_id": "c8d67066-ce8b-49d9-accc-ca3c3ea44408",
+      "migrations_dir": "./drizzle"
+    }
+  ],
+  "secrets": {
+    "required": ["API_ENCRYPTION_KEY"]
+  },
+  "observability": {
+    "enabled": true
+  }
+}
