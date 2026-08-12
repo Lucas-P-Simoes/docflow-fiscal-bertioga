@@ -7,11 +7,12 @@ const siteRoot = new URL("../", import.meta.url);
 
 
 test("serves the DocFlow interface at the site root without exposing its asset path", async () => {
-  const [page, layout, worker, docflowPage, manifest] = await Promise.all([
+  const [page, layout, worker, docflowPage, docflowApp, manifest] = await Promise.all([
     readFile(new URL("app/page.tsx", siteRoot), "utf8"),
     readFile(new URL("app/layout.tsx", siteRoot), "utf8"),
     readFile(new URL("worker/index.ts", siteRoot), "utf8"),
     readFile(new URL("public/docflow/index.html", siteRoot), "utf8"),
+    readFile(new URL("public/docflow/app.js", siteRoot), "utf8"),
     readFile(new URL("public/docflow/manifest.webmanifest", siteRoot), "utf8"),
   ]);
 
@@ -19,6 +20,8 @@ test("serves the DocFlow interface at the site root without exposing its asset p
   assert.match(worker, /new URL\("\/docflow\/", request\.url\)/);
   assert.match(worker, /return await serveDocFlowAtRoot\(request, env\)/);
   assert.match(docflowPage, /<base href="\/docflow\/" \/>/);
+  assert.match(docflowApp, /LEGACY_DOCFLOW_PATHS/);
+  assert.match(docflowApp, /window\.history\.replaceState/);
   assert.match(manifest, /"start_url": "\/"/);
   assert.match(manifest, /"scope": "\/"/);
   assert.match(layout, /DocFlow — Assistente de Documentos/);

@@ -1,5 +1,14 @@
 /* DocFlow — aplicação web independente para geração de documentos. */
 
+const LEGACY_DOCFLOW_PATHS = new Set(["/docflow/", "/docflow/index.html"]);
+if (LEGACY_DOCFLOW_PATHS.has(window.location.pathname)) {
+  window.history.replaceState(
+    null,
+    "",
+    `/${window.location.search}${window.location.hash}`,
+  );
+}
+
 const REPORT_STEPS = ["Informações", "Fotografias", "Conteúdo e formato", "Revisão"];
 const COTA_STEPS = ["Conteúdo", "Revisão e download"];
 const CORRESPONDENCE_STEPS = ["Dados do documento", "Conteúdo", "Revisão e download"];
