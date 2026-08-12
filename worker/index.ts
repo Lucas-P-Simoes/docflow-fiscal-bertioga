@@ -120,6 +120,26 @@ function isSameOriginRequest(request: Request): boolean {
   return fetchSite === "same-origin" || fetchSite === "none";
 }
 
+function isDocFlowRootRequest(request: Request, url: URL): boolean {
+  return (
+    (request.method === "GET" || request.method === "HEAD") &&
+    (url.pathname === "/" || url.pathname === "/index.html")
+  );
+}
+
+async function serveDocFlowAtRoot(request: Request, env: Env): Promise<Response> {
+  const assetUrl = new URL("/docflow/", request.url);
+  const assetResponse = await env.ASSETS.fetch(new Request(assetUrl, request));
+  const headers = new Headers(assetResponse.headers);
+  headers.set("Content-Location", "/");
+
+  return new Response(assetResponse.body, {
+    status: assetResponse.status,
+    statusText: assetResponse.statusText,
+    headers,
+  });
+}
+
 const worker = {
   async fetch(request: Request, env: Env, ctx: ExecutionContext): Promise<Response> {
     const url = new URL(request.url);
@@ -148,6 +168,10 @@ const worker = {
       }
       if (url.pathname === "/api/openai") {
         return await proxyOpenAI(request, env);
+      }
+
+      if (isDocFlowRootRequest(request, url)) {
+        return await serveDocFlowAtRoot(request, env);
       }
 
       if (url.pathname === "/_vinext/image") {

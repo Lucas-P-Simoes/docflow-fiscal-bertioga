@@ -17,7 +17,8 @@ import {
 } from "../db/auth";
 
 const SESSION_SECONDS = 60 * 60 * 24 * 7;
-const PASSWORD_ITERATIONS = 600_000;
+// Cloudflare Workers caps a single Web Crypto PBKDF2 operation at 100,000 rounds.
+const PASSWORD_ITERATIONS = 100_000;
 const MAX_AUTH_BODY_BYTES = 16 * 1024;
 const LOGIN_WINDOW_SECONDS = 15 * 60;
 const MAX_LOGIN_FAILURES = 5;

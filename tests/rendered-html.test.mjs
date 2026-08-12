@@ -6,13 +6,21 @@ import test from "node:test";
 const siteRoot = new URL("../", import.meta.url);
 
 
-test("routes the site to the DocFlow interface", async () => {
-  const [page, layout] = await Promise.all([
+test("serves the DocFlow interface at the site root without exposing its asset path", async () => {
+  const [page, layout, worker, docflowPage, manifest] = await Promise.all([
     readFile(new URL("app/page.tsx", siteRoot), "utf8"),
     readFile(new URL("app/layout.tsx", siteRoot), "utf8"),
+    readFile(new URL("worker/index.ts", siteRoot), "utf8"),
+    readFile(new URL("public/docflow/index.html", siteRoot), "utf8"),
+    readFile(new URL("public/docflow/manifest.webmanifest", siteRoot), "utf8"),
   ]);
 
-  assert.match(page, /redirect\("\/docflow\/index\.html"\)/);
+  assert.match(worker, /url\.pathname === "\/" \|\| url\.pathname === "\/index\.html"/);
+  assert.match(worker, /new URL\("\/docflow\/", request\.url\)/);
+  assert.match(worker, /return await serveDocFlowAtRoot\(request, env\)/);
+  assert.match(docflowPage, /<base href="\/docflow\/" \/>/);
+  assert.match(manifest, /"start_url": "\/"/);
+  assert.match(manifest, /"scope": "\/"/);
   assert.match(layout, /DocFlow — Assistente de Documentos/);
   assert.doesNotMatch(page, /codex-preview|_sites-preview|SkeletonPreview/);
 });
@@ -66,12 +74,13 @@ test("keeps the editable and deployable DocFlow assets synchronized", async () =
 });
 
 
-test("requires an account and keeps each encrypted API key in D1", async () => {
-  const [app, page, worker, authWorker, schema, hosting, migration] = await Promise.all([
+test("requires an account and keeps registrations and encrypted API keys in D1", async () => {
+  const [app, page, worker, authWorker, dbAuth, schema, hosting, migration] = await Promise.all([
     readFile(new URL("public/docflow/app.js", siteRoot), "utf8"),
     readFile(new URL("public/docflow/index.html", siteRoot), "utf8"),
     readFile(new URL("worker/index.ts", siteRoot), "utf8"),
     readFile(new URL("worker/auth.ts", siteRoot), "utf8"),
+    readFile(new URL("db/auth.ts", siteRoot), "utf8"),
     readFile(new URL("db/schema.ts", siteRoot), "utf8"),
     readFile(new URL(".openai/hosting.json", siteRoot), "utf8"),
     readFile(new URL("drizzle/0000_vengeful_zodiak.sql", siteRoot), "utf8"),
@@ -100,11 +109,16 @@ test("requires an account and keeps each encrypted API key in D1", async () => {
   assert.match(worker, /openAICredentialForUser/);
   assert.match(worker, /"Cache-Control": "no-store"/);
   assert.match(authWorker, /PBKDF2/);
-  assert.match(authWorker, /PASSWORD_ITERATIONS = 600_000/);
+  assert.match(authWorker, /PASSWORD_ITERATIONS = 100_000/);
   assert.match(authWorker, /timingSafeEqual/);
   assert.match(authWorker, /AES-GCM/);
   assert.match(authWorker, /HttpOnly; SameSite=Lax/);
+  assert.match(authWorker, /createUserAndSession\(env\.DB/);
+  assert.match(dbAuth, /INSERT INTO users/);
+  assert.match(dbAuth, /INSERT INTO sessions/);
+  assert.match(dbAuth, /await db\.batch\(\[/);
   assert.match(schema, /openaiCredentials/);
+  assert.match(schema, /export const users/);
   assert.match(schema, /sessions/);
   assert.match(hosting, /"d1": "DB"/);
   assert.match(migration, /CREATE TABLE `users`/);

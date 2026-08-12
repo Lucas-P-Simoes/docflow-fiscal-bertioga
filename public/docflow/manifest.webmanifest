@@ -3,7 +3,8 @@
   "short_name": "DocFlow",
   "description": "Crie relatórios, folhas de cota, memorandos, ofícios, notificações e advertências em Word.",
   "lang": "pt-BR",
-  "start_url": "./",
+  "start_url": "/",
+  "scope": "/",
   "display": "standalone",
   "background_color": "#f3f5f2",
   "theme_color": "#17211d"
