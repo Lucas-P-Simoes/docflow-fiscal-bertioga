@@ -12,6 +12,7 @@ if (LEGACY_DOCFLOW_PATHS.has(window.location.pathname)) {
 const REPORT_STEPS = ["Informações", "Fotografias", "Conteúdo e formato", "Revisão"];
 const COTA_STEPS = ["Conteúdo", "Revisão e download"];
 const CORRESPONDENCE_STEPS = ["Dados do documento", "Conteúdo", "Revisão e download"];
+const NOTIFICATION_STEPS = ["Dados da notificação", "Conteúdo e anexos", "Revisão e download"];
 const CORRESPONDENCE_TYPES = {
   memorando: {
     label: "Memorando",
@@ -45,6 +46,7 @@ const CORRESPONDENCE_TYPES = {
 const MAX_COTA_TEXT = 2500;
 const MAX_COTA_LINES = 32;
 const COTA_TEMPLATE_URL = "templates/MODELO_FOLHA_COTA.docx";
+const NOTIFICATION_TEMPLATE_URL = "templates/MODELO_NOTIFICACAO.docx";
 const COTA_TEXT_STYLE = { font: "Arial", size: 24, language: { value: "pt-BR" } };
 const COTA_HEADER_FIELD_STYLE = { ...COTA_TEXT_STYLE, bold: true, italics: false };
 const MAX_CORRESPONDENCE_TEXT = 7000;
@@ -147,6 +149,7 @@ const state = {
   report: createReportState(persisted),
   cota: createCotaState(persisted),
   correspondence: createCorrespondenceState(persisted),
+  notification: createNotificationState(persisted),
   analysis: { running: false, total: 0, done: 0 },
   generation: { running: false, progress: 0, message: "" },
   lastDownload: null,
@@ -156,6 +159,7 @@ const state = {
 let toastTimer = null;
 let saveTimer = null;
 let cotaTemplatePromise = null;
+let notificationTemplatePromise = null;
 
 function createReportState(saved = {}) {
   return {
@@ -213,6 +217,22 @@ function createCorrespondenceState(saved = {}) {
   };
 }
 
+function createNotificationState(saved = {}) {
+  return {
+    city: saved.notificationCity || "Bertioga",
+    date: todayInputValue(),
+    number: "",
+    process: "",
+    work: "",
+    contractor: "",
+    baseText: "",
+    finalText: "",
+    signatories: [{ id: makeId("notification-signer"), name: "", role: "" }],
+    photos: [],
+    complete: false,
+  };
+}
+
 function todayInputValue() {
   const now = new Date();
   const offset = now.getTimezoneOffset() * 60_000;
@@ -244,6 +264,7 @@ function scheduleSave() {
         responsibles: state.report.responsibles,
         onePerPage: state.report.onePerPage,
         startPhotosNewPage: state.report.startPhotosNewPage,
+        notificationCity: state.notification.city,
       };
       localStorage.setItem("docflow-preferences", JSON.stringify(preferences));
       elements.saveStatus.textContent = "Preferências locais";
@@ -272,6 +293,17 @@ function formatDate(value) {
   if (!value) return "Não informada";
   const [year, month, day] = value.split("-");
   return `${day}/${month}/${year}`;
+}
+
+function formatDateLong(value) {
+  if (!value) return "";
+  const [year, month, day] = value.split("-");
+  const months = [
+    "janeiro", "fevereiro", "março", "abril", "maio", "junho",
+    "julho", "agosto", "setembro", "outubro", "novembro", "dezembro",
+  ];
+  const monthName = months[Number(month) - 1];
+  return monthName ? `${Number(day)} de ${monthName} de ${year}` : formatDate(value);
 }
 
 function slugify(value, fallback = "documento") {
@@ -555,7 +587,9 @@ function render() {
       ? renderReport()
       : state.flow === "cota"
         ? renderCota()
-        : renderCorrespondence();
+        : state.flow === "notification"
+          ? renderNotification()
+          : renderCorrespondence();
     configureActionBar();
   }
 }
@@ -563,12 +597,14 @@ function render() {
 function currentData() {
   if (state.flow === "report") return state.report;
   if (state.flow === "cota") return state.cota;
+  if (state.flow === "notification") return state.notification;
   return state.correspondence;
 }
 
 function currentSteps() {
   if (state.flow === "report") return REPORT_STEPS;
   if (state.flow === "cota") return COTA_STEPS;
+  if (state.flow === "notification") return NOTIFICATION_STEPS;
   return CORRESPONDENCE_STEPS;
 }
 
@@ -581,6 +617,10 @@ function renderSidebar() {
     elements.flowEyebrow.textContent = "Folha de cota";
     elements.flowTitle.textContent = "Prepare o despacho";
     elements.flowDescription.textContent = "Revise a redação e baixe o Word pronto.";
+  } else if (state.flow === "notification") {
+    elements.flowEyebrow.textContent = "Notificação";
+    elements.flowTitle.textContent = "Prepare a notificação";
+    elements.flowDescription.textContent = "Use o timbre oficial, assinaturas e fotos opcionais.";
   } else {
     const type = correspondenceType();
     elements.flowEyebrow.textContent = type.label;
@@ -643,11 +683,11 @@ function renderHome() {
         <p>Prepare uma comunicação formal para órgãos, entidades ou destinatários externos.</p>
         <span class="card-link">Criar ofício <span aria-hidden="true">→</span></span>
       </article>
-      <article class="document-card is-alert" tabindex="0" role="button" data-action="start-correspondence" data-kind="notificacao">
-        <span class="card-status is-development">Em desenvolvimento</span>
+      <article class="document-card is-alert" tabindex="0" role="button" data-action="start-notification">
+        <span class="card-status is-ready">Pronto</span>
         <span class="card-number" aria-hidden="true">05</span><span class="card-icon" aria-hidden="true">N</span>
         <h3>Notificação</h3>
-        <p>Formalize uma ciência, solicitação, ocorrência ou providência em um documento claro.</p>
+        <p>Gere a notificação no modelo oficial da Prefeitura de Bertioga, com assinaturas e fotos opcionais.</p>
         <span class="card-link">Criar notificação <span aria-hidden="true">→</span></span>
       </article>
       <article class="document-card is-alert" tabindex="0" role="button" data-action="start-correspondence" data-kind="advertencia">
@@ -858,6 +898,96 @@ function renderCotaReview() {
   ${c.useAI ? `<div class="notice"><span aria-hidden="true">✦</span><span>Texto analisado com <strong>${e(modelDisplayName(getSelectedModel()))}</strong>${c.contextImage ? ` usando <strong>${e(c.contextImage.file.name)}</strong> como contexto visual` : ""}. Revise todas as informações.</span></div>` : `<div class="notice"><span aria-hidden="true">✓</span><span><strong>Modo direto:</strong> este é o texto digitado por você, sem análise da IA.</span></div>`}`;
 }
 
+function renderNotification() {
+  const renders = [renderNotificationInfo, renderNotificationContent, renderNotificationReview];
+  return renders[state.step]();
+}
+
+function renderNotificationInfo() {
+  const n = state.notification;
+  return `${pageHeading("Etapa 1", "Identifique a notificação", "Preencha os dados que aparecerão no modelo oficial da Prefeitura de Bertioga.")}
+  <section class="panel">
+    ${panelHeader("Modelo oficial", "O brasão e o cabeçalho da Prefeitura serão aplicados automaticamente, com a mesma página A4, margens e tipografia do arquivo fornecido.")}
+    <div class="field-grid three">
+      <label class="field"><span>Cidade *</span><input type="text" data-bind="notification.city" value="${e(n.city)}" placeholder="Ex.: Bertioga" /></label>
+      <label class="field"><span>Data *</span><input type="date" data-bind="notification.date" value="${e(n.date)}" /></label>
+      <label class="field"><span>Número da notificação *</span><input type="text" data-bind="notification.number" value="${e(n.number)}" placeholder="Ex.: 2ª ou 015/2026" /></label>
+    </div>
+  </section>
+  <section class="panel">
+    ${panelHeader("Processo e contratação", "Estes campos serão apresentados com os mesmos rótulos e alinhamentos do modelo.")}
+    <label class="field"><span>Processo *</span><input type="text" data-bind="notification.process" value="${e(n.process)}" placeholder="Ex.: 3330/2026 - Contrato 22/2026" /></label>
+    <label class="field stacked"><span>Obra *</span><textarea class="textarea-compact" data-bind="notification.work" maxlength="1800" placeholder="Descreva o objeto da obra ou do contrato">${e(n.work)}</textarea></label>
+    <label class="field stacked"><span>Contratada *</span><input type="text" data-bind="notification.contractor" value="${e(n.contractor)}" placeholder="Razão social da empresa contratada" /></label>
+  </section>`;
+}
+
+function renderNotificationContent() {
+  const n = state.notification;
+  return `${pageHeading("Etapa 2", "Escreva e complete a notificação", "Informe o texto, as pessoas que assinarão e, se desejar, anexe fotos com legenda.")}
+  <section class="panel">
+    ${panelHeader("Texto da notificação", "Separe os parágrafos com uma linha em branco; o Word manterá o texto em Arial 12 e alinhamento justificado.")}
+    <label class="field"><span>Conteúdo *</span><textarea data-bind="notification.baseText" maxlength="${MAX_CORRESPONDENCE_TEXT}" placeholder="Escreva o texto integral da notificação…">${e(n.baseText)}</textarea><span class="text-counter"><span>Os fatos e prazos devem ser conferidos antes da emissão</span><span>${n.baseText.length}/${MAX_CORRESPONDENCE_TEXT}</span></span></label>
+  </section>
+  <section class="panel">
+    ${panelHeader("Pessoas que vão assinar", "O cargo de cada pessoa aparecerá imediatamente abaixo do respectivo nome.", `<button class="button button-secondary" type="button" data-action="add-notification-signer">+ Adicionar pessoa</button>`)}
+    <div class="signatory-list">
+      ${n.signatories.map((signatory, index) => renderNotificationSignatory(signatory, index)).join("")}
+    </div>
+  </section>
+  <section class="panel">
+    ${panelHeader("Fotos e legendas", "Opcional. Cada foto será colocada em uma página própria, com numeração automática e a legenda abaixo.")}
+    <label class="upload-box" data-drop="notification-photos">
+      <input type="file" multiple accept="image/jpeg,image/png,image/bmp,image/gif,image/webp" data-file="notification-photos" />
+      <span class="upload-icon" aria-hidden="true">+</span>
+      <span class="upload-copy"><strong>Anexar fotos</strong><span>JPEG, PNG, BMP, GIF ou WebP • até 20 MB por arquivo</span></span>
+    </label>
+    ${n.photos.length ? `<div class="photo-list notification-photo-list">${n.photos.map(renderNotificationPhoto).join("")}</div>` : `<div class="empty-state notification-empty-state"><div><strong>Nenhuma foto anexada</strong><span>Esta parte é opcional e não aparecerá no Word se permanecer vazia.</span></div></div>`}
+  </section>`;
+}
+
+function renderNotificationSignatory(signatory, index) {
+  return `<article class="signatory-card" data-notification-signatory-id="${e(signatory.id)}">
+    <span class="signatory-index">${String(index + 1).padStart(2, "0")}</span>
+    <div class="field-grid">
+      <label class="field"><span>Nome completo *</span><input type="text" data-notification-signatory-field="name" data-id="${e(signatory.id)}" value="${e(signatory.name)}" placeholder="Nome da pessoa" /></label>
+      <label class="field"><span>Cargo ou função *</span><input type="text" data-notification-signatory-field="role" data-id="${e(signatory.id)}" value="${e(signatory.role)}" placeholder="Ex.: Fiscal do contrato" /></label>
+    </div>
+    <button class="icon-button" type="button" data-action="remove-notification-signer" data-id="${e(signatory.id)}" aria-label="Remover pessoa" title="Remover">×</button>
+  </article>`;
+}
+
+function renderNotificationPhoto(photo, index) {
+  return `<article class="photo-card" data-notification-photo-id="${e(photo.id)}">
+    <img src="${e(photo.url)}" alt="Imagem ${index + 1}: ${e(photo.file.name)}" />
+    <div class="photo-card-main">
+      <div class="photo-card-heading"><span class="photo-index">${String(index + 1).padStart(2, "0")}</span><strong>${e(photo.file.name)}</strong></div>
+      <textarea data-notification-photo-caption="${e(photo.id)}" maxlength="500" placeholder="Legenda da foto…">${e(photo.caption)}</textarea>
+    </div>
+    <div class="photo-card-actions"><button class="icon-button" type="button" data-action="remove-notification-photo" data-id="${e(photo.id)}" aria-label="Remover foto" title="Remover">×</button></div>
+  </article>`;
+}
+
+function renderNotificationReview() {
+  const n = state.notification;
+  const signerNames = n.signatories.map((item) => `${item.name} — ${item.role}`).join(" • ");
+  return `${pageHeading("Etapa 3", "Revise a notificação", "Confira os dados e ajuste o texto final antes de baixar o Word.")}
+  <section class="panel">
+    ${panelHeader("Texto final", "Somente o conteúdo deste campo será usado como corpo da notificação.")}
+    <label class="field"><span>Redação final *</span><textarea data-bind="notification.finalText" maxlength="${MAX_CORRESPONDENCE_TEXT}">${e(n.finalText)}</textarea><span class="text-counter"><span>Revise nomes, datas, prazos e informações contratuais</span><span>${n.finalText.length}/${MAX_CORRESPONDENCE_TEXT}</span></span></label>
+  </section>
+  <div class="summary-grid">
+    ${summaryCard("Notificação", n.number, `${n.city}, ${formatDateLong(n.date)}`)}
+    ${summaryCard("Processo", n.process, n.contractor)}
+    ${summaryCard("Anexos", `${n.photos.length} foto(s)`, `${n.signatories.length} assinatura(s)`)}
+  </div>
+  <section class="panel review-panel">
+    <div class="review-block"><h3>Obra</h3><p>${e(n.work)}</p></div>
+    <div class="review-block"><h3>Assinaturas</h3><p>${e(signerNames)}</p></div>
+  </section>
+  <div class="notice"><span aria-hidden="true">✓</span><span><strong>Modelo conferido.</strong> O arquivo será criado com o cabeçalho oficial da Prefeitura de Bertioga e a formatação do documento fornecido.</span></div>`;
+}
+
 function correspondenceType() {
   return CORRESPONDENCE_TYPES[state.correspondence.kind] || CORRESPONDENCE_TYPES.memorando;
 }
@@ -941,7 +1071,9 @@ function renderSuccess() {
     ? "O relatório fotográfico"
     : state.flow === "cota"
       ? "A folha de cota"
-      : `${correspondenceType().article.toUpperCase()} ${correspondenceType().label.toLowerCase()}`;
+      : state.flow === "notification"
+        ? "A notificação"
+        : `${correspondenceType().article.toUpperCase()} ${correspondenceType().label.toLowerCase()}`;
   return `<section class="panel success-card">
     <div class="success-mark">✓</div>
     <h2>Documento criado</h2>
@@ -989,6 +1121,7 @@ function startFlow(flow, kind = "") {
     state.correspondence.kind = kind;
     state.correspondence.complete = false;
   }
+  if (flow === "notification") state.notification.complete = false;
   state.step = 0;
   state.generation = { running: false, progress: 0, message: "" };
   currentData().complete = false;
@@ -1022,6 +1155,9 @@ async function nextStep() {
     if (state.flow === "correspondence" && state.step === 1 && !state.correspondence.finalText.trim()) {
       state.correspondence.finalText = state.correspondence.baseText.trim();
     }
+    if (state.flow === "notification" && state.step === 1 && !state.notification.finalText.trim()) {
+      state.notification.finalText = state.notification.baseText.trim();
+    }
     state.step += 1;
     render();
     focusMain();
@@ -1029,6 +1165,7 @@ async function nextStep() {
   }
   if (state.flow === "report") generateReport();
   else if (state.flow === "cota") generateCota();
+  else if (state.flow === "notification") generateNotification();
   else generateCorrespondence();
 }
 
@@ -1081,6 +1218,35 @@ function validateCurrentStep() {
     }
     if (state.step === 2 && !c.finalText.trim()) {
       showMessage({ title: "Texto final vazio", text: "Mantenha algum conteúdo antes de gerar o documento." });
+      return false;
+    }
+    return true;
+  }
+
+  if (state.flow === "notification") {
+    const n = state.notification;
+    if (state.step === 0 && (!n.city.trim() || !n.date || !n.number.trim() || !n.process.trim() || !n.work.trim() || !n.contractor.trim())) {
+      showMessage({ title: "Complete a identificação", text: "Informe cidade, data, número da notificação, processo, obra e contratada antes de continuar." });
+      return false;
+    }
+    if (state.step === 1) {
+      if (!n.baseText.trim()) {
+        showMessage({ title: "Informe o texto", text: "Escreva o conteúdo da notificação antes de continuar." });
+        return false;
+      }
+      const invalidSigner = n.signatories.find((item) => !item.name.trim() || !item.role.trim());
+      if (!n.signatories.length || invalidSigner) {
+        showMessage({ title: "Complete as assinaturas", text: "Informe o nome e o respectivo cargo de cada pessoa que vai assinar." });
+        return false;
+      }
+      const photoWithoutCaption = n.photos.find((photo) => !photo.caption.trim());
+      if (photoWithoutCaption) {
+        showMessage({ title: "Complete as legendas", text: "Toda foto anexada precisa ter uma legenda, ou deve ser removida." });
+        return false;
+      }
+    }
+    if (state.step === 2 && !n.finalText.trim()) {
+      showMessage({ title: "Texto final vazio", text: "Mantenha algum conteúdo antes de gerar a notificação." });
       return false;
     }
     return true;
@@ -1140,6 +1306,10 @@ function updateCounter(target) {
     const counter = target.parentElement.querySelector(".text-counter span:last-child");
     if (counter) counter.textContent = `${target.value.length}/${MAX_CORRESPONDENCE_TEXT}`;
   }
+  if (["notification.baseText", "notification.finalText"].includes(target.dataset.bind)) {
+    const counter = target.parentElement.querySelector(".text-counter span:last-child");
+    if (counter) counter.textContent = `${target.value.length}/${MAX_CORRESPONDENCE_TEXT}`;
+  }
 }
 
 async function handleFiles(kind, files, id = "") {
@@ -1172,6 +1342,19 @@ async function handleFiles(kind, files, id = "") {
     return;
   }
 
+  if (kind === "notification-photos") {
+    const known = new Set(state.notification.photos.map((photo) => `${photo.file.name}-${photo.file.size}-${photo.file.lastModified}`));
+    valid.forEach((file) => {
+      const signature = `${file.name}-${file.size}-${file.lastModified}`;
+      if (!known.has(signature)) {
+        state.notification.photos.push({ id: makeId("notification-photo"), file, url: URL.createObjectURL(file), caption: "" });
+        known.add(signature);
+      }
+    });
+    render();
+    return;
+  }
+
   const file = valid[0];
   const record = { file, url: URL.createObjectURL(file) };
   if (kind === "report-logo") replaceImageRecord(state.report, "logo", record);
@@ -1197,6 +1380,13 @@ function removeFile(kind, id) {
     const topic = state.report.topics.find((item) => item.id === id);
     if (topic) replaceImageRecord(topic, "image", null);
   }
+  render();
+}
+
+function removeNotificationPhoto(id) {
+  const photo = state.notification.photos.find((item) => item.id === id);
+  if (photo?.url) URL.revokeObjectURL(photo.url);
+  state.notification.photos = state.notification.photos.filter((item) => item.id !== id);
   render();
 }
 
@@ -1660,6 +1850,29 @@ async function generateCota() {
   }
 }
 
+async function generateNotification() {
+  if (!validateCurrentStep()) return;
+  if (!window.docx) {
+    showMessage({ title: "Gerador indisponível", text: "O componente de criação do Word não foi carregado. Atualize a página e tente novamente.", kind: "error" });
+    return;
+  }
+  state.generation = { running: true, progress: 10, message: "Aplicando o modelo oficial da notificação…" };
+  render();
+  try {
+    const blob = await buildNotificationDocument((progress, message) => setGenerationProgress(progress, message));
+    const suffix = state.notification.number || state.notification.date;
+    const filename = `notificacao${suffix ? `-${slugify(suffix)}` : ""}.docx`;
+    finishDownload(blob, filename);
+    state.notification.complete = true;
+    state.generation.running = false;
+    render();
+  } catch (error) {
+    state.generation.running = false;
+    render();
+    showMessage({ title: "Não foi possível gerar a notificação", text: error.message, kind: "error" });
+  }
+}
+
 async function generateCorrespondence() {
   if (!validateCurrentStep()) return;
   if (!window.docx) {
@@ -1971,6 +2184,134 @@ async function loadCotaTemplate() {
   return template.slice(0);
 }
 
+async function loadNotificationTemplate() {
+  if (!notificationTemplatePromise) {
+    notificationTemplatePromise = fetch(NOTIFICATION_TEMPLATE_URL)
+      .then((response) => {
+        if (!response.ok) throw new Error("O modelo oficial da notificação não pôde ser carregado.");
+        return response.arrayBuffer();
+      })
+      .catch((error) => {
+        notificationTemplatePromise = null;
+        throw error;
+      });
+  }
+  const data = await notificationTemplatePromise;
+  return data.slice(0);
+}
+
+function notificationBodyParagraphs(text) {
+  const { Paragraph, TextRun, AlignmentType } = window.docx;
+  return String(text || "")
+    .replace(/\r\n?/g, "\n")
+    .split(/\n\s*\n/)
+    .filter((paragraph) => paragraph.trim())
+    .map((paragraph) => new Paragraph({
+      alignment: AlignmentType.JUSTIFIED,
+      spacing: { before: 100, after: 100, line: 240 },
+      children: [new TextRun({ text: paragraph.replace(/\s*\n\s*/g, " ").trim(), font: "Arial", size: 24, color: "222222" })],
+    }));
+}
+
+function notificationMetadataParagraph(label, value, options = {}) {
+  const { Paragraph, TextRun, AlignmentType } = window.docx;
+  return new Paragraph({
+    alignment: options.justified ? AlignmentType.JUSTIFIED : AlignmentType.LEFT,
+    spacing: { after: options.after ?? 0, line: 240 },
+    children: [
+      new TextRun({ text: `${label}: `, font: "Arial", size: 24, bold: true, color: "222222" }),
+      new TextRun({ text: String(value || "").trim(), font: "Arial", size: 24, color: "222222" }),
+    ],
+  });
+}
+
+function notificationSignatureTable(signatories) {
+  const {
+    Paragraph, TextRun, Table, TableRow, TableCell, WidthType, VerticalAlign,
+  } = window.docx;
+  const rows = [];
+  for (let index = 0; index < signatories.length; index += 2) {
+    const pair = signatories.slice(index, index + 2);
+    const cells = pair.map((signatory) => new TableCell({
+      width: { size: 50, type: WidthType.PERCENTAGE },
+      borders: noBorders(),
+      verticalAlign: VerticalAlign.TOP,
+      margins: { top: 240, bottom: 180, left: 0, right: 120 },
+      children: [
+        new Paragraph({ spacing: { after: 0, line: 240 }, children: [new TextRun({ text: signatory.name.trim(), font: "Arial", size: 24, bold: true, color: "222222" })] }),
+        new Paragraph({ spacing: { after: 0, line: 240 }, children: [new TextRun({ text: signatory.role.trim(), font: "Arial", size: 24, bold: true, color: "222222" })] }),
+      ],
+    }));
+    if (cells.length === 1) {
+      cells.push(new TableCell({ width: { size: 50, type: WidthType.PERCENTAGE }, borders: noBorders(), children: [new Paragraph("")] }));
+    }
+    rows.push(new TableRow({ cantSplit: true, children: cells }));
+  }
+  return new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, borders: noBorders(), rows });
+}
+
+async function buildNotificationDocument(onProgress) {
+  const {
+    Paragraph, TextRun, AlignmentType, PageBreak, patchDocument, PatchType,
+  } = window.docx;
+  const n = state.notification;
+  if (typeof patchDocument !== "function" || !PatchType) {
+    throw new Error("O componente de preenchimento do modelo Word não está disponível.");
+  }
+  onProgress(18, "Carregando o modelo oficial da Prefeitura…");
+  const template = await loadNotificationTemplate();
+
+  const children = [
+    new Paragraph({
+      alignment: AlignmentType.RIGHT,
+      spacing: { after: 160, line: 240 },
+      children: [new TextRun({ text: `${n.city.trim()}, ${formatDateLong(n.date)}.`, font: "Arial", size: 24, bold: true, color: "222222" })],
+    }),
+    new Paragraph({
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 220, line: 240 },
+      children: [new TextRun({ text: `${n.number.trim()} NOTIFICAÇÃO`, font: "Arial", size: 24, bold: true, color: "222222" })],
+    }),
+    notificationMetadataParagraph("Processo", n.process),
+    notificationMetadataParagraph("Obra", n.work, { justified: true, after: 160 }),
+    notificationMetadataParagraph("Contratada", n.contractor, { justified: true, after: 160 }),
+  ];
+
+  onProgress(38, "Formatando o texto da notificação em Arial 12…");
+  children.push(...notificationBodyParagraphs(n.finalText));
+  children.push(new Paragraph({ spacing: { before: 180, after: 0 }, children: [] }));
+  children.push(notificationSignatureTable(n.signatories));
+
+  for (let index = 0; index < n.photos.length; index += 1) {
+    const photo = n.photos[index];
+    onProgress(50 + Math.round(((index + 1) / n.photos.length) * 40), `Inserindo imagem ${index + 1} de ${n.photos.length}…`);
+    const run = await imageRunFor(photo.file, 500, 570, `Imagem ${String(index + 1).padStart(2, "0")}`);
+    children.push(new Paragraph({ children: [new PageBreak()] }));
+    children.push(new Paragraph({ alignment: AlignmentType.CENTER, keepNext: true, spacing: { before: 80, after: 120 }, children: [run] }));
+    children.push(new Paragraph({
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 0, line: 240 },
+      children: [new TextRun({ text: `Imagem ${String(index + 1).padStart(2, "0")} - ${photo.caption.trim()}`, font: "Arial", size: 24, bold: true, color: "222222" })],
+    }));
+  }
+
+  onProgress(94, "Preenchendo o modelo sem alterar o cabeçalho…");
+  const blob = await patchDocument({
+    outputType: "blob",
+    data: template,
+    patches: {
+      notification_content: {
+        type: PatchType.DOCUMENT,
+        children,
+      },
+    },
+    keepOriginalStyles: true,
+    recursive: false,
+  });
+  onProgress(100, "Notificação concluída.");
+  return blob;
+}
+
 async function buildCorrespondenceDocument(onProgress) {
   const {
     Document, Packer, Paragraph, TextRun, AlignmentType,
@@ -2048,6 +2389,9 @@ function resetCurrentDocument() {
   } else if (state.flow === "cota") {
     if (state.cota.contextImage?.url) URL.revokeObjectURL(state.cota.contextImage.url);
     state.cota = createCotaState(readStorage("docflow-preferences", {}));
+  } else if (state.flow === "notification") {
+    state.notification.photos.forEach((photo) => URL.revokeObjectURL(photo.url));
+    state.notification = createNotificationState(readStorage("docflow-preferences", {}));
   } else {
     const kind = state.correspondence.kind;
     state.correspondence = createCorrespondenceState(readStorage("docflow-preferences", {}));
@@ -2070,6 +2414,7 @@ async function handleAction(action, target) {
   if (action === "logout") return logout();
   if (action === "start-report") return startFlow("report");
   if (action === "start-cota") return startFlow("cota");
+  if (action === "start-notification") return startFlow("notification");
   if (action === "start-correspondence") return startFlow("correspondence", target.dataset.kind);
   if (action === "previous-step") return previousStep();
   if (action === "next-step") return nextStep();
@@ -2094,6 +2439,7 @@ async function handleAction(action, target) {
   if (action === "remove-api") return removeApiConfiguration();
   if (action === "remove-file") return removeFile(target.dataset.kind, target.dataset.id);
   if (action === "remove-photo") return removePhoto(target.dataset.id);
+  if (action === "remove-notification-photo") return removeNotificationPhoto(target.dataset.id);
   if (action === "analyze-photo") return analyzePhoto(target.dataset.id);
   if (action === "analyze-all") return analyzeAllPhotos();
   if (action === "add-topic") {
@@ -2115,6 +2461,19 @@ async function handleAction(action, target) {
     state.report.responsibleOptions = unique([...state.report.responsibleOptions, name]);
     state.report.responsibles = unique([...state.report.responsibles, name]);
     scheduleSave();
+    render();
+    return;
+  }
+  if (action === "add-notification-signer") {
+    state.notification.signatories.push({ id: makeId("notification-signer"), name: "", role: "" });
+    render();
+    return;
+  }
+  if (action === "remove-notification-signer") {
+    state.notification.signatories = state.notification.signatories.filter((item) => item.id !== target.dataset.id);
+    if (!state.notification.signatories.length) {
+      state.notification.signatories.push({ id: makeId("notification-signer"), name: "", role: "" });
+    }
     render();
     return;
   }
@@ -2159,6 +2518,14 @@ document.addEventListener("input", (event) => {
       if (photo.status === "done") photo.status = "idle";
     }
   }
+  if (target.dataset.notificationSignatoryField) {
+    const signatory = state.notification.signatories.find((item) => item.id === target.dataset.id);
+    if (signatory) signatory[target.dataset.notificationSignatoryField] = target.value;
+  }
+  if (target.dataset.notificationPhotoCaption) {
+    const photo = state.notification.photos.find((item) => item.id === target.dataset.notificationPhotoCaption);
+    if (photo) photo.caption = target.value;
+  }
   if (target.dataset.topicField) {
     const topic = state.report.topics.find((item) => item.id === target.dataset.id);
     if (topic) topic[target.dataset.topicField] = target.value;
@@ -2190,23 +2557,23 @@ document.addEventListener("change", (event) => {
 });
 
 document.addEventListener("dragover", (event) => {
-  const dropZone = event.target.closest("[data-drop='photos']");
+  const dropZone = event.target.closest("[data-drop]");
   if (!dropZone) return;
   event.preventDefault();
   dropZone.classList.add("is-dragging");
 });
 
 document.addEventListener("dragleave", (event) => {
-  const dropZone = event.target.closest("[data-drop='photos']");
+  const dropZone = event.target.closest("[data-drop]");
   if (dropZone) dropZone.classList.remove("is-dragging");
 });
 
 document.addEventListener("drop", (event) => {
-  const dropZone = event.target.closest("[data-drop='photos']");
+  const dropZone = event.target.closest("[data-drop]");
   if (!dropZone) return;
   event.preventDefault();
   dropZone.classList.remove("is-dragging");
-  handleFiles("report-photos", event.dataTransfer.files);
+  handleFiles(dropZone.dataset.drop === "notification-photos" ? "notification-photos" : "report-photos", event.dataTransfer.files);
 });
 
 elements.modelSelect.addEventListener("change", () => {
@@ -2239,6 +2606,7 @@ elements.messageDialog.addEventListener("click", (event) => {
 
 window.addEventListener("beforeunload", () => {
   state.report.photos.forEach((photo) => URL.revokeObjectURL(photo.url));
+  state.notification.photos.forEach((photo) => URL.revokeObjectURL(photo.url));
   if (state.lastDownload?.url) URL.revokeObjectURL(state.lastDownload.url);
 });
 

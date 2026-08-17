@@ -1000,6 +1000,10 @@ select:focus-visible,
   line-height: 1.45;
 }
 
+.textarea-compact {
+  min-height: 112px;
+}
+
 input[type="text"],
 input[type="password"],
 input[type="email"],
@@ -1408,6 +1412,34 @@ textarea::placeholder {
   gap: 9px;
 }
 
+.signatory-list {
+  display: grid;
+  gap: 12px;
+}
+
+.signatory-card {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+  padding: 15px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #ffffff;
+}
+
+.signatory-index {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  color: var(--forest-dark);
+  background: var(--forest-soft);
+  font-size: 10px;
+  font-weight: 850;
+}
+
 .check-row {
   display: flex;
   align-items: center;
@@ -1462,6 +1494,15 @@ textarea::placeholder {
 .photo-list {
   display: grid;
   gap: 12px;
+}
+
+.notification-photo-list {
+  margin-top: 16px;
+}
+
+.notification-empty-state {
+  min-height: 112px;
+  margin-top: 16px;
 }
 
 .photo-card {
@@ -2259,6 +2300,11 @@ textarea::placeholder {
   .summary-grid,
   .topic-image-row {
     grid-template-columns: 1fr;
+  }
+
+  .signatory-card {
+    grid-template-columns: 30px minmax(0, 1fr) auto;
+    align-items: start;
   }
 
   .document-card {

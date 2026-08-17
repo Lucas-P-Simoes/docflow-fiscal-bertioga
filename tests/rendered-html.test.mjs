@@ -63,17 +63,29 @@ test("ships the standard letterhead template and fills it in place", async () =>
 
 
 test("keeps the editable and deployable DocFlow assets synchronized", async () => {
-  const [sourceApp, builtApp, sourceTemplate, builtTemplate] = await Promise.all([
+  const [
+    sourceApp,
+    builtApp,
+    sourceTemplate,
+    builtTemplate,
+    sourceNotificationTemplate,
+    builtNotificationTemplate,
+  ] = await Promise.all([
     readFile(new URL("public/docflow/app.js", siteRoot)),
     readFile(new URL("dist/client/docflow/app.js", siteRoot)),
     readFile(new URL("public/docflow/templates/MODELO_FOLHA_COTA.docx", siteRoot)),
     readFile(
       new URL("dist/client/docflow/templates/MODELO_FOLHA_COTA.docx", siteRoot),
     ),
+    readFile(new URL("public/docflow/templates/MODELO_NOTIFICACAO.docx", siteRoot)),
+    readFile(
+      new URL("dist/client/docflow/templates/MODELO_NOTIFICACAO.docx", siteRoot),
+    ),
   ]);
 
   assert.deepEqual(builtApp, sourceApp);
   assert.deepEqual(builtTemplate, sourceTemplate);
+  assert.deepEqual(builtNotificationTemplate, sourceNotificationTemplate);
 });
 
 
@@ -129,15 +141,43 @@ test("requires an account and keeps registrations and encrypted API keys in D1",
 });
 
 
-test("labels the cota as ready and all other document cards as in development", async () => {
+test("labels the cota and notification as ready", async () => {
   const [app, styles] = await Promise.all([
     readFile(new URL("public/docflow/app.js", siteRoot), "utf8"),
     readFile(new URL("public/docflow/styles.css", siteRoot), "utf8"),
   ]);
 
-  assert.equal((app.match(/card-status is-ready/g) || []).length, 1);
-  assert.equal((app.match(/card-status is-development/g) || []).length, 5);
+  assert.equal((app.match(/card-status is-ready/g) || []).length, 2);
+  assert.equal((app.match(/card-status is-development/g) || []).length, 4);
   assert.match(app, /card-status is-ready">Pronto<\/span>[\s\S]*?<h3>Folha de cota<\/h3>/);
+  assert.match(app, /data-action="start-notification">[\s\S]*?card-status is-ready">Pronto<\/span>[\s\S]*?<h3>Notificação<\/h3>/);
   assert.match(styles, /\.card-status\s*\{/);
   assert.match(styles, /\.card-status\.is-ready\s*\{/);
+});
+
+
+test("builds notifications from the supplied Bertioga model with fillable fields, signatures, and optional photos", async () => {
+  const [app, template] = await Promise.all([
+    readFile(new URL("public/docflow/app.js", siteRoot), "utf8"),
+    readFile(new URL("public/docflow/templates/MODELO_NOTIFICACAO.docx", siteRoot)),
+  ]);
+
+  assert.ok(template.byteLength > 70_000 && template.byteLength < 120_000);
+  assert.match(app, /NOTIFICATION_TEMPLATE_URL\s*=\s*"templates\/MODELO_NOTIFICACAO\.docx"/);
+  assert.match(app, /data-bind="notification\.city"/);
+  assert.match(app, /data-bind="notification\.date"/);
+  assert.match(app, /data-bind="notification\.number"/);
+  assert.match(app, /data-bind="notification\.process"/);
+  assert.match(app, /data-bind="notification\.work"/);
+  assert.match(app, /data-bind="notification\.contractor"/);
+  assert.match(app, /data-bind="notification\.baseText"/);
+  assert.match(app, /data-notification-signatory-field="name"/);
+  assert.match(app, /data-notification-signatory-field="role"/);
+  assert.match(app, /data-file="notification-photos"/);
+  assert.match(app, /data-notification-photo-caption/);
+  assert.match(app, /async function buildNotificationDocument/);
+  assert.match(app, /font:\s*"Arial",\s*size:\s*24/);
+  assert.match(app, /type:\s*PatchType\.DOCUMENT/);
+  assert.match(app, /keepOriginalStyles:\s*true/);
+  assert.match(app, /Imagem \$\{String\(index \+ 1\)\.padStart\(2, "0"\)\} - \$\{photo\.caption\.trim\(\)\}/);
 });
