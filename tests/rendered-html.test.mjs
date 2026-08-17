@@ -209,6 +209,10 @@ test("keeps a private account history for every generated document", async () =>
   assert.match(page, /<strong>Fiscal Bertioga<\/strong>/);
   assert.doesNotMatch(page, /<strong>DocFlow<\/strong>/);
   assert.match(page, /data-action="show-history"/);
+  assert.doesNotMatch(app, /Escolha o documento/);
+  assert.doesNotMatch(app, /O que você quer preparar\?/);
+  assert.doesNotMatch(app, /history-callout/);
+  assert.match(app, /home-history-button[^>]*[\s\S]*?Histórico de documentos/);
   assert.match(app, /Histórico de documentos/);
   assert.match(app, /apiRequest\("\/api\/documents"/);
   assert.match(app, /requestOptions\.body instanceof FormData/);

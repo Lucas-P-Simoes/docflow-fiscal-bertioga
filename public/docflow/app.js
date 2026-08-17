@@ -661,8 +661,10 @@ function configureActionBar() {
 
 function renderHome() {
   return `<section class="document-section">
-    <div class="section-intro">
-      <div><span class="eyebrow eyebrow-dark">Escolha o documento</span><h2>O que você quer preparar?</h2></div>
+    <div class="home-history-row">
+      <button class="button button-primary home-history-button" type="button" data-action="show-history">
+        Histórico de documentos <span aria-hidden="true">→</span>
+      </button>
     </div>
     <div class="document-grid">
       <article class="document-card" tabindex="0" role="button" data-action="start-report">
@@ -708,10 +710,6 @@ function renderHome() {
         <span class="card-link">Criar advertência <span aria-hidden="true">→</span></span>
       </article>
     </div>
-    <aside class="history-callout">
-      <div><span class="eyebrow eyebrow-dark">Seus arquivos</span><h3>Precisa baixar um documento novamente?</h3><p>Os arquivos gerados ficam vinculados à sua conta e disponíveis no histórico.</p></div>
-      <button class="button button-primary" type="button" data-action="show-history">Abrir histórico <span aria-hidden="true">→</span></button>
-    </aside>
   </section>`;
 }
 
