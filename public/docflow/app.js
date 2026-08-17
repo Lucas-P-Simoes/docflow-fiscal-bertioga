@@ -13,6 +13,7 @@ const REPORT_STEPS = ["Informações", "Fotografias", "Conteúdo e formato", "Re
 const COTA_STEPS = ["Conteúdo", "Revisão e download"];
 const CORRESPONDENCE_STEPS = ["Dados do documento", "Conteúdo", "Revisão e download"];
 const NOTIFICATION_STEPS = ["Dados da notificação", "Conteúdo e anexos", "Revisão e download"];
+const WARNING_STEPS = ["Dados da advertência", "Conteúdo e anexos", "Revisão e download"];
 const CORRESPONDENCE_TYPES = {
   memorando: {
     label: "Memorando",
@@ -149,7 +150,8 @@ const state = {
   report: createReportState(persisted),
   cota: createCotaState(persisted),
   correspondence: createCorrespondenceState(persisted),
-  notification: createNotificationState(persisted),
+  notification: createNotificationState(persisted, "notification"),
+  warning: createNotificationState(persisted, "warning"),
   analysis: { running: false, total: 0, done: 0 },
   generation: { running: false, progress: 0, message: "" },
   lastDownload: null,
@@ -218,9 +220,9 @@ function createCorrespondenceState(saved = {}) {
   };
 }
 
-function createNotificationState(saved = {}) {
+function createNotificationState(saved = {}, kind = "notification") {
   return {
-    city: saved.notificationCity || "Bertioga",
+    city: saved[`${kind}City`] || "Bertioga",
     date: todayInputValue(),
     number: "",
     process: "",
@@ -228,7 +230,7 @@ function createNotificationState(saved = {}) {
     contractor: "",
     baseText: "",
     finalText: "",
-    signatories: [{ id: makeId("notification-signer"), name: "", role: "" }],
+    signatories: [{ id: makeId(`${kind}-signer`), name: "", role: "" }],
     photos: [],
     complete: false,
   };
@@ -266,6 +268,7 @@ function scheduleSave() {
         onePerPage: state.report.onePerPage,
         startPhotosNewPage: state.report.startPhotosNewPage,
         notificationCity: state.notification.city,
+        warningCity: state.warning.city,
       };
       localStorage.setItem("docflow-preferences", JSON.stringify(preferences));
       elements.saveStatus.textContent = "Preferências locais";
@@ -597,7 +600,7 @@ function render() {
       ? renderReport()
       : state.flow === "cota"
         ? renderCota()
-        : state.flow === "notification"
+        : isNoticeFlow()
           ? renderNotification()
           : renderCorrespondence();
     configureActionBar();
@@ -607,7 +610,7 @@ function render() {
 function currentData() {
   if (state.flow === "report") return state.report;
   if (state.flow === "cota") return state.cota;
-  if (state.flow === "notification") return state.notification;
+  if (isNoticeFlow()) return noticeState();
   return state.correspondence;
 }
 
@@ -615,6 +618,7 @@ function currentSteps() {
   if (state.flow === "report") return REPORT_STEPS;
   if (state.flow === "cota") return COTA_STEPS;
   if (state.flow === "notification") return NOTIFICATION_STEPS;
+  if (state.flow === "warning") return WARNING_STEPS;
   return CORRESPONDENCE_STEPS;
 }
 
@@ -627,9 +631,10 @@ function renderSidebar() {
     elements.flowEyebrow.textContent = "Folha de cota";
     elements.flowTitle.textContent = "Prepare o despacho";
     elements.flowDescription.textContent = "Revise a redação e baixe o Word pronto.";
-  } else if (state.flow === "notification") {
-    elements.flowEyebrow.textContent = "Notificação";
-    elements.flowTitle.textContent = "Prepare a notificação";
+  } else if (isNoticeFlow()) {
+    const notice = noticeCopy();
+    elements.flowEyebrow.textContent = notice.label;
+    elements.flowTitle.textContent = `Prepare a ${notice.lower}`;
     elements.flowDescription.textContent = "Use o timbre oficial, assinaturas e fotos opcionais.";
   } else {
     const type = correspondenceType();
@@ -702,11 +707,11 @@ function renderHome() {
         <p>Gere a notificação no modelo oficial da Prefeitura de Bertioga, com assinaturas e fotos opcionais.</p>
         <span class="card-link">Criar notificação <span aria-hidden="true">→</span></span>
       </article>
-      <article class="document-card is-alert" tabindex="0" role="button" data-action="start-correspondence" data-kind="advertencia">
-        <span class="card-status is-development">Em desenvolvimento</span>
+      <article class="document-card is-alert" tabindex="0" role="button" data-action="start-warning">
+        <span class="card-status is-ready">Pronto</span>
         <span class="card-number" aria-hidden="true">06</span><span class="card-icon" aria-hidden="true">A</span>
         <h3>Advertência</h3>
-        <p>Registre uma orientação ou advertência formal usando apenas os fatos informados.</p>
+        <p>Gere a advertência no modelo oficial da Prefeitura de Bertioga, com assinaturas e fotos opcionais.</p>
         <span class="card-link">Criar advertência <span aria-hidden="true">→</span></span>
       </article>
     </div>
@@ -978,36 +983,57 @@ function renderCotaReview() {
   ${c.useAI ? `<div class="notice"><span aria-hidden="true">✦</span><span>Texto analisado com <strong>${e(modelDisplayName(getSelectedModel()))}</strong>${c.contextImage ? ` usando <strong>${e(c.contextImage.file.name)}</strong> como contexto visual` : ""}. Revise todas as informações.</span></div>` : `<div class="notice"><span aria-hidden="true">✓</span><span><strong>Modo direto:</strong> este é o texto digitado por você, sem análise da IA.</span></div>`}`;
 }
 
+function isNoticeFlow(flow = state.flow) {
+  return flow === "notification" || flow === "warning";
+}
+
+function noticeState(flow = state.flow) {
+  return flow === "warning" ? state.warning : state.notification;
+}
+
+function noticeCopy(flow = state.flow) {
+  const warning = flow === "warning";
+  return {
+    key: warning ? "warning" : "notification",
+    label: warning ? "Advertência" : "Notificação",
+    lower: warning ? "advertência" : "notificação",
+    title: warning ? "ADVERTÊNCIA" : "NOTIFICAÇÃO",
+    slug: warning ? "advertencia" : "notificacao",
+  };
+}
+
 function renderNotification() {
   const renders = [renderNotificationInfo, renderNotificationContent, renderNotificationReview];
   return renders[state.step]();
 }
 
 function renderNotificationInfo() {
-  const n = state.notification;
-  return `${pageHeading("Etapa 1", "Identifique a notificação", "Preencha os dados que aparecerão no modelo oficial da Prefeitura de Bertioga.")}
+  const n = noticeState();
+  const notice = noticeCopy();
+  return `${pageHeading("Etapa 1", `Identifique a ${notice.lower}`, "Preencha os dados que aparecerão no modelo oficial da Prefeitura de Bertioga.")}
   <section class="panel">
     ${panelHeader("Modelo oficial", "O brasão e o cabeçalho da Prefeitura serão aplicados automaticamente, com a mesma página A4, margens e tipografia do arquivo fornecido.")}
     <div class="field-grid three">
-      <label class="field"><span>Cidade *</span><input type="text" data-bind="notification.city" value="${e(n.city)}" placeholder="Ex.: Bertioga" /></label>
-      <label class="field"><span>Data *</span><input type="date" data-bind="notification.date" value="${e(n.date)}" /></label>
-      <label class="field"><span>Número da notificação *</span><input type="text" data-bind="notification.number" value="${e(n.number)}" placeholder="Ex.: 2ª ou 015/2026" /></label>
+      <label class="field"><span>Cidade *</span><input type="text" data-bind="${notice.key}.city" value="${e(n.city)}" placeholder="Ex.: Bertioga" /></label>
+      <label class="field"><span>Data *</span><input type="date" data-bind="${notice.key}.date" value="${e(n.date)}" /></label>
+      <label class="field"><span>Número da ${notice.lower} *</span><input type="text" data-bind="${notice.key}.number" value="${e(n.number)}" placeholder="Ex.: 2ª ou 015/2026" /></label>
     </div>
   </section>
   <section class="panel">
     ${panelHeader("Processo e contratação", "Estes campos serão apresentados com os mesmos rótulos e alinhamentos do modelo.")}
-    <label class="field"><span>Processo *</span><input type="text" data-bind="notification.process" value="${e(n.process)}" placeholder="Ex.: 3330/2026 - Contrato 22/2026" /></label>
-    <label class="field stacked"><span>Obra *</span><textarea class="textarea-compact" data-bind="notification.work" maxlength="1800" placeholder="Descreva o objeto da obra ou do contrato">${e(n.work)}</textarea></label>
-    <label class="field stacked"><span>Contratada *</span><input type="text" data-bind="notification.contractor" value="${e(n.contractor)}" placeholder="Razão social da empresa contratada" /></label>
+    <label class="field"><span>Processo *</span><input type="text" data-bind="${notice.key}.process" value="${e(n.process)}" placeholder="Ex.: 3330/2026 - Contrato 22/2026" /></label>
+    <label class="field stacked"><span>Obra *</span><textarea class="textarea-compact" data-bind="${notice.key}.work" maxlength="1800" placeholder="Descreva o objeto da obra ou do contrato">${e(n.work)}</textarea></label>
+    <label class="field stacked"><span>Contratada *</span><input type="text" data-bind="${notice.key}.contractor" value="${e(n.contractor)}" placeholder="Razão social da empresa contratada" /></label>
   </section>`;
 }
 
 function renderNotificationContent() {
-  const n = state.notification;
-  return `${pageHeading("Etapa 2", "Escreva e complete a notificação", "Informe o texto, as pessoas que assinarão e, se desejar, anexe fotos com legenda.")}
+  const n = noticeState();
+  const notice = noticeCopy();
+  return `${pageHeading("Etapa 2", `Escreva e complete a ${notice.lower}`, "Informe o texto, as pessoas que assinarão e, se desejar, anexe fotos com legenda.")}
   <section class="panel">
-    ${panelHeader("Texto da notificação", "Separe os parágrafos com uma linha em branco; o Word manterá o texto em Arial 12 e alinhamento justificado.")}
-    <label class="field"><span>Conteúdo *</span><textarea data-bind="notification.baseText" maxlength="${MAX_CORRESPONDENCE_TEXT}" placeholder="Escreva o texto integral da notificação…">${e(n.baseText)}</textarea><span class="text-counter"><span>Os fatos e prazos devem ser conferidos antes da emissão</span><span>${n.baseText.length}/${MAX_CORRESPONDENCE_TEXT}</span></span></label>
+    ${panelHeader(`Texto da ${notice.lower}`, "Separe os parágrafos com uma linha em branco; o Word manterá o texto em Arial 12 e alinhamento justificado.")}
+    <label class="field"><span>Conteúdo *</span><textarea data-bind="${notice.key}.baseText" maxlength="${MAX_CORRESPONDENCE_TEXT}" placeholder="Escreva o texto integral da ${notice.lower}…">${e(n.baseText)}</textarea><span class="text-counter"><span>Os fatos e prazos devem ser conferidos antes da emissão</span><span>${n.baseText.length}/${MAX_CORRESPONDENCE_TEXT}</span></span></label>
   </section>
   <section class="panel">
     ${panelHeader("Pessoas que vão assinar", "O cargo de cada pessoa aparecerá imediatamente abaixo do respectivo nome.", `<button class="button button-secondary" type="button" data-action="add-notification-signer">+ Adicionar pessoa</button>`)}
@@ -1017,8 +1043,8 @@ function renderNotificationContent() {
   </section>
   <section class="panel">
     ${panelHeader("Fotos e legendas", "Opcional. Cada foto será colocada em uma página própria, com numeração automática e a legenda abaixo.")}
-    <label class="upload-box" data-drop="notification-photos">
-      <input type="file" multiple accept="image/jpeg,image/png,image/bmp,image/gif,image/webp" data-file="notification-photos" />
+    <label class="upload-box" data-drop="${notice.key}-photos">
+      <input type="file" multiple accept="image/jpeg,image/png,image/bmp,image/gif,image/webp" data-file="${notice.key}-photos" />
       <span class="upload-icon" aria-hidden="true">+</span>
       <span class="upload-copy"><strong>Anexar fotos</strong><span>JPEG, PNG, BMP, GIF ou WebP • até 20 MB por arquivo</span></span>
     </label>
@@ -1049,15 +1075,16 @@ function renderNotificationPhoto(photo, index) {
 }
 
 function renderNotificationReview() {
-  const n = state.notification;
+  const n = noticeState();
+  const notice = noticeCopy();
   const signerNames = n.signatories.map((item) => `${item.name} — ${item.role}`).join(" • ");
-  return `${pageHeading("Etapa 3", "Revise a notificação", "Confira os dados e ajuste o texto final antes de baixar o Word.")}
+  return `${pageHeading("Etapa 3", `Revise a ${notice.lower}`, "Confira os dados e ajuste o texto final antes de baixar o Word.")}
   <section class="panel">
-    ${panelHeader("Texto final", "Somente o conteúdo deste campo será usado como corpo da notificação.")}
-    <label class="field"><span>Redação final *</span><textarea data-bind="notification.finalText" maxlength="${MAX_CORRESPONDENCE_TEXT}">${e(n.finalText)}</textarea><span class="text-counter"><span>Revise nomes, datas, prazos e informações contratuais</span><span>${n.finalText.length}/${MAX_CORRESPONDENCE_TEXT}</span></span></label>
+    ${panelHeader("Texto final", `Somente o conteúdo deste campo será usado como corpo da ${notice.lower}.`)}
+    <label class="field"><span>Redação final *</span><textarea data-bind="${notice.key}.finalText" maxlength="${MAX_CORRESPONDENCE_TEXT}">${e(n.finalText)}</textarea><span class="text-counter"><span>Revise nomes, datas, prazos e informações contratuais</span><span>${n.finalText.length}/${MAX_CORRESPONDENCE_TEXT}</span></span></label>
   </section>
   <div class="summary-grid">
-    ${summaryCard("Notificação", n.number, `${n.city}, ${formatDateLong(n.date)}`)}
+    ${summaryCard(notice.label, n.number, `${n.city}, ${formatDateLong(n.date)}`)}
     ${summaryCard("Processo", n.process, n.contractor)}
     ${summaryCard("Anexos", `${n.photos.length} foto(s)`, `${n.signatories.length} assinatura(s)`)}
   </div>
@@ -1153,6 +1180,8 @@ function renderSuccess() {
       ? "A folha de cota"
       : state.flow === "notification"
         ? "A notificação"
+        : state.flow === "warning"
+          ? "A advertência"
         : `${correspondenceType().article.toUpperCase()} ${correspondenceType().label.toLowerCase()}`;
   const historyMessage = state.lastDownload?.saved
     ? " Uma cópia também foi salva no histórico da sua conta."
@@ -1205,7 +1234,7 @@ function startFlow(flow, kind = "") {
     state.correspondence.kind = kind;
     state.correspondence.complete = false;
   }
-  if (flow === "notification") state.notification.complete = false;
+  if (isNoticeFlow(flow)) noticeState(flow).complete = false;
   state.step = 0;
   state.generation = { running: false, progress: 0, message: "" };
   currentData().complete = false;
@@ -1240,8 +1269,8 @@ async function nextStep() {
     if (state.flow === "correspondence" && state.step === 1 && !state.correspondence.finalText.trim()) {
       state.correspondence.finalText = state.correspondence.baseText.trim();
     }
-    if (state.flow === "notification" && state.step === 1 && !state.notification.finalText.trim()) {
-      state.notification.finalText = state.notification.baseText.trim();
+    if (isNoticeFlow() && state.step === 1 && !noticeState().finalText.trim()) {
+      noticeState().finalText = noticeState().baseText.trim();
     }
     state.step += 1;
     render();
@@ -1250,7 +1279,7 @@ async function nextStep() {
   }
   if (state.flow === "report") generateReport();
   else if (state.flow === "cota") generateCota();
-  else if (state.flow === "notification") generateNotification();
+  else if (isNoticeFlow()) generateNotification();
   else generateCorrespondence();
 }
 
@@ -1308,15 +1337,16 @@ function validateCurrentStep() {
     return true;
   }
 
-  if (state.flow === "notification") {
-    const n = state.notification;
+  if (isNoticeFlow()) {
+    const n = noticeState();
+    const notice = noticeCopy();
     if (state.step === 0 && (!n.city.trim() || !n.date || !n.number.trim() || !n.process.trim() || !n.work.trim() || !n.contractor.trim())) {
-      showMessage({ title: "Complete a identificação", text: "Informe cidade, data, número da notificação, processo, obra e contratada antes de continuar." });
+      showMessage({ title: "Complete a identificação", text: `Informe cidade, data, número da ${notice.lower}, processo, obra e contratada antes de continuar.` });
       return false;
     }
     if (state.step === 1) {
       if (!n.baseText.trim()) {
-        showMessage({ title: "Informe o texto", text: "Escreva o conteúdo da notificação antes de continuar." });
+        showMessage({ title: "Informe o texto", text: `Escreva o conteúdo da ${notice.lower} antes de continuar.` });
         return false;
       }
       const invalidSigner = n.signatories.find((item) => !item.name.trim() || !item.role.trim());
@@ -1331,7 +1361,7 @@ function validateCurrentStep() {
       }
     }
     if (state.step === 2 && !n.finalText.trim()) {
-      showMessage({ title: "Texto final vazio", text: "Mantenha algum conteúdo antes de gerar a notificação." });
+      showMessage({ title: "Texto final vazio", text: `Mantenha algum conteúdo antes de gerar a ${notice.lower}.` });
       return false;
     }
     return true;
@@ -1391,7 +1421,7 @@ function updateCounter(target) {
     const counter = target.parentElement.querySelector(".text-counter span:last-child");
     if (counter) counter.textContent = `${target.value.length}/${MAX_CORRESPONDENCE_TEXT}`;
   }
-  if (["notification.baseText", "notification.finalText"].includes(target.dataset.bind)) {
+  if (["notification.baseText", "notification.finalText", "warning.baseText", "warning.finalText"].includes(target.dataset.bind)) {
     const counter = target.parentElement.querySelector(".text-counter span:last-child");
     if (counter) counter.textContent = `${target.value.length}/${MAX_CORRESPONDENCE_TEXT}`;
   }
@@ -1427,12 +1457,13 @@ async function handleFiles(kind, files, id = "") {
     return;
   }
 
-  if (kind === "notification-photos") {
-    const known = new Set(state.notification.photos.map((photo) => `${photo.file.name}-${photo.file.size}-${photo.file.lastModified}`));
+  if (kind === "notification-photos" || kind === "warning-photos") {
+    const owner = kind === "warning-photos" ? state.warning : state.notification;
+    const known = new Set(owner.photos.map((photo) => `${photo.file.name}-${photo.file.size}-${photo.file.lastModified}`));
     valid.forEach((file) => {
       const signature = `${file.name}-${file.size}-${file.lastModified}`;
       if (!known.has(signature)) {
-        state.notification.photos.push({ id: makeId("notification-photo"), file, url: URL.createObjectURL(file), caption: "" });
+        owner.photos.push({ id: makeId(`${kind}-photo`), file, url: URL.createObjectURL(file), caption: "" });
         known.add(signature);
       }
     });
@@ -1469,9 +1500,10 @@ function removeFile(kind, id) {
 }
 
 function removeNotificationPhoto(id) {
-  const photo = state.notification.photos.find((item) => item.id === id);
+  const owner = noticeState();
+  const photo = owner.photos.find((item) => item.id === id);
   if (photo?.url) URL.revokeObjectURL(photo.url);
-  state.notification.photos = state.notification.photos.filter((item) => item.id !== id);
+  owner.photos = owner.photos.filter((item) => item.id !== id);
   render();
 }
 
@@ -1937,24 +1969,26 @@ async function generateCota() {
 
 async function generateNotification() {
   if (!validateCurrentStep()) return;
+  const n = noticeState();
+  const notice = noticeCopy();
   if (!window.docx) {
     showMessage({ title: "Gerador indisponível", text: "O componente de criação do Word não foi carregado. Atualize a página e tente novamente.", kind: "error" });
     return;
   }
-  state.generation = { running: true, progress: 10, message: "Aplicando o modelo oficial da notificação…" };
+  state.generation = { running: true, progress: 10, message: `Aplicando o modelo oficial da ${notice.lower}…` };
   render();
   try {
     const blob = await buildNotificationDocument((progress, message) => setGenerationProgress(progress, message));
-    const suffix = state.notification.number || state.notification.date;
-    const filename = `notificacao${suffix ? `-${slugify(suffix)}` : ""}.docx`;
-    await finishDownload(blob, filename, "Notificação");
-    state.notification.complete = true;
+    const suffix = n.number || n.date;
+    const filename = `${notice.slug}${suffix ? `-${slugify(suffix)}` : ""}.docx`;
+    await finishDownload(blob, filename, notice.label);
+    n.complete = true;
     state.generation.running = false;
     render();
   } catch (error) {
     state.generation.running = false;
     render();
-    showMessage({ title: "Não foi possível gerar a notificação", text: error.message, kind: "error" });
+    showMessage({ title: `Não foi possível gerar a ${notice.lower}`, text: error.message, kind: "error" });
   }
 }
 
@@ -2363,7 +2397,8 @@ async function buildNotificationDocument(onProgress) {
   const {
     Paragraph, TextRun, AlignmentType, PageBreak, patchDocument, PatchType,
   } = window.docx;
-  const n = state.notification;
+  const n = noticeState();
+  const notice = noticeCopy();
   if (typeof patchDocument !== "function" || !PatchType) {
     throw new Error("O componente de preenchimento do modelo Word não está disponível.");
   }
@@ -2379,14 +2414,14 @@ async function buildNotificationDocument(onProgress) {
     new Paragraph({
       alignment: AlignmentType.CENTER,
       spacing: { after: 220, line: 240 },
-      children: [new TextRun({ text: `${n.number.trim()} NOTIFICAÇÃO`, font: "Arial", size: 24, bold: true, color: "222222" })],
+      children: [new TextRun({ text: `${n.number.trim()} ${notice.title}`, font: "Arial", size: 24, bold: true, color: "222222" })],
     }),
     notificationMetadataParagraph("Processo", n.process),
     notificationMetadataParagraph("Obra", n.work, { justified: true, after: 160 }),
     notificationMetadataParagraph("Contratada", n.contractor, { justified: true, after: 160 }),
   ];
 
-  onProgress(38, "Formatando o texto da notificação em Arial 12…");
+  onProgress(38, `Formatando o texto da ${notice.lower} em Arial 12…`);
   children.push(...notificationBodyParagraphs(n.finalText));
   children.push(new Paragraph({ spacing: { before: 180, after: 0 }, children: [] }));
   children.push(notificationSignatureTable(n.signatories));
@@ -2417,7 +2452,7 @@ async function buildNotificationDocument(onProgress) {
     keepOriginalStyles: true,
     recursive: false,
   });
-  onProgress(100, "Notificação concluída.");
+  onProgress(100, `${notice.label} concluída.`);
   return blob;
 }
 
@@ -2498,9 +2533,10 @@ function resetCurrentDocument() {
   } else if (state.flow === "cota") {
     if (state.cota.contextImage?.url) URL.revokeObjectURL(state.cota.contextImage.url);
     state.cota = createCotaState(readStorage("docflow-preferences", {}));
-  } else if (state.flow === "notification") {
-    state.notification.photos.forEach((photo) => URL.revokeObjectURL(photo.url));
-    state.notification = createNotificationState(readStorage("docflow-preferences", {}));
+  } else if (isNoticeFlow()) {
+    const flow = state.flow;
+    noticeState().photos.forEach((photo) => URL.revokeObjectURL(photo.url));
+    state[flow] = createNotificationState(readStorage("docflow-preferences", {}), flow);
   } else {
     const kind = state.correspondence.kind;
     state.correspondence = createCorrespondenceState(readStorage("docflow-preferences", {}));
@@ -2527,6 +2563,7 @@ async function handleAction(action, target) {
   if (action === "start-report") return startFlow("report");
   if (action === "start-cota") return startFlow("cota");
   if (action === "start-notification") return startFlow("notification");
+  if (action === "start-warning") return startFlow("warning");
   if (action === "start-correspondence") return startFlow("correspondence", target.dataset.kind);
   if (action === "previous-step") return previousStep();
   if (action === "next-step") return nextStep();
@@ -2577,14 +2614,15 @@ async function handleAction(action, target) {
     return;
   }
   if (action === "add-notification-signer") {
-    state.notification.signatories.push({ id: makeId("notification-signer"), name: "", role: "" });
+    noticeState().signatories.push({ id: makeId(`${state.flow}-signer`), name: "", role: "" });
     render();
     return;
   }
   if (action === "remove-notification-signer") {
-    state.notification.signatories = state.notification.signatories.filter((item) => item.id !== target.dataset.id);
-    if (!state.notification.signatories.length) {
-      state.notification.signatories.push({ id: makeId("notification-signer"), name: "", role: "" });
+    const notice = noticeState();
+    notice.signatories = notice.signatories.filter((item) => item.id !== target.dataset.id);
+    if (!notice.signatories.length) {
+      notice.signatories.push({ id: makeId(`${state.flow}-signer`), name: "", role: "" });
     }
     render();
     return;
@@ -2631,11 +2669,11 @@ document.addEventListener("input", (event) => {
     }
   }
   if (target.dataset.notificationSignatoryField) {
-    const signatory = state.notification.signatories.find((item) => item.id === target.dataset.id);
+    const signatory = noticeState().signatories.find((item) => item.id === target.dataset.id);
     if (signatory) signatory[target.dataset.notificationSignatoryField] = target.value;
   }
   if (target.dataset.notificationPhotoCaption) {
-    const photo = state.notification.photos.find((item) => item.id === target.dataset.notificationPhotoCaption);
+    const photo = noticeState().photos.find((item) => item.id === target.dataset.notificationPhotoCaption);
     if (photo) photo.caption = target.value;
   }
   if (target.dataset.topicField) {
@@ -2685,7 +2723,7 @@ document.addEventListener("drop", (event) => {
   if (!dropZone) return;
   event.preventDefault();
   dropZone.classList.remove("is-dragging");
-  handleFiles(dropZone.dataset.drop === "notification-photos" ? "notification-photos" : "report-photos", event.dataTransfer.files);
+  handleFiles(["notification-photos", "warning-photos"].includes(dropZone.dataset.drop) ? dropZone.dataset.drop : "report-photos", event.dataTransfer.files);
 });
 
 elements.modelSelect.addEventListener("change", () => {
@@ -2719,6 +2757,7 @@ elements.messageDialog.addEventListener("click", (event) => {
 window.addEventListener("beforeunload", () => {
   state.report.photos.forEach((photo) => URL.revokeObjectURL(photo.url));
   state.notification.photos.forEach((photo) => URL.revokeObjectURL(photo.url));
+  state.warning.photos.forEach((photo) => URL.revokeObjectURL(photo.url));
   if (state.lastDownload?.url) URL.revokeObjectURL(state.lastDownload.url);
 });
 

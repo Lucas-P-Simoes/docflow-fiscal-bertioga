@@ -151,22 +151,23 @@ test("requires an account and keeps registrations and encrypted API keys in D1",
 });
 
 
-test("labels the cota and notification as ready", async () => {
+test("labels the cota, notification, and warning as ready", async () => {
   const [app, styles] = await Promise.all([
     readFile(new URL("public/docflow/app.js", siteRoot), "utf8"),
     readFile(new URL("public/docflow/styles.css", siteRoot), "utf8"),
   ]);
 
-  assert.equal((app.match(/card-status is-ready/g) || []).length, 2);
-  assert.equal((app.match(/card-status is-development/g) || []).length, 4);
+  assert.equal((app.match(/card-status is-ready/g) || []).length, 3);
+  assert.equal((app.match(/card-status is-development/g) || []).length, 3);
   assert.match(app, /card-status is-ready">Pronto<\/span>[\s\S]*?<h3>Folha de cota<\/h3>/);
   assert.match(app, /data-action="start-notification">[\s\S]*?card-status is-ready">Pronto<\/span>[\s\S]*?<h3>Notificação<\/h3>/);
+  assert.match(app, /data-action="start-warning">[\s\S]*?card-status is-ready">Pronto<\/span>[\s\S]*?<h3>Advertência<\/h3>/);
   assert.match(styles, /\.card-status\s*\{/);
   assert.match(styles, /\.card-status\.is-ready\s*\{/);
 });
 
 
-test("builds notifications from the supplied Bertioga model with fillable fields, signatures, and optional photos", async () => {
+test("builds notifications and warnings from the same Bertioga model with fillable fields, signatures, and optional photos", async () => {
   const [app, template] = await Promise.all([
     readFile(new URL("public/docflow/app.js", siteRoot), "utf8"),
     readFile(new URL("public/docflow/templates/MODELO_NOTIFICACAO.docx", siteRoot)),
@@ -174,21 +175,26 @@ test("builds notifications from the supplied Bertioga model with fillable fields
 
   assert.ok(template.byteLength > 70_000 && template.byteLength < 120_000);
   assert.match(app, /NOTIFICATION_TEMPLATE_URL\s*=\s*"templates\/MODELO_NOTIFICACAO\.docx"/);
-  assert.match(app, /data-bind="notification\.city"/);
-  assert.match(app, /data-bind="notification\.date"/);
-  assert.match(app, /data-bind="notification\.number"/);
-  assert.match(app, /data-bind="notification\.process"/);
-  assert.match(app, /data-bind="notification\.work"/);
-  assert.match(app, /data-bind="notification\.contractor"/);
-  assert.match(app, /data-bind="notification\.baseText"/);
+  assert.match(app, /warning:\s*createNotificationState\(persisted, "warning"\)/);
+  assert.match(app, /flow === "notification" \|\| flow === "warning"/);
+  assert.match(app, /data-bind="\$\{notice\.key\}\.city"/);
+  assert.match(app, /data-bind="\$\{notice\.key\}\.date"/);
+  assert.match(app, /data-bind="\$\{notice\.key\}\.number"/);
+  assert.match(app, /data-bind="\$\{notice\.key\}\.process"/);
+  assert.match(app, /data-bind="\$\{notice\.key\}\.work"/);
+  assert.match(app, /data-bind="\$\{notice\.key\}\.contractor"/);
+  assert.match(app, /data-bind="\$\{notice\.key\}\.baseText"/);
   assert.match(app, /data-notification-signatory-field="name"/);
   assert.match(app, /data-notification-signatory-field="role"/);
-  assert.match(app, /data-file="notification-photos"/);
+  assert.match(app, /data-file="\$\{notice\.key\}-photos"/);
   assert.match(app, /data-notification-photo-caption/);
   assert.match(app, /async function buildNotificationDocument/);
   assert.match(app, /font:\s*"Arial",\s*size:\s*24/);
   assert.match(app, /type:\s*PatchType\.DOCUMENT/);
   assert.match(app, /keepOriginalStyles:\s*true/);
+  assert.match(app, /title:\s*warning \? "ADVERTÊNCIA" : "NOTIFICAÇÃO"/);
+  assert.match(app, /text:\s*`\$\{n\.number\.trim\(\)\} \$\{notice\.title\}`/);
+  assert.match(app, /await finishDownload\(blob, filename, notice\.label\)/);
   assert.match(app, /Imagem \$\{String\(index \+ 1\)\.padStart\(2, "0"\)\} - \$\{photo\.caption\.trim\(\)\}/);
 });
 
