@@ -70,6 +70,8 @@ test("keeps the editable and deployable DocFlow assets synchronized", async () =
     builtTemplate,
     sourceNotificationTemplate,
     builtNotificationTemplate,
+    sourceLoginImage,
+    builtLoginImage,
   ] = await Promise.all([
     readFile(new URL("public/docflow/app.js", siteRoot)),
     readFile(new URL("dist/client/docflow/app.js", siteRoot)),
@@ -81,11 +83,14 @@ test("keeps the editable and deployable DocFlow assets synchronized", async () =
     readFile(
       new URL("dist/client/docflow/templates/MODELO_NOTIFICACAO.docx", siteRoot),
     ),
+    readFile(new URL("public/docflow/assets/bertioga-praia-login.png", siteRoot)),
+    readFile(new URL("dist/client/docflow/assets/bertioga-praia-login.png", siteRoot)),
   ]);
 
   assert.deepEqual(builtApp, sourceApp);
   assert.deepEqual(builtTemplate, sourceTemplate);
   assert.deepEqual(builtNotificationTemplate, sourceNotificationTemplate);
+  assert.deepEqual(builtLoginImage, sourceLoginImage);
 });
 
 
@@ -102,10 +107,15 @@ test("requires an account and keeps registrations and encrypted API keys in D1",
   ]);
 
   assert.match(page, /id="authGate"/);
+  assert.doesNotMatch(page, /class="auth-brand"/);
   assert.match(page, /id="loginForm"/);
   assert.match(page, /id="registerForm"/);
   assert.match(page, /id="siteShell"[^>]*is-hidden[^>]*hidden/);
   assert.match(page, /criptografada antes de ser salva no D1/);
+  assert.match(
+    await readFile(new URL("public/docflow/styles.css", siteRoot), "utf8"),
+    /url\("assets\/bertioga-praia-login\.png"\)/,
+  );
   assert.match(app, /bootstrapAuth\(\)/);
   assert.match(app, /fetch\("\/api\/auth\/session"|apiRequest\("\/api\/auth\/session"/);
   assert.match(app, /apiRequest\("\/api\/account\/api-key"/);
