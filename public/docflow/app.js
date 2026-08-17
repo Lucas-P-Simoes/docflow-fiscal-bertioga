@@ -153,6 +153,7 @@ const state = {
   analysis: { running: false, total: 0, done: 0 },
   generation: { running: false, progress: 0, message: "" },
   lastDownload: null,
+  history: { open: false, loading: false, loaded: false, items: [], error: "" },
   messageCallbacks: new Map(),
 };
 
@@ -357,7 +358,7 @@ async function apiRequest(url, options = {}) {
   const requestOptions = { ...options };
   const headers = new Headers(requestOptions.headers || {});
   headers.set("Accept", "application/json");
-  if (requestOptions.body && typeof requestOptions.body !== "string") {
+  if (requestOptions.body && typeof requestOptions.body !== "string" && !(requestOptions.body instanceof FormData)) {
     headers.set("Content-Type", "application/json");
     requestOptions.body = JSON.stringify(requestOptions.body);
   }
@@ -423,10 +424,12 @@ function applyAccount(payload) {
   elements.siteShell.hidden = false;
   elements.siteShell.classList.remove("is-hidden");
   render();
+  loadDocumentHistory();
 }
 
 function showAuthGate(view = "login") {
   state.auth.user = null;
+  state.history = { open: false, loading: false, loaded: false, items: [], error: "" };
   elements.siteShell.hidden = true;
   elements.siteShell.classList.add("is-hidden");
   elements.authGate.classList.remove("is-hidden");
@@ -563,6 +566,13 @@ function panelHeader(title, description, action = "") {
 
 function render() {
   updateApiBadge();
+  if (state.history.open) {
+    elements.sidebar.classList.add("is-hidden");
+    elements.actionBar.classList.add("is-hidden");
+    elements.view.className = "view home-view";
+    elements.view.innerHTML = renderDocumentHistory();
+    return;
+  }
   if (!state.flow) {
     elements.sidebar.classList.add("is-hidden");
     elements.actionBar.classList.add("is-hidden");
@@ -698,7 +708,79 @@ function renderHome() {
         <span class="card-link">Criar advertência <span aria-hidden="true">→</span></span>
       </article>
     </div>
+    <aside class="history-callout">
+      <div><span class="eyebrow eyebrow-dark">Seus arquivos</span><h3>Precisa baixar um documento novamente?</h3><p>Os arquivos gerados ficam vinculados à sua conta e disponíveis no histórico.</p></div>
+      <button class="button button-primary" type="button" data-action="show-history">Abrir histórico <span aria-hidden="true">→</span></button>
+    </aside>
   </section>`;
+}
+
+function renderDocumentHistory() {
+  const history = state.history;
+  const content = history.loading && !history.loaded
+    ? `<div class="history-state"><span class="history-spinner" aria-hidden="true"></span><strong>Carregando seus documentos…</strong></div>`
+    : history.error
+      ? `<div class="history-state is-error"><strong>Não foi possível carregar o histórico</strong><span>${e(history.error)}</span><button class="button button-secondary" type="button" data-action="refresh-history">Tentar novamente</button></div>`
+      : history.items.length
+        ? `<div class="history-list">${history.items.map(renderHistoryItem).join("")}</div>`
+        : `<div class="history-state"><strong>Seu histórico ainda está vazio</strong><span>Quando você gerar um documento, ele aparecerá aqui para baixar novamente.</span><button class="button button-primary" type="button" data-action="home">Criar primeiro documento</button></div>`;
+
+  return `<section class="document-section history-section">
+    <div class="history-heading">
+      <div><span class="eyebrow eyebrow-dark">Arquivos gerados</span><h2>Histórico de documentos</h2><p>Somente os documentos da sua conta aparecem nesta lista.</p></div>
+      <div class="history-heading-actions">
+        <button class="button button-secondary" type="button" data-action="home">← Voltar</button>
+        <button class="button button-secondary" type="button" data-action="refresh-history" ${history.loading ? "disabled" : ""}>Atualizar</button>
+      </div>
+    </div>
+    ${content}
+  </section>`;
+}
+
+function renderHistoryItem(document) {
+  return `<article class="history-item">
+    <span class="history-file-mark" aria-hidden="true">W</span>
+    <div class="history-file-copy"><strong>${e(document.filename)}</strong><span>${e(document.documentType)} • ${e(formatHistoryDate(document.createdAt))} • ${e(formatFileSize(document.sizeBytes))}</span></div>
+    <button class="button button-secondary" type="button" data-action="download-history" data-id="${e(document.id)}">Baixar novamente <span aria-hidden="true">↓</span></button>
+  </article>`;
+}
+
+function formatHistoryDate(unixSeconds) {
+  const date = new Date(Number(unixSeconds) * 1000);
+  if (Number.isNaN(date.getTime())) return "Data não informada";
+  return new Intl.DateTimeFormat("pt-BR", { dateStyle: "short", timeStyle: "short" }).format(date);
+}
+
+function formatFileSize(bytes) {
+  const size = Number(bytes) || 0;
+  if (size < 1024) return `${size} B`;
+  if (size < 1024 * 1024) return `${Math.round(size / 1024)} KB`;
+  return `${(size / (1024 * 1024)).toFixed(1).replace(".", ",")} MB`;
+}
+
+async function loadDocumentHistory() {
+  if (!state.auth.user || state.history.loading) return;
+  state.history.loading = true;
+  state.history.error = "";
+  if (state.history.open) render();
+  try {
+    const payload = await apiRequest("/api/documents");
+    state.history.items = Array.isArray(payload.documents) ? payload.documents : [];
+    state.history.loaded = true;
+  } catch (error) {
+    state.history.error = error.message;
+  } finally {
+    state.history.loading = false;
+    if (state.history.open) render();
+  }
+}
+
+function showDocumentHistory() {
+  state.flow = null;
+  state.history.open = true;
+  render();
+  focusMain();
+  if (!state.history.loaded) loadDocumentHistory();
 }
 
 function renderReport() {
@@ -1074,10 +1156,13 @@ function renderSuccess() {
       : state.flow === "notification"
         ? "A notificação"
         : `${correspondenceType().article.toUpperCase()} ${correspondenceType().label.toLowerCase()}`;
+  const historyMessage = state.lastDownload?.saved
+    ? " Uma cópia também foi salva no histórico da sua conta."
+    : " O download foi concluído, mas não foi possível salvar uma cópia no histórico desta vez.";
   return `<section class="panel success-card">
     <div class="success-mark">✓</div>
     <h2>Documento criado</h2>
-    <p>${documentLabel} foi gerado e o download foi iniciado. Se necessário, use o botão abaixo para baixar novamente.</p>
+    <p>${documentLabel} foi gerado e o download foi iniciado.${historyMessage}</p>
     <div class="success-actions">
       <button class="button button-secondary" type="button" data-action="home">Voltar ao início</button>
       <button class="button button-secondary" type="button" data-action="new-document">Criar outro</button>
@@ -1113,6 +1198,7 @@ function wrapCotaText(text) {
 }
 
 function startFlow(flow, kind = "") {
+  state.history.open = false;
   state.flow = flow;
   if (flow === "correspondence" && CORRESPONDENCE_TYPES[kind]) {
     if (state.correspondence.kind !== kind) {
@@ -1131,6 +1217,7 @@ function startFlow(flow, kind = "") {
 
 function goHome() {
   state.flow = null;
+  state.history.open = false;
   state.step = 0;
   state.generation.running = false;
   render();
@@ -1816,7 +1903,7 @@ async function generateReport() {
   try {
     const blob = await buildReportDocument((progress, message) => setGenerationProgress(progress, message));
     const filename = `${slugify(state.report.title, "relatorio-fotografico")}.docx`;
-    finishDownload(blob, filename);
+    await finishDownload(blob, filename, "Relatório fotográfico");
     state.report.complete = true;
     state.generation.running = false;
     render();
@@ -1839,7 +1926,7 @@ async function generateCota() {
     const blob = await buildCotaDocument((progress, message) => setGenerationProgress(progress, message));
     const suffix = [state.cota.processNumber, state.cota.year].filter(Boolean).join("-");
     const filename = `folha-de-cota${suffix ? `-${slugify(suffix)}` : ""}.docx`;
-    finishDownload(blob, filename);
+    await finishDownload(blob, filename, "Folha de cota");
     state.cota.complete = true;
     state.generation.running = false;
     render();
@@ -1862,7 +1949,7 @@ async function generateNotification() {
     const blob = await buildNotificationDocument((progress, message) => setGenerationProgress(progress, message));
     const suffix = state.notification.number || state.notification.date;
     const filename = `notificacao${suffix ? `-${slugify(suffix)}` : ""}.docx`;
-    finishDownload(blob, filename);
+    await finishDownload(blob, filename, "Notificação");
     state.notification.complete = true;
     state.generation.running = false;
     render();
@@ -1886,7 +1973,7 @@ async function generateCorrespondence() {
     const blob = await buildCorrespondenceDocument((progress, message) => setGenerationProgress(progress, message));
     const suffix = state.correspondence.number || state.correspondence.date;
     const filename = `${slugify(type.label)}${suffix ? `-${slugify(suffix)}` : ""}.docx`;
-    finishDownload(blob, filename);
+    await finishDownload(blob, filename, type.label);
     state.correspondence.complete = true;
     state.generation.running = false;
     render();
@@ -1897,17 +1984,41 @@ async function generateCorrespondence() {
   }
 }
 
-function finishDownload(blob, filename) {
+async function finishDownload(blob, filename, documentType) {
   if (state.lastDownload?.url) URL.revokeObjectURL(state.lastDownload.url);
   const url = URL.createObjectURL(blob);
-  state.lastDownload = { blob, filename, url };
+  state.lastDownload = { blob, filename, url, saved: false };
   triggerDownload(url, filename);
+  setGenerationProgress(96, "Salvando uma cópia segura no histórico…");
+
+  const form = new FormData();
+  form.append("file", blob, filename);
+  form.append("documentType", documentType);
+  try {
+    const payload = await apiRequest("/api/documents", { method: "POST", body: form });
+    if (payload.document) {
+      state.history.items = [payload.document, ...state.history.items.filter((item) => item.id !== payload.document.id)];
+      state.history.loaded = true;
+    }
+    state.lastDownload.saved = true;
+  } catch (error) {
+    state.lastDownload.historyError = error.message;
+  }
 }
 
 function triggerDownload(url, filename) {
   const anchor = document.createElement("a");
   anchor.href = url;
   anchor.download = filename;
+  document.body.appendChild(anchor);
+  anchor.click();
+  anchor.remove();
+}
+
+function triggerHistoryDownload(documentId) {
+  if (!/^[0-9a-f-]{36}$/i.test(String(documentId || ""))) return;
+  const anchor = document.createElement("a");
+  anchor.href = `/api/documents/${encodeURIComponent(documentId)}/download`;
   document.body.appendChild(anchor);
   anchor.click();
   anchor.remove();
@@ -2411,6 +2522,9 @@ async function handleAction(action, target) {
     return;
   }
   if (action === "home") return goHome();
+  if (action === "show-history") return showDocumentHistory();
+  if (action === "refresh-history") return loadDocumentHistory();
+  if (action === "download-history") return triggerHistoryDownload(target.dataset.id);
   if (action === "logout") return logout();
   if (action === "start-report") return startFlow("report");
   if (action === "start-cota") return startFlow("cota");

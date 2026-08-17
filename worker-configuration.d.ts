@@ -3,6 +3,7 @@
 // Runtime types generated with workerd@1.20260515.1 2026-08-11 nodejs_compat
 interface __BaseEnv_Env {
 	DB: D1Database;
+	DOCUMENTS: R2Bucket;
 	IMAGES: ImagesBinding;
 	ASSETS: Fetcher;
 	API_ENCRYPTION_KEY: string;

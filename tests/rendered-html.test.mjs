@@ -191,3 +191,44 @@ test("builds notifications from the supplied Bertioga model with fillable fields
   assert.match(app, /keepOriginalStyles:\s*true/);
   assert.match(app, /Imagem \$\{String\(index \+ 1\)\.padStart\(2, "0"\)\} - \$\{photo\.caption\.trim\(\)\}/);
 });
+
+
+test("keeps a private account history for every generated document", async () => {
+  const [app, page, worker, documentWorker, documentDb, schema, hosting, wrangler, migration] = await Promise.all([
+    readFile(new URL("public/docflow/app.js", siteRoot), "utf8"),
+    readFile(new URL("public/docflow/index.html", siteRoot), "utf8"),
+    readFile(new URL("worker/index.ts", siteRoot), "utf8"),
+    readFile(new URL("worker/documents.ts", siteRoot), "utf8"),
+    readFile(new URL("db/documents.ts", siteRoot), "utf8"),
+    readFile(new URL("db/schema.ts", siteRoot), "utf8"),
+    readFile(new URL(".openai/hosting.json", siteRoot), "utf8"),
+    readFile(new URL("wrangler.jsonc", siteRoot), "utf8"),
+    readFile(new URL("drizzle/0001_nappy_bloodscream.sql", siteRoot), "utf8"),
+  ]);
+
+  assert.match(page, /<strong>Fiscal Bertioga<\/strong>/);
+  assert.doesNotMatch(page, /<strong>DocFlow<\/strong>/);
+  assert.match(page, /data-action="show-history"/);
+  assert.match(app, /Histórico de documentos/);
+  assert.match(app, /apiRequest\("\/api\/documents"/);
+  assert.match(app, /requestOptions\.body instanceof FormData/);
+  assert.equal((app.match(/await finishDownload\(/g) || []).length, 4);
+  assert.match(app, /data-action="download-history"/);
+  assert.match(app, /\/api\/documents\/\$\{encodeURIComponent\(documentId\)\}\/download/);
+  assert.match(worker, /url\.pathname === "\/api\/documents"/);
+  assert.match(worker, /handleDocumentDownload/);
+  assert.match(documentWorker, /authenticateRequest\(request, env\)/);
+  assert.match(documentWorker, /env\.DOCUMENTS\.put/);
+  assert.match(documentWorker, /env\.DOCUMENTS\.delete/);
+  assert.match(documentWorker, /getGeneratedDocument\(env\.DB, authenticated\.account\.id, documentId\)/);
+  assert.match(documentWorker, /Content-Disposition/);
+  assert.match(documentDb, /WHERE user_id = \?/);
+  assert.match(documentDb, /WHERE id = \? AND user_id = \?/);
+  assert.match(schema, /generatedDocuments/);
+  assert.match(schema, /idx_generated_documents_user_created/);
+  assert.match(hosting, /"r2": "DOCUMENTS"/);
+  assert.match(wrangler, /"binding": "DOCUMENTS"/);
+  assert.match(migration, /CREATE TABLE `generated_documents`/);
+  assert.match(migration, /CREATE INDEX `idx_generated_documents_user_created`/);
+  assert.match(migration, /PRAGMA optimize/);
+});

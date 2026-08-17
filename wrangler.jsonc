@@ -19,6 +19,12 @@
       "migrations_dir": "./drizzle"
     }
   ],
+  "r2_buckets": [
+    {
+      "binding": "DOCUMENTS",
+      "bucket_name": "docflow-generated-documents"
+    }
+  ],
   "secrets": {
     "required": ["API_ENCRYPTION_KEY"]
   },

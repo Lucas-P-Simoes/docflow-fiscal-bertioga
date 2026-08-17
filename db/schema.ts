@@ -49,3 +49,23 @@ export const loginAttempts = sqliteTable("login_attempts", {
   windowStartedAt: integer("window_started_at").notNull(),
   blockedUntil: integer("blocked_until").notNull(),
 });
+
+export const generatedDocuments = sqliteTable(
+  "generated_documents",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    objectKey: text("object_key").notNull(),
+    filename: text("filename").notNull(),
+    documentType: text("document_type").notNull(),
+    contentType: text("content_type").notNull(),
+    sizeBytes: integer("size_bytes").notNull(),
+    createdAt: integer("created_at").notNull(),
+  },
+  (table) => [
+    uniqueIndex("idx_generated_documents_object_key").on(table.objectKey),
+    index("idx_generated_documents_user_created").on(table.userId, table.createdAt),
+  ],
+);
