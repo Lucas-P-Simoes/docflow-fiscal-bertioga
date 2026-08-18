@@ -283,3 +283,52 @@ test("keeps a private account history for every generated document", async () =>
   assert.match(migration, /CREATE INDEX `idx_generated_documents_user_created`/);
   assert.match(migration, /PRAGMA optimize/);
 });
+
+
+test("lets each account rename, delete, preview, and download its history as PDF", async () => {
+  const [app, page, styles, worker, documentWorker, documentDb, docxPreview, html2canvas, jspdf, jszip] = await Promise.all([
+    readFile(new URL("public/docflow/app.js", siteRoot), "utf8"),
+    readFile(new URL("public/docflow/index.html", siteRoot), "utf8"),
+    readFile(new URL("public/docflow/styles.css", siteRoot), "utf8"),
+    readFile(new URL("worker/index.ts", siteRoot), "utf8"),
+    readFile(new URL("worker/documents.ts", siteRoot), "utf8"),
+    readFile(new URL("db/documents.ts", siteRoot), "utf8"),
+    readFile(new URL("public/docflow/vendor/docx-preview.min.js", siteRoot)),
+    readFile(new URL("public/docflow/vendor/html2canvas.min.js", siteRoot)),
+    readFile(new URL("public/docflow/vendor/jspdf.umd.min.js", siteRoot)),
+    readFile(new URL("public/docflow/vendor/jszip.min.js", siteRoot)),
+  ]);
+
+  assert.match(page, /id="renameDialog"/);
+  assert.match(page, /vendor\/jszip\.min\.js/);
+  assert.match(page, /vendor\/docx-preview\.min\.js/);
+  assert.match(page, /vendor\/html2canvas\.min\.js/);
+  assert.match(page, /vendor\/jspdf\.umd\.min\.js/);
+  assert.ok(docxPreview.byteLength > 70_000);
+  assert.ok(html2canvas.byteLength > 190_000);
+  assert.ok(jspdf.byteLength > 400_000);
+  assert.ok(jszip.byteLength > 90_000);
+
+  assert.match(app, /data-action="preview-history-pdf"/);
+  assert.match(app, /data-action="download-history-pdf"/);
+  assert.match(app, /data-action="rename-history"/);
+  assert.match(app, /data-action="delete-history"/);
+  assert.match(app, /window\.docxPreview\.renderAsync/);
+  assert.match(app, /window\.html2canvas/);
+  assert.match(app, /window\.jspdf/);
+  assert.match(app, /pdf\.output\("blob"\)/);
+  assert.match(app, /window\.open\("", "_blank"\)/);
+  assert.match(app, /\.pdf`/);
+  assert.doesNotMatch(page, /https?:\/\/[^"']+\.(?:js|mjs)/);
+  assert.match(styles, /\.history-item-actions/);
+  assert.match(styles, /\.pdf-render-host/);
+
+  assert.match(worker, /handleDocumentMutation/);
+  assert.match(worker, /const documentMutation = url\.pathname\.match/);
+  assert.match(documentWorker, /request\.method === "PATCH"/);
+  assert.match(documentWorker, /request\.method === "DELETE"/);
+  assert.match(documentWorker, /renameGeneratedDocument\(\s*env\.DB,\s*authenticated\.account\.id/);
+  assert.match(documentWorker, /deleteGeneratedDocument\(env\.DB, authenticated\.account\.id, documentId\)/);
+  assert.match(documentDb, /UPDATE generated_documents[\s\S]*?WHERE id = \? AND user_id = \?/);
+  assert.match(documentDb, /DELETE FROM generated_documents[\s\S]*?WHERE id = \? AND user_id = \?/);
+});

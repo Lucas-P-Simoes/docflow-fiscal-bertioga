@@ -9,6 +9,7 @@ onlyBuiltDependencies:
 confirmModulesPurge: false
 
 allowBuilds:
+  core-js: false
   esbuild: true
   sharp: true
   workerd: true

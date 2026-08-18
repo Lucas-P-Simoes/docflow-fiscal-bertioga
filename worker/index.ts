@@ -15,7 +15,7 @@ import {
   handleSession,
   openAICredentialForUser,
 } from "./auth";
-import { handleDocumentDownload, handleDocuments } from "./documents";
+import { handleDocumentDownload, handleDocumentMutation, handleDocuments } from "./documents";
 
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
 const MAX_OPENAI_REQUEST_BYTES = 12 * 1024 * 1024;
@@ -176,6 +176,10 @@ const worker = {
       const documentDownload = url.pathname.match(/^\/api\/documents\/([0-9a-f-]{36})\/download$/i);
       if (documentDownload) {
         return await handleDocumentDownload(request, env, documentDownload[1]);
+      }
+      const documentMutation = url.pathname.match(/^\/api\/documents\/([0-9a-f-]{36})$/i);
+      if (documentMutation) {
+        return await handleDocumentMutation(request, env, documentMutation[1]);
       }
 
       if (isDocFlowRootRequest(request, url)) {

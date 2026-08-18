@@ -131,11 +131,29 @@ const elements = {
   messageTitle: document.querySelector("#messageTitle"),
   messageText: document.querySelector("#messageText"),
   messageActions: document.querySelector("#messageActions"),
+  renameDialog: document.querySelector("#renameDialog"),
+  renameForm: document.querySelector("#renameForm"),
+  renameInput: document.querySelector("#renameInput"),
+  renameFeedback: document.querySelector("#renameFeedback"),
+  renameSubmitButton: document.querySelector("#renameSubmitButton"),
   toast: document.querySelector("#toast"),
   saveStatus: document.querySelector("#saveStatus"),
 };
 
 const persisted = readStorage("docflow-preferences", {});
+
+function createHistoryState() {
+  return {
+    open: false,
+    loading: false,
+    loaded: false,
+    items: [],
+    error: "",
+    busy: new Map(),
+    pdfCache: new Map(),
+    renameDocumentId: null,
+  };
+}
 
 const state = {
   auth: {
@@ -157,7 +175,7 @@ const state = {
   analysis: { running: false, total: 0, done: 0 },
   generation: { running: false, progress: 0, message: "" },
   lastDownload: null,
-  history: { open: false, loading: false, loaded: false, items: [], error: "" },
+  history: createHistoryState(),
   messageCallbacks: new Map(),
 };
 
@@ -438,7 +456,8 @@ function applyAccount(payload) {
 
 function showAuthGate(view = "login") {
   state.auth.user = null;
-  state.history = { open: false, loading: false, loaded: false, items: [], error: "" };
+  state.history.pdfCache.forEach((cached) => cached.url && URL.revokeObjectURL(cached.url));
+  state.history = createHistoryState();
   elements.siteShell.hidden = true;
   elements.siteShell.classList.add("is-hidden");
   elements.authGate.classList.remove("is-hidden");
@@ -739,7 +758,7 @@ function renderDocumentHistory() {
       ? `<div class="history-state is-error"><strong>Não foi possível carregar o histórico</strong><span>${e(history.error)}</span><button class="button button-secondary" type="button" data-action="refresh-history">Tentar novamente</button></div>`
       : history.items.length
         ? `<div class="history-list">${history.items.map(renderHistoryItem).join("")}</div>`
-        : `<div class="history-state"><strong>Seu histórico ainda está vazio</strong><span>Quando você gerar um documento, ele aparecerá aqui para baixar novamente.</span><button class="button button-primary" type="button" data-action="home">Criar primeiro documento</button></div>`;
+        : `<div class="history-state"><strong>Seu histórico ainda está vazio</strong><span>Quando você gerar um documento, ele aparecerá aqui para visualizar, renomear e baixar.</span><button class="button button-primary" type="button" data-action="home">Criar primeiro documento</button></div>`;
 
   return `<section class="document-section history-section">
     <div class="history-heading">
@@ -754,10 +773,20 @@ function renderDocumentHistory() {
 }
 
 function renderHistoryItem(document) {
+  const busyAction = state.history.busy.get(document.id) || "";
+  const disabled = busyAction ? "disabled" : "";
   return `<article class="history-item">
     <span class="history-file-mark" aria-hidden="true">W</span>
     <div class="history-file-copy"><strong>${e(document.filename)}</strong><span>${e(document.documentType)} • ${e(formatHistoryDate(document.createdAt))} • ${e(formatFileSize(document.sizeBytes))}</span></div>
-    <button class="button button-secondary" type="button" data-action="download-history" data-id="${e(document.id)}">Baixar novamente <span aria-hidden="true">↓</span></button>
+    <div class="history-item-actions" aria-label="Ações do arquivo ${e(document.filename)}">
+      <button class="button button-primary history-pdf-action" type="button" data-action="preview-history-pdf" data-id="${e(document.id)}" ${disabled}>${busyAction === "preview" ? "Preparando PDF…" : "Visualizar PDF"}<span aria-hidden="true">↗</span></button>
+      <button class="button button-secondary history-pdf-action" type="button" data-action="download-history-pdf" data-id="${e(document.id)}" ${disabled}>${busyAction === "pdf" ? "Preparando PDF…" : "Baixar PDF"}<span aria-hidden="true">↓</span></button>
+      <div class="history-item-tools">
+        <button class="button button-quiet" type="button" data-action="download-history" data-id="${e(document.id)}" ${disabled}>Baixar Word</button>
+        <button class="button button-quiet" type="button" data-action="rename-history" data-id="${e(document.id)}" ${disabled}>Renomear</button>
+        <button class="button button-quiet button-danger" type="button" data-action="delete-history" data-id="${e(document.id)}" ${disabled}>${busyAction === "delete" ? "Excluindo…" : "Excluir"}</button>
+      </div>
+    </div>
   </article>`;
 }
 
@@ -2187,9 +2216,321 @@ function triggerHistoryDownload(documentId) {
   if (!/^[0-9a-f-]{36}$/i.test(String(documentId || ""))) return;
   const anchor = document.createElement("a");
   anchor.href = `/api/documents/${encodeURIComponent(documentId)}/download`;
+  anchor.download = "";
   document.body.appendChild(anchor);
   anchor.click();
   anchor.remove();
+}
+
+function historyDocument(documentId) {
+  return state.history.items.find((item) => item.id === documentId) || null;
+}
+
+function setHistoryBusy(documentId, action) {
+  if (action) state.history.busy.set(documentId, action);
+  else state.history.busy.delete(documentId);
+  if (state.history.open) render();
+}
+
+function historyFilenameStem(filename) {
+  return String(filename || "documento").replace(/\.docx$/i, "").trim();
+}
+
+function historyPdfFilename(filename) {
+  const stem = historyFilenameStem(filename) || "documento";
+  return `${stem}.pdf`;
+}
+
+function setRenameFeedback(message = "") {
+  elements.renameFeedback.textContent = message;
+  elements.renameFeedback.classList.toggle("is-hidden", !message);
+  elements.renameFeedback.classList.toggle("is-error", Boolean(message));
+}
+
+function openHistoryRename(documentId) {
+  const document = historyDocument(documentId);
+  if (!document) return;
+  state.history.renameDocumentId = documentId;
+  elements.renameInput.value = historyFilenameStem(document.filename);
+  elements.renameInput.disabled = false;
+  elements.renameSubmitButton.disabled = false;
+  elements.renameSubmitButton.textContent = "Salvar nome";
+  setRenameFeedback();
+  openDialog(elements.renameDialog);
+  requestAnimationFrame(() => {
+    elements.renameInput.focus();
+    elements.renameInput.select();
+  });
+}
+
+function closeHistoryRename() {
+  if (elements.renameSubmitButton.disabled) return;
+  state.history.renameDocumentId = null;
+  setRenameFeedback();
+  closeDialog(elements.renameDialog);
+}
+
+async function submitHistoryRename() {
+  const documentId = state.history.renameDocumentId;
+  const document = historyDocument(documentId);
+  const stem = elements.renameInput.value.replace(/\.docx$/i, "").trim();
+  if (!document || !stem) {
+    setRenameFeedback("Informe um nome para o arquivo.");
+    elements.renameInput.focus();
+    return;
+  }
+
+  elements.renameInput.disabled = true;
+  elements.renameSubmitButton.disabled = true;
+  elements.renameSubmitButton.textContent = "Salvando…";
+  setRenameFeedback();
+  try {
+    const payload = await apiRequest(`/api/documents/${encodeURIComponent(documentId)}`, {
+      method: "PATCH",
+      body: { filename: `${stem}.docx` },
+    });
+    if (!payload.document) throw new Error("O servidor não retornou o documento renomeado.");
+    state.history.items = state.history.items.map((item) => item.id === documentId ? payload.document : item);
+    releaseHistoryPdf(documentId);
+    state.history.renameDocumentId = null;
+    closeDialog(elements.renameDialog);
+    if (state.history.open) render();
+    showToast("Arquivo renomeado.");
+  } catch (error) {
+    elements.renameInput.disabled = false;
+    elements.renameSubmitButton.disabled = false;
+    elements.renameSubmitButton.textContent = "Salvar nome";
+    setRenameFeedback(error.message);
+    elements.renameInput.focus();
+  }
+}
+
+function confirmHistoryDelete(documentId) {
+  const document = historyDocument(documentId);
+  if (!document) return;
+  showMessage({
+    title: "Excluir este arquivo?",
+    text: `${document.filename} será removido definitivamente do seu Histórico.`,
+    kind: "error",
+    actions: [
+      { label: "Cancelar" },
+      { label: "Excluir arquivo", primary: true, onClick: () => deleteHistoryDocument(documentId) },
+    ],
+  });
+}
+
+async function deleteHistoryDocument(documentId) {
+  if (!historyDocument(documentId)) return;
+  setHistoryBusy(documentId, "delete");
+  try {
+    await apiRequest(`/api/documents/${encodeURIComponent(documentId)}`, { method: "DELETE" });
+    releaseHistoryPdf(documentId);
+    state.history.items = state.history.items.filter((item) => item.id !== documentId);
+    setHistoryBusy(documentId, "");
+    showToast("Arquivo excluído do Histórico.");
+  } catch (error) {
+    setHistoryBusy(documentId, "");
+    showMessage({ title: "Não foi possível excluir", text: error.message, kind: "error" });
+  }
+}
+
+async function fetchHistoryDocument(documentId) {
+  let response;
+  try {
+    response = await fetch(`/api/documents/${encodeURIComponent(documentId)}/download`, {
+      headers: { Accept: "application/vnd.openxmlformats-officedocument.wordprocessingml.document" },
+    });
+  } catch {
+    throw new Error("Não foi possível acessar o arquivo. Verifique sua conexão.");
+  }
+
+  if (!response.ok) {
+    let message = "Não foi possível abrir este documento.";
+    try {
+      const payload = await response.json();
+      if (payload?.error?.message) message = payload.error.message;
+    } catch {
+      // A mensagem padrão evita expor detalhes inesperados da resposta.
+    }
+    throw new Error(message);
+  }
+  return response.blob();
+}
+
+function waitForRenderedImages(container) {
+  return Promise.all(Array.from(container.querySelectorAll("img")).map((image) => {
+    if (image.complete) return Promise.resolve();
+    return new Promise((resolve) => {
+      image.addEventListener("load", resolve, { once: true });
+      image.addEventListener("error", resolve, { once: true });
+    });
+  }));
+}
+
+async function renderHistoryPdf(historyItem) {
+  if (!window.docxPreview?.renderAsync || !window.html2canvas || !window.jspdf?.jsPDF) {
+    throw new Error("O conversor de PDF não foi carregado. Atualize a página e tente novamente.");
+  }
+
+  const wordBlob = await fetchHistoryDocument(historyItem.id);
+  const renderHost = documentNode("div", "pdf-render-host");
+  renderHost.setAttribute("aria-hidden", "true");
+  document.body.appendChild(renderHost);
+
+  try {
+    await window.docxPreview.renderAsync(wordBlob, renderHost, renderHost, {
+      className: "history-docx",
+      inWrapper: true,
+      breakPages: true,
+      ignoreWidth: false,
+      ignoreHeight: false,
+      renderHeaders: true,
+      renderFooters: true,
+      renderFootnotes: true,
+      renderEndnotes: true,
+      useBase64URL: true,
+    });
+    await waitForRenderedImages(renderHost);
+    if (document.fonts?.ready) await document.fonts.ready;
+    await new Promise((resolve) => requestAnimationFrame(() => requestAnimationFrame(resolve)));
+
+    const pages = Array.from(renderHost.querySelectorAll("section.history-docx"));
+    if (!pages.length) throw new Error("O documento não possui páginas que possam ser convertidas.");
+
+    const { jsPDF } = window.jspdf;
+    let pdf = null;
+    for (const [index, page] of pages.entries()) {
+      const canvas = await window.html2canvas(page, {
+        backgroundColor: "#ffffff",
+        logging: false,
+        scale: Math.max(1.5, Math.min(2, window.devicePixelRatio || 1.5)),
+        useCORS: false,
+      });
+      const orientation = canvas.width > canvas.height ? "landscape" : "portrait";
+      if (!pdf) {
+        pdf = new jsPDF({ orientation, unit: "pt", format: "a4", compress: true });
+        pdf.setProperties({
+          title: historyFilenameStem(historyItem.filename),
+          subject: historyItem.documentType,
+          creator: "Fiscal Bertioga",
+        });
+      } else {
+        pdf.addPage("a4", orientation);
+      }
+
+      const pageWidth = pdf.internal.pageSize.getWidth();
+      const pageHeight = pdf.internal.pageSize.getHeight();
+      const ratio = Math.min(pageWidth / canvas.width, pageHeight / canvas.height);
+      const width = canvas.width * ratio;
+      const height = canvas.height * ratio;
+      const x = (pageWidth - width) / 2;
+      const y = (pageHeight - height) / 2;
+      pdf.addImage(canvas.toDataURL("image/jpeg", 0.94), "JPEG", x, y, width, height, undefined, "FAST");
+      canvas.width = 1;
+      canvas.height = 1;
+      if (index < pages.length - 1) await new Promise((resolve) => setTimeout(resolve, 0));
+    }
+
+    return pdf.output("blob");
+  } finally {
+    renderHost.remove();
+  }
+}
+
+function documentNode(tagName, className) {
+  const node = document.createElement(tagName);
+  node.className = className;
+  return node;
+}
+
+async function ensureHistoryPdf(document) {
+  const cached = state.history.pdfCache.get(document.id);
+  if (cached?.blob) return cached.blob;
+  if (cached?.promise) return cached.promise;
+
+  const promise = renderHistoryPdf(document)
+    .then((blob) => {
+      state.history.pdfCache.set(document.id, { blob, url: null });
+      return blob;
+    })
+    .catch((error) => {
+      state.history.pdfCache.delete(document.id);
+      throw error;
+    });
+  state.history.pdfCache.set(document.id, { promise, url: null });
+  return promise;
+}
+
+function historyPdfUrl(documentId, blob) {
+  const cached = state.history.pdfCache.get(documentId) || { blob, url: null };
+  if (!cached.url) cached.url = URL.createObjectURL(blob);
+  cached.blob = blob;
+  delete cached.promise;
+  state.history.pdfCache.set(documentId, cached);
+  return cached.url;
+}
+
+function releaseHistoryPdf(documentId) {
+  const cached = state.history.pdfCache.get(documentId);
+  if (cached?.url) URL.revokeObjectURL(cached.url);
+  state.history.pdfCache.delete(documentId);
+}
+
+function openPdfLoadingWindow(filename) {
+  const preview = window.open("", "_blank");
+  if (!preview) return null;
+  preview.opener = null;
+  preview.document.title = `Preparando ${historyPdfFilename(filename)}`;
+  const style = preview.document.createElement("style");
+  style.textContent = "body{display:grid;place-items:center;min-height:100vh;margin:0;background:#f4f6f3;color:#17211d;font:600 16px Arial,sans-serif}p{padding:24px;text-align:center}";
+  const message = preview.document.createElement("p");
+  message.textContent = "Preparando a versão em PDF…";
+  preview.document.head.appendChild(style);
+  preview.document.body.appendChild(message);
+  return preview;
+}
+
+async function previewHistoryPdf(documentId) {
+  const document = historyDocument(documentId);
+  if (!document) return;
+  const preview = openPdfLoadingWindow(document.filename);
+  if (!preview) {
+    showMessage({
+      title: "A prévia foi bloqueada",
+      text: "Permita a abertura de janelas para este site e tente visualizar novamente.",
+      kind: "warning",
+    });
+    return;
+  }
+
+  setHistoryBusy(documentId, "preview");
+  try {
+    const blob = await ensureHistoryPdf(document);
+    const url = historyPdfUrl(documentId, blob);
+    if (!preview.closed) preview.location.replace(url);
+  } catch (error) {
+    if (!preview.closed) {
+      preview.document.body.textContent = "Não foi possível preparar a prévia em PDF.";
+    }
+    showMessage({ title: "Não foi possível visualizar o PDF", text: error.message, kind: "error" });
+  } finally {
+    setHistoryBusy(documentId, "");
+  }
+}
+
+async function downloadHistoryPdf(documentId) {
+  const document = historyDocument(documentId);
+  if (!document) return;
+  setHistoryBusy(documentId, "pdf");
+  try {
+    const blob = await ensureHistoryPdf(document);
+    triggerDownload(historyPdfUrl(documentId, blob), historyPdfFilename(document.filename));
+    showToast("PDF preparado para download.");
+  } catch (error) {
+    showMessage({ title: "Não foi possível baixar o PDF", text: error.message, kind: "error" });
+  } finally {
+    setHistoryBusy(documentId, "");
+  }
 }
 
 async function imageRunFor(file, maxWidth, maxHeight, altText = "Imagem") {
@@ -2834,6 +3175,11 @@ async function handleAction(action, target) {
   if (action === "show-history") return showDocumentHistory();
   if (action === "refresh-history") return loadDocumentHistory();
   if (action === "download-history") return triggerHistoryDownload(target.dataset.id);
+  if (action === "preview-history-pdf") return previewHistoryPdf(target.dataset.id);
+  if (action === "download-history-pdf") return downloadHistoryPdf(target.dataset.id);
+  if (action === "rename-history") return openHistoryRename(target.dataset.id);
+  if (action === "close-rename") return closeHistoryRename();
+  if (action === "delete-history") return confirmHistoryDelete(target.dataset.id);
   if (action === "logout") return logout();
   if (action === "start-report") return startFlow("report");
   if (action === "start-cota") return startFlow("cota");
@@ -3034,11 +3380,21 @@ elements.messageDialog.addEventListener("click", (event) => {
   if (event.target === elements.messageDialog) closeDialog(elements.messageDialog);
 });
 
+elements.renameForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  await submitHistoryRename();
+});
+
+elements.renameDialog.addEventListener("click", (event) => {
+  if (event.target === elements.renameDialog) closeHistoryRename();
+});
+
 window.addEventListener("beforeunload", () => {
   state.report.photos.forEach((photo) => URL.revokeObjectURL(photo.url));
   state.notification.photos.forEach((photo) => URL.revokeObjectURL(photo.url));
   state.warning.photos.forEach((photo) => URL.revokeObjectURL(photo.url));
   if (state.lastDownload?.url) URL.revokeObjectURL(state.lastDownload.url);
+  state.history.pdfCache.forEach((cached) => cached.url && URL.revokeObjectURL(cached.url));
 });
 
 bootstrapAuth();

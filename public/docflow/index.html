@@ -210,10 +210,36 @@
       </div>
     </dialog>
 
+    <dialog id="renameDialog" class="dialog dialog-small">
+      <form id="renameForm" class="dialog-card rename-form" method="dialog">
+        <div class="dialog-topline">
+          <span class="dialog-icon" aria-hidden="true">Aa</span>
+          <button class="icon-button" type="button" data-action="close-rename" aria-label="Fechar">×</button>
+        </div>
+        <span class="eyebrow eyebrow-dark">Nome do arquivo</span>
+        <h2>Renomear documento</h2>
+        <p class="dialog-lead">Altere o nome exibido no Histórico. A extensão Word será mantida.</p>
+        <label class="field">
+          <span>Novo nome</span>
+          <input id="renameInput" type="text" name="filename" maxlength="180" autocomplete="off" required />
+        </label>
+        <div id="renameFeedback" class="inline-feedback is-hidden" role="status"></div>
+        <div class="dialog-actions">
+          <button class="button button-secondary" type="button" data-action="close-rename">Cancelar</button>
+          <button id="renameSubmitButton" class="button button-primary" type="submit">Salvar nome</button>
+        </div>
+      </form>
+    </dialog>
+
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
     <noscript>Ative o JavaScript para usar o DocFlow.</noscript>
+    <script src="vendor/jszip.min.js" defer></script>
+    <script src="vendor/docx-preview.min.js" defer></script>
+    <script src="vendor/docx-preview-global.js" defer></script>
     <script src="vendor/docx.iife.js" defer></script>
+    <script src="vendor/html2canvas.min.js" defer></script>
+    <script src="vendor/jspdf.umd.min.js" defer></script>
     <script src="app.js" defer></script>
   </body>
 </html>

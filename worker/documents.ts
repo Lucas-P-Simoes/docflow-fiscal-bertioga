@@ -1,13 +1,16 @@
 import {
   createGeneratedDocument,
+  deleteGeneratedDocument,
   getGeneratedDocument,
   listGeneratedDocuments,
+  renameGeneratedDocument,
   type GeneratedDocument,
 } from "../db/documents";
 import { authenticateRequest, authError, authJson } from "./auth";
 
 const DOCX_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.wordprocessingml.document";
 const MAX_DOCUMENT_BYTES = 50 * 1024 * 1024;
+const MAX_MUTATION_BODY_BYTES = 4 * 1024;
 const DOCUMENT_TYPES = new Set([
   "Relatório fotográfico",
   "Folha de cota",
@@ -121,14 +124,82 @@ export async function handleDocumentDownload(
   return new Response(request.method === "HEAD" ? null : object.body, { headers });
 }
 
+export async function handleDocumentMutation(
+  request: Request,
+  env: Env,
+  documentId: string,
+): Promise<Response> {
+  const authenticated = await authenticateRequest(request, env);
+  if (!authenticated) return authError(401, "Sua sessão expirou. Entre novamente.");
+
+  if (request.method === "PATCH") {
+    const declaredLength = Number(request.headers.get("Content-Length") || 0);
+    if (declaredLength > MAX_MUTATION_BODY_BYTES) {
+      return authError(413, "O novo nome é maior que o limite permitido.");
+    }
+
+    let body: unknown;
+    try {
+      const text = await request.text();
+      if (new TextEncoder().encode(text).byteLength > MAX_MUTATION_BODY_BYTES) {
+        return authError(413, "O novo nome é maior que o limite permitido.");
+      }
+      body = JSON.parse(text);
+    } catch {
+      return authError(400, "Informe um nome de arquivo válido.");
+    }
+
+    if (!isObject(body) || typeof body.filename !== "string") {
+      return authError(400, "Informe um nome de arquivo válido.");
+    }
+    if (!body.filename.replace(/\.docx$/i, "").trim()) {
+      return authError(400, "Informe um nome de arquivo válido.");
+    }
+    const filename = safeFilename(body.filename);
+    const document = await renameGeneratedDocument(
+      env.DB,
+      authenticated.account.id,
+      documentId,
+      filename,
+    );
+    if (!document) return authError(404, "Documento não encontrado.");
+    return authJson(200, { document });
+  }
+
+  if (request.method === "DELETE") {
+    const document = await deleteGeneratedDocument(env.DB, authenticated.account.id, documentId);
+    if (!document) return authError(404, "Documento não encontrado.");
+    try {
+      await env.DOCUMENTS.delete(document.objectKey);
+    } catch (error) {
+      console.error(
+        JSON.stringify({
+          message: "Could not remove generated document object",
+          documentId,
+          error: error instanceof Error ? error.message : String(error),
+        }),
+      );
+    }
+    return authJson(200, { deleted: true });
+  }
+
+  return authError(405, "Método não permitido.");
+}
+
 function cleanText(value: FormDataEntryValue | null, maxLength: number): string {
   if (typeof value !== "string") return "";
   return value.replace(/\s+/g, " ").trim().slice(0, maxLength);
 }
 
+function isObject(value: unknown): value is Record<string, unknown> {
+  return Boolean(value) && typeof value === "object" && !Array.isArray(value);
+}
+
 function safeFilename(value: string): string {
-  const cleaned = value
-    .replace(/[\\/\u0000-\u001f\u007f]+/g, "-")
+  const cleaned = Array.from(value, (character) => {
+    const code = character.charCodeAt(0);
+    return character === "\\" || character === "/" || code <= 31 || code === 127 ? "-" : character;
+  }).join("")
     .replace(/\s+/g, " ")
     .trim()
     .slice(0, 180);

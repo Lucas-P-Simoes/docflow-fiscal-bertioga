@@ -33,6 +33,17 @@ function mapDocument(row: GeneratedDocumentRow): StoredGeneratedDocument {
   };
 }
 
+function publicDocument(stored: StoredGeneratedDocument): GeneratedDocument {
+  return {
+    id: stored.id,
+    filename: stored.filename,
+    documentType: stored.documentType,
+    contentType: stored.contentType,
+    sizeBytes: stored.sizeBytes,
+    createdAt: stored.createdAt,
+  };
+}
+
 export async function listGeneratedDocuments(
   db: D1Database,
   userId: string,
@@ -48,11 +59,7 @@ export async function listGeneratedDocuments(
     .bind(userId)
     .all<GeneratedDocumentRow>();
 
-  return result.results.map((row) => {
-    const stored = mapDocument(row);
-    const { objectKey: _privateKey, ...document } = stored;
-    return document;
-  });
+  return result.results.map((row) => publicDocument(mapDocument(row)));
 }
 
 export async function getGeneratedDocument(
@@ -93,4 +100,42 @@ export async function createGeneratedDocument(
       values.createdAt,
     )
     .run();
+}
+
+export async function renameGeneratedDocument(
+  db: D1Database,
+  userId: string,
+  documentId: string,
+  filename: string,
+): Promise<GeneratedDocument | null> {
+  await db
+    .prepare(
+      `UPDATE generated_documents
+       SET filename = ?
+       WHERE id = ? AND user_id = ?`,
+    )
+    .bind(filename, documentId, userId)
+    .run();
+
+  const stored = await getGeneratedDocument(db, userId, documentId);
+  if (!stored) return null;
+  return publicDocument(stored);
+}
+
+export async function deleteGeneratedDocument(
+  db: D1Database,
+  userId: string,
+  documentId: string,
+): Promise<StoredGeneratedDocument | null> {
+  const stored = await getGeneratedDocument(db, userId, documentId);
+  if (!stored) return null;
+
+  await db
+    .prepare(
+      `DELETE FROM generated_documents
+       WHERE id = ? AND user_id = ?`,
+    )
+    .bind(documentId, userId)
+    .run();
+  return stored;
 }
