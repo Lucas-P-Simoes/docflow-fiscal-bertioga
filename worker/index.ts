@@ -128,52 +128,6 @@ function isDocFlowRootRequest(request: Request, url: URL): boolean {
   );
 }
 
-type MigrationDocument = {
-  object_key: string;
-  filename: string;
-  content_type: string;
-  size_bytes: number;
-};
-
-async function handleMigrationDocumentExport(
-  request: Request,
-  env: Env,
-  documentId: string,
-): Promise<Response> {
-  if (request.method !== "GET" && request.method !== "HEAD") {
-    return authError(405, "Método não permitido.");
-  }
-
-  const configuredToken = (env as Env & { MIGRATION_EXPORT_TOKEN?: string }).MIGRATION_EXPORT_TOKEN;
-  const authorization = request.headers.get("Authorization") || "";
-  const providedToken = authorization.startsWith("Bearer ") ? authorization.slice(7) : "";
-  if (!configuredToken || providedToken !== configuredToken) {
-    return authError(404, "Documento não encontrado.");
-  }
-
-  const document = await env.DB.prepare(
-    `SELECT object_key, filename, content_type, size_bytes
-       FROM generated_documents
-      WHERE id = ?
-      LIMIT 1`,
-  )
-    .bind(documentId)
-    .first<MigrationDocument>();
-  if (!document) return authError(404, "Documento não encontrado.");
-
-  const object = await env.DOCUMENTS.get(document.object_key);
-  if (!object) return authError(404, "O arquivo deste documento não está disponível.");
-
-  return new Response(request.method === "HEAD" ? null : object.body, {
-    headers: {
-      "Cache-Control": "private, no-store",
-      "Content-Length": String(object.size),
-      "Content-Type": document.content_type,
-      "X-Content-Type-Options": "nosniff",
-    },
-  });
-}
-
 async function serveDocFlowAtRoot(request: Request, env: Env): Promise<Response> {
   const assetUrl = new URL("/docflow/", request.url);
   const assetResponse = await env.ASSETS.fetch(new Request(assetUrl, request));
@@ -218,12 +172,6 @@ const worker = {
       }
       if (url.pathname === "/api/documents") {
         return await handleDocuments(request, env);
-      }
-      const migrationDocumentExport = url.pathname.match(
-        /^\/api\/migration\/documents\/([0-9a-f-]{36})$/i,
-      );
-      if (migrationDocumentExport) {
-        return await handleMigrationDocumentExport(request, env, migrationDocumentExport[1]);
       }
       const documentDownload = url.pathname.match(/^\/api\/documents\/([0-9a-f-]{36})\/download$/i);
       if (documentDownload) {
