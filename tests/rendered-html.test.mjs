@@ -137,6 +137,9 @@ test("requires an account and keeps registrations and encrypted API keys in D1",
   assert.match(worker, /url\.pathname === "\/api\/auth\/login"/);
   assert.match(worker, /url\.pathname === "\/api\/account\/api-key"/);
   assert.match(worker, /url\.pathname === "\/api\/openai"/);
+  assert.match(worker, /CLOUDFLARE_BACKEND_ORIGIN/);
+  assert.match(worker, /proxyApiToPersonalCloudflare/);
+  assert.match(worker, /docflow-fiscal-bertioga\.lucaspsimoes22\.workers\.dev/);
   assert.match(worker, /https:\/\/api\.openai\.com\/v1\/responses/);
   assert.match(worker, /openAICredentialForUser/);
   assert.match(worker, /"Cache-Control": "no-store"/);

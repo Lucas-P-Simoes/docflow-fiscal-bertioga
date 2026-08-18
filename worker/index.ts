@@ -18,6 +18,8 @@ import {
 import { handleDocumentDownload, handleDocumentMutation, handleDocuments } from "./documents";
 
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
+const PERSONAL_CLOUDFLARE_API_ORIGIN =
+  "https://docflow-fiscal-bertioga.lucaspsimoes22.workers.dev";
 const MAX_OPENAI_REQUEST_BYTES = 12 * 1024 * 1024;
 
 type OpenAIRequestBody = {
@@ -128,6 +130,32 @@ function isDocFlowRootRequest(request: Request, url: URL): boolean {
   );
 }
 
+async function proxyApiToPersonalCloudflare(
+  request: Request,
+  env: Env,
+  url: URL,
+): Promise<Response | null> {
+  const configuredOrigin = (env as Env & { CLOUDFLARE_BACKEND_ORIGIN?: string })
+    .CLOUDFLARE_BACKEND_ORIGIN;
+  if (!configuredOrigin) return null;
+  if (configuredOrigin !== PERSONAL_CLOUDFLARE_API_ORIGIN) {
+    throw new Error("CLOUDFLARE_BACKEND_ORIGIN inválida.");
+  }
+
+  const target = new URL(`${url.pathname}${url.search}`, PERSONAL_CLOUDFLARE_API_ORIGIN);
+  const headers = new Headers(request.headers);
+  headers.set("Origin", PERSONAL_CLOUDFLARE_API_ORIGIN);
+  headers.set("X-Forwarded-Host", url.host);
+  headers.delete("Host");
+
+  return fetch(new Request(target, {
+    method: request.method,
+    headers,
+    body: request.method === "GET" || request.method === "HEAD" ? undefined : request.body,
+    redirect: "manual",
+  }));
+}
+
 async function serveDocFlowAtRoot(request: Request, env: Env): Promise<Response> {
   const assetUrl = new URL("/docflow/", request.url);
   const assetResponse = await env.ASSETS.fetch(new Request(assetUrl, request));
@@ -150,6 +178,11 @@ const worker = {
         if (!isSameOriginRequest(request)) {
           return authError(403, "Solicitação bloqueada por segurança.");
         }
+      }
+
+      if (url.pathname.startsWith("/api/")) {
+        const proxied = await proxyApiToPersonalCloudflare(request, env, url);
+        if (proxied) return proxied;
       }
 
       if (url.pathname === "/api/auth/register") {
