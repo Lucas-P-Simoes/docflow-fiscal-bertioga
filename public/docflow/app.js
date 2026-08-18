@@ -220,6 +220,7 @@ function createCorrespondenceState(saved = {}) {
     finalText: "",
     signer: "",
     signerRole: "",
+    photos: [],
     complete: false,
   };
 }
@@ -702,7 +703,7 @@ function renderHome() {
         <span class="card-status is-ready">Pronto</span>
         <span class="card-number" aria-hidden="true">03</span><span class="card-icon" aria-hidden="true">M</span>
         <h3>Memorando</h3>
-        <p>Gere o memorando no modelo oficial da Prefeitura de Bertioga, com os campos e a formatação do arquivo fornecido.</p>
+        <p>Gere o memorando no modelo oficial da Prefeitura de Bertioga, com assinatura e fotos opcionais.</p>
         <span class="card-link">Criar memorando <span aria-hidden="true">→</span></span>
       </article>
       <article class="document-card is-admin" tabindex="0" role="button" data-action="start-correspondence" data-kind="oficio">
@@ -1150,7 +1151,27 @@ function renderMemorandumContent() {
       <label class="field"><span>Cargo ou função *</span><input type="text" data-bind="correspondence.signerRole" value="${e(c.signerRole)}" placeholder="Ex.: Secretário de Obras e Habitação" /></label>
     </div>
   </section>
+  <section class="panel">
+    ${panelHeader("Fotos e legendas", "Opcional. Cada foto será colocada em uma página própria, com numeração automática e a legenda abaixo.")}
+    <label class="upload-box" data-drop="memorandum-photos">
+      <input type="file" multiple accept="image/jpeg,image/png,image/bmp,image/gif,image/webp" data-file="memorandum-photos" />
+      <span class="upload-icon" aria-hidden="true">+</span>
+      <span class="upload-copy"><strong>Anexar fotos</strong><span>JPEG, PNG, BMP, GIF ou WebP • até 20 MB por arquivo</span></span>
+    </label>
+    ${c.photos.length ? `<div class="photo-list notification-photo-list">${c.photos.map(renderMemorandumPhoto).join("")}</div>` : `<div class="empty-state notification-empty-state"><div><strong>Nenhuma foto anexada</strong><span>Esta parte é opcional e não aparecerá no Word se permanecer vazia.</span></div></div>`}
+  </section>
   <div class="notice is-warning"><span aria-hidden="true">!</span><span>A IA pode revisar a linguagem na etapa seguinte, sem inventar fatos, datas, números ou providências. Confira o texto antes de gerar o Word.</span></div>`;
+}
+
+function renderMemorandumPhoto(photo, index) {
+  return `<article class="photo-card" data-memorandum-photo-id="${e(photo.id)}">
+    <img src="${e(photo.url)}" alt="Imagem ${index + 1}: ${e(photo.file.name)}" />
+    <div class="photo-card-main">
+      <div class="photo-card-heading"><span class="photo-index">${String(index + 1).padStart(2, "0")}</span><strong>${e(photo.file.name)}</strong></div>
+      <textarea data-memorandum-photo-caption="${e(photo.id)}" maxlength="500" placeholder="Legenda da foto…">${e(photo.caption)}</textarea>
+    </div>
+    <div class="photo-card-actions"><button class="icon-button" type="button" data-action="remove-memorandum-photo" data-id="${e(photo.id)}" aria-label="Remover foto" title="Remover">×</button></div>
+  </article>`;
 }
 
 function renderMemorandumReview() {
@@ -1163,8 +1184,11 @@ function renderMemorandumReview() {
   <div class="summary-grid">
     ${summaryCard("Memorando", c.number, `${c.place}, ${formatDateLong(c.date)}`)}
     ${summaryCard("Destinatário", formatMemorandumRecipient(c.recipient), c.salutation)}
-    ${summaryCard("Assinatura", c.signer, c.signerRole)}
+    ${summaryCard("Anexos", `${c.photos.length} foto(s)`, c.photos.length ? "Todas com legenda" : "Sem fotografias")}
   </div>
+  <section class="panel review-panel">
+    <div class="review-block"><h3>Assinatura</h3><p>${e(c.signer)} — ${e(c.signerRole)}</p></div>
+  </section>
   <div class="notice"><span aria-hidden="true">✓</span><span><strong>Modelo conferido.</strong> O arquivo será criado com o cabeçalho oficial, a paginação e a formatação do memorando fornecido.</span></div>`;
 }
 
@@ -1302,6 +1326,7 @@ function startFlow(flow, kind = "") {
   state.flow = flow;
   if (flow === "correspondence" && CORRESPONDENCE_TYPES[kind]) {
     if (state.correspondence.kind !== kind) {
+      state.correspondence.photos.forEach((photo) => URL.revokeObjectURL(photo.url));
       state.correspondence = createCorrespondenceState(readStorage("docflow-preferences", {}));
     }
     state.correspondence.kind = kind;
@@ -1402,6 +1427,10 @@ function validateCurrentStep() {
       }
       if (state.step === 1 && (!c.baseText.trim() || !c.signer.trim() || !c.signerRole.trim())) {
         showMessage({ title: "Complete o conteúdo", text: "Informe o texto, o nome e o cargo da pessoa que vai assinar." });
+        return false;
+      }
+      if (state.step === 1 && c.photos.some((photo) => !photo.caption.trim())) {
+        showMessage({ title: "Complete as legendas", text: "Toda foto anexada ao memorando precisa ter uma legenda, ou deve ser removida." });
         return false;
       }
       if (state.step === 2 && !c.finalText.trim()) {
@@ -1545,8 +1574,12 @@ async function handleFiles(kind, files, id = "") {
     return;
   }
 
-  if (kind === "notification-photos" || kind === "warning-photos") {
-    const owner = kind === "warning-photos" ? state.warning : state.notification;
+  if (["memorandum-photos", "notification-photos", "warning-photos"].includes(kind)) {
+    const owner = kind === "memorandum-photos"
+      ? state.correspondence
+      : kind === "warning-photos"
+        ? state.warning
+        : state.notification;
     const known = new Set(owner.photos.map((photo) => `${photo.file.name}-${photo.file.size}-${photo.file.lastModified}`));
     valid.forEach((file) => {
       const signature = `${file.name}-${file.size}-${file.lastModified}`;
@@ -1592,6 +1625,13 @@ function removeNotificationPhoto(id) {
   const photo = owner.photos.find((item) => item.id === id);
   if (photo?.url) URL.revokeObjectURL(photo.url);
   owner.photos = owner.photos.filter((item) => item.id !== id);
+  render();
+}
+
+function removeMemorandumPhoto(id) {
+  const photo = state.correspondence.photos.find((item) => item.id === id);
+  if (photo?.url) URL.revokeObjectURL(photo.url);
+  state.correspondence.photos = state.correspondence.photos.filter((item) => item.id !== id);
   render();
 }
 
@@ -2583,6 +2623,11 @@ function memorandumBlankParagraph() {
   return new Paragraph({ children: [memorandumRun("")] });
 }
 
+function memorandumPhotoSpacerParagraph() {
+  const { Paragraph } = window.docx;
+  return new Paragraph({ spacing: { after: 1500 }, children: [memorandumRun("\u00A0")] });
+}
+
 function memorandumBodyParagraphs(text) {
   const { Paragraph, AlignmentType } = window.docx;
   return String(text || "")
@@ -2598,7 +2643,7 @@ function memorandumBodyParagraphs(text) {
 }
 
 async function buildMemorandumDocument(onProgress) {
-  const { Paragraph, AlignmentType, patchDocument, PatchType } = window.docx;
+  const { Paragraph, AlignmentType, PageBreak, patchDocument, PatchType } = window.docx;
   const c = state.correspondence;
   if (typeof patchDocument !== "function" || !PatchType) {
     throw new Error("O componente de preenchimento do modelo Word não está disponível.");
@@ -2648,6 +2693,25 @@ async function buildMemorandumDocument(onProgress) {
       children: [memorandumRun(c.signerRole.trim(), true)],
     }),
   );
+
+  for (let index = 0; index < c.photos.length; index += 1) {
+    const photo = c.photos[index];
+    onProgress(55 + Math.round(((index + 1) / c.photos.length) * 35), `Inserindo imagem ${index + 1} de ${c.photos.length}…`);
+    const run = await imageRunFor(photo.file, 500, 570, `Imagem ${String(index + 1).padStart(2, "0")}`);
+    children.push(new Paragraph({ children: [new PageBreak()] }));
+    children.push(memorandumPhotoSpacerParagraph());
+    children.push(new Paragraph({
+      alignment: AlignmentType.CENTER,
+      keepNext: true,
+      spacing: { before: 80, after: 120 },
+      children: [run],
+    }));
+    children.push(new Paragraph({
+      alignment: AlignmentType.CENTER,
+      spacing: { after: 0, line: 240 },
+      children: [memorandumRun(`Imagem ${String(index + 1).padStart(2, "0")} - ${photo.caption.trim()}`, true)],
+    }));
+  }
 
   onProgress(92, "Preenchendo o modelo sem alterar o cabeçalho e a paginação…");
   const blob = await patchDocument({
@@ -2749,6 +2813,7 @@ function resetCurrentDocument() {
     state[flow] = createNotificationState(readStorage("docflow-preferences", {}), flow);
   } else {
     const kind = state.correspondence.kind;
+    state.correspondence.photos.forEach((photo) => URL.revokeObjectURL(photo.url));
     state.correspondence = createCorrespondenceState(readStorage("docflow-preferences", {}));
     state.correspondence.kind = kind;
   }
@@ -2799,6 +2864,7 @@ async function handleAction(action, target) {
   if (action === "remove-file") return removeFile(target.dataset.kind, target.dataset.id);
   if (action === "remove-photo") return removePhoto(target.dataset.id);
   if (action === "remove-notification-photo") return removeNotificationPhoto(target.dataset.id);
+  if (action === "remove-memorandum-photo") return removeMemorandumPhoto(target.dataset.id);
   if (action === "analyze-photo") return analyzePhoto(target.dataset.id);
   if (action === "analyze-all") return analyzeAllPhotos();
   if (action === "add-topic") {
@@ -2886,6 +2952,10 @@ document.addEventListener("input", (event) => {
     const photo = noticeState().photos.find((item) => item.id === target.dataset.notificationPhotoCaption);
     if (photo) photo.caption = target.value;
   }
+  if (target.dataset.memorandumPhotoCaption) {
+    const photo = state.correspondence.photos.find((item) => item.id === target.dataset.memorandumPhotoCaption);
+    if (photo) photo.caption = target.value;
+  }
   if (target.dataset.topicField) {
     const topic = state.report.topics.find((item) => item.id === target.dataset.id);
     if (topic) topic[target.dataset.topicField] = target.value;
@@ -2933,7 +3003,7 @@ document.addEventListener("drop", (event) => {
   if (!dropZone) return;
   event.preventDefault();
   dropZone.classList.remove("is-dragging");
-  handleFiles(["notification-photos", "warning-photos"].includes(dropZone.dataset.drop) ? dropZone.dataset.drop : "report-photos", event.dataTransfer.files);
+  handleFiles(["memorandum-photos", "notification-photos", "warning-photos"].includes(dropZone.dataset.drop) ? dropZone.dataset.drop : "report-photos", event.dataTransfer.files);
 });
 
 elements.modelSelect.addEventListener("change", () => {

@@ -192,11 +192,17 @@ test("builds memoranda from the supplied Bertioga model with its respective fiel
   assert.match(app, /data-bind="correspondence\.baseText"/);
   assert.match(app, /data-bind="correspondence\.signer"/);
   assert.match(app, /data-bind="correspondence\.signerRole"/);
+  assert.match(app, /data-file="memorandum-photos"/);
+  assert.match(app, /data-memorandum-photo-caption/);
+  assert.match(app, /data-action="remove-memorandum-photo"/);
   assert.match(app, /async function buildMemorandumDocument/);
   assert.match(app, /Memorando nº \$\{c\.number\.trim\(\)\}/);
   assert.match(app, /font:\s*"Arial",\s*size:\s*24/);
   assert.match(app, /spacing:\s*\{\s*before:\s*100,\s*after:\s*100,\s*line:\s*360\s*\}/);
   assert.match(app, /memorandum_content:\s*\{[\s\S]*?type:\s*PatchType\.DOCUMENT/);
+  assert.match(app, /imageRunFor\(photo\.file, 500, 570/);
+  assert.match(app, /Imagem \$\{String\(index \+ 1\)\.padStart\(2, "0"\)\} - \$\{photo\.caption\.trim\(\)\}/);
+  assert.match(app, /Toda foto anexada ao memorando precisa ter uma legenda/);
   assert.match(app, /keepOriginalStyles:\s*true/);
   assert.match(app, /await finishDownload\(blob, filename, type\.label\)/);
 });
