@@ -11,6 +11,7 @@ if (LEGACY_DOCFLOW_PATHS.has(window.location.pathname)) {
 
 const REPORT_STEPS = ["Informações", "Fotografias", "Conteúdo e formato", "Revisão"];
 const COTA_STEPS = ["Conteúdo", "Revisão e download"];
+const MEMORANDUM_STEPS = ["Dados do memorando", "Conteúdo", "Revisão e download"];
 const CORRESPONDENCE_STEPS = ["Dados do documento", "Conteúdo", "Revisão e download"];
 const NOTIFICATION_STEPS = ["Dados da notificação", "Conteúdo e anexos", "Revisão e download"];
 const WARNING_STEPS = ["Dados da advertência", "Conteúdo e anexos", "Revisão e download"];
@@ -47,6 +48,7 @@ const CORRESPONDENCE_TYPES = {
 const MAX_COTA_TEXT = 2500;
 const MAX_COTA_LINES = 32;
 const COTA_TEMPLATE_URL = "templates/MODELO_FOLHA_COTA.docx";
+const MEMORANDUM_TEMPLATE_URL = "templates/MODELO_MEMORANDO.docx";
 const NOTIFICATION_TEMPLATE_URL = "templates/MODELO_NOTIFICACAO.docx";
 const COTA_TEXT_STYLE = { font: "Arial", size: 24, language: { value: "pt-BR" } };
 const COTA_HEADER_FIELD_STYLE = { ...COTA_TEXT_STYLE, bold: true, italics: false };
@@ -162,6 +164,7 @@ const state = {
 let toastTimer = null;
 let saveTimer = null;
 let cotaTemplatePromise = null;
+let memorandumTemplatePromise = null;
 let notificationTemplatePromise = null;
 
 function createReportState(saved = {}) {
@@ -207,10 +210,11 @@ function createCorrespondenceState(saved = {}) {
     organization: saved.organization || "",
     department: saved.department || "",
     number: "",
-    place: "",
+    place: saved.memorandumCity || "Bertioga",
     date: todayInputValue(),
     recipient: "",
     recipientRole: "",
+    salutation: "",
     subject: "",
     baseText: "",
     finalText: "",
@@ -267,6 +271,7 @@ function scheduleSave() {
         responsibles: state.report.responsibles,
         onePerPage: state.report.onePerPage,
         startPhotosNewPage: state.report.startPhotosNewPage,
+        memorandumCity: state.correspondence.kind === "memorando" ? state.correspondence.place : (persisted.memorandumCity || "Bertioga"),
         notificationCity: state.notification.city,
         warningCity: state.warning.city,
       };
@@ -602,7 +607,9 @@ function render() {
         ? renderCota()
         : isNoticeFlow()
           ? renderNotification()
-          : renderCorrespondence();
+          : isMemorandumFlow()
+            ? renderMemorandum()
+            : renderCorrespondence();
     configureActionBar();
   }
 }
@@ -619,6 +626,7 @@ function currentSteps() {
   if (state.flow === "cota") return COTA_STEPS;
   if (state.flow === "notification") return NOTIFICATION_STEPS;
   if (state.flow === "warning") return WARNING_STEPS;
+  if (isMemorandumFlow()) return MEMORANDUM_STEPS;
   return CORRESPONDENCE_STEPS;
 }
 
@@ -636,6 +644,10 @@ function renderSidebar() {
     elements.flowEyebrow.textContent = notice.label;
     elements.flowTitle.textContent = `Prepare a ${notice.lower}`;
     elements.flowDescription.textContent = "Use o timbre oficial, assinaturas e fotos opcionais.";
+  } else if (isMemorandumFlow()) {
+    elements.flowEyebrow.textContent = "Memorando";
+    elements.flowTitle.textContent = "Prepare o memorando";
+    elements.flowDescription.textContent = "Use o modelo oficial da Prefeitura de Bertioga.";
   } else {
     const type = correspondenceType();
     elements.flowEyebrow.textContent = type.label;
@@ -687,10 +699,10 @@ function renderHome() {
         <span class="card-link">Preparar folha <span aria-hidden="true">→</span></span>
       </article>
       <article class="document-card is-admin" tabindex="0" role="button" data-action="start-correspondence" data-kind="memorando">
-        <span class="card-status is-development">Em desenvolvimento</span>
+        <span class="card-status is-ready">Pronto</span>
         <span class="card-number" aria-hidden="true">03</span><span class="card-icon" aria-hidden="true">M</span>
         <h3>Memorando</h3>
-        <p>Crie uma comunicação interna objetiva entre setores, unidades ou responsáveis.</p>
+        <p>Gere o memorando no modelo oficial da Prefeitura de Bertioga, com os campos e a formatação do arquivo fornecido.</p>
         <span class="card-link">Criar memorando <span aria-hidden="true">→</span></span>
       </article>
       <article class="document-card is-admin" tabindex="0" role="button" data-action="start-correspondence" data-kind="oficio">
@@ -1095,6 +1107,67 @@ function renderNotificationReview() {
   <div class="notice"><span aria-hidden="true">✓</span><span><strong>Modelo conferido.</strong> O arquivo será criado com o cabeçalho oficial da Prefeitura de Bertioga e a formatação do documento fornecido.</span></div>`;
 }
 
+function isMemorandumFlow(flow = state.flow) {
+  return flow === "correspondence" && state.correspondence.kind === "memorando";
+}
+
+function renderMemorandum() {
+  const renders = [renderMemorandumInfo, renderMemorandumContent, renderMemorandumReview];
+  return renders[state.step]();
+}
+
+function renderMemorandumInfo() {
+  const c = state.correspondence;
+  return `${pageHeading("Etapa 1", "Identifique o memorando", "Preencha os campos que aparecerão no modelo oficial da Prefeitura de Bertioga.")}
+  <section class="panel">
+    ${panelHeader("Modelo oficial", "O brasão, o cabeçalho, a página A4, as margens e a tipografia serão preservados conforme o arquivo fornecido.")}
+    <div class="field-grid three">
+      <label class="field"><span>Cidade *</span><input type="text" data-bind="correspondence.place" value="${e(c.place)}" placeholder="Ex.: Bertioga" /></label>
+      <label class="field"><span>Data *</span><input type="date" data-bind="correspondence.date" value="${e(c.date)}" /></label>
+      <label class="field"><span>Número do memorando *</span><input type="text" data-bind="correspondence.number" value="${e(c.number)}" placeholder="Ex.: 0268/2026" /></label>
+    </div>
+  </section>
+  <section class="panel">
+    ${panelHeader("Destinatário", "O setor ou destinatário e o tratamento serão apresentados em negrito, como no modelo original.")}
+    <div class="field-grid">
+      <label class="field"><span>Destinatário ou setor *</span><input type="text" data-bind="correspondence.recipient" value="${e(c.recipient)}" placeholder="Ex.: SCON" /></label>
+      <label class="field"><span>Saudação ou tratamento *</span><input type="text" data-bind="correspondence.salutation" value="${e(c.salutation)}" placeholder="Ex.: Sra. Chefe," /></label>
+    </div>
+  </section>`;
+}
+
+function renderMemorandumContent() {
+  const c = state.correspondence;
+  return `${pageHeading("Etapa 2", "Escreva o memorando", "Informe o texto e a pessoa que assinará o documento.")}
+  <section class="panel">
+    ${panelHeader("Texto do memorando", "Separe os parágrafos com uma linha em branco; o Word manterá Arial 12, alinhamento justificado e espaçamento de 1,5 linha.")}
+    <label class="field"><span>Conteúdo *</span><textarea data-bind="correspondence.baseText" maxlength="${MAX_CORRESPONDENCE_TEXT}" placeholder="Escreva o texto integral do memorando…">${e(c.baseText)}</textarea><span class="text-counter"><span>Use parágrafos para organizar as informações</span><span>${c.baseText.length}/${MAX_CORRESPONDENCE_TEXT}</span></span></label>
+  </section>
+  <section class="panel">
+    ${panelHeader("Assinatura", "O cargo será colocado imediatamente abaixo do nome, ambos centralizados e em negrito.")}
+    <div class="field-grid">
+      <label class="field"><span>Nome do signatário *</span><input type="text" data-bind="correspondence.signer" value="${e(c.signer)}" placeholder="Nome completo" /></label>
+      <label class="field"><span>Cargo ou função *</span><input type="text" data-bind="correspondence.signerRole" value="${e(c.signerRole)}" placeholder="Ex.: Secretário de Obras e Habitação" /></label>
+    </div>
+  </section>
+  <div class="notice is-warning"><span aria-hidden="true">!</span><span>A IA pode revisar a linguagem na etapa seguinte, sem inventar fatos, datas, números ou providências. Confira o texto antes de gerar o Word.</span></div>`;
+}
+
+function renderMemorandumReview() {
+  const c = state.correspondence;
+  return `${pageHeading("Etapa 3", "Revise o memorando", "Confira os dados e ajuste o texto final antes de baixar o Word.")}
+  <section class="panel">
+    ${panelHeader("Texto final", "Somente o conteúdo deste campo será usado como corpo do memorando.", `<button class="button button-secondary" type="button" data-action="improve-correspondence">✦ Revisar com IA</button>`)}
+    <label class="field"><span>Redação final *</span><textarea data-bind="correspondence.finalText" maxlength="${MAX_CORRESPONDENCE_TEXT}">${e(c.finalText)}</textarea><span class="text-counter"><span>Revise nomes, datas, valores e números</span><span>${c.finalText.length}/${MAX_CORRESPONDENCE_TEXT}</span></span></label>
+  </section>
+  <div class="summary-grid">
+    ${summaryCard("Memorando", c.number, `${c.place}, ${formatDateLong(c.date)}`)}
+    ${summaryCard("Destinatário", formatMemorandumRecipient(c.recipient), c.salutation)}
+    ${summaryCard("Assinatura", c.signer, c.signerRole)}
+  </div>
+  <div class="notice"><span aria-hidden="true">✓</span><span><strong>Modelo conferido.</strong> O arquivo será criado com o cabeçalho oficial, a paginação e a formatação do memorando fornecido.</span></div>`;
+}
+
 function correspondenceType() {
   return CORRESPONDENCE_TYPES[state.correspondence.kind] || CORRESPONDENCE_TYPES.memorando;
 }
@@ -1322,6 +1395,21 @@ function validateCurrentStep() {
 
   if (state.flow === "correspondence") {
     const c = state.correspondence;
+    if (isMemorandumFlow()) {
+      if (state.step === 0 && (!c.place.trim() || !c.date || !c.number.trim() || !c.recipient.trim() || !c.salutation.trim())) {
+        showMessage({ title: "Complete a identificação", text: "Informe cidade, data, número do memorando, destinatário e saudação antes de continuar." });
+        return false;
+      }
+      if (state.step === 1 && (!c.baseText.trim() || !c.signer.trim() || !c.signerRole.trim())) {
+        showMessage({ title: "Complete o conteúdo", text: "Informe o texto, o nome e o cargo da pessoa que vai assinar." });
+        return false;
+      }
+      if (state.step === 2 && !c.finalText.trim()) {
+        showMessage({ title: "Texto final vazio", text: "Mantenha algum conteúdo antes de gerar o memorando." });
+        return false;
+      }
+      return true;
+    }
     if (state.step === 0 && (!c.date || !c.recipient.trim() || !c.subject.trim())) {
       showMessage({ title: "Complete os dados do documento", text: "Informe a data, o destinatário e o assunto antes de continuar." });
       return false;
@@ -1999,10 +2087,18 @@ async function generateCorrespondence() {
     return;
   }
   const type = correspondenceType();
-  state.generation = { running: true, progress: 12, message: `Montando ${type.article} ${type.label.toLowerCase()}…` };
+  state.generation = {
+    running: true,
+    progress: 12,
+    message: isMemorandumFlow()
+      ? "Aplicando o modelo oficial do memorando…"
+      : `Montando ${type.article} ${type.label.toLowerCase()}…`,
+  };
   render();
   try {
-    const blob = await buildCorrespondenceDocument((progress, message) => setGenerationProgress(progress, message));
+    const blob = isMemorandumFlow()
+      ? await buildMemorandumDocument((progress, message) => setGenerationProgress(progress, message))
+      : await buildCorrespondenceDocument((progress, message) => setGenerationProgress(progress, message));
     const suffix = state.correspondence.number || state.correspondence.date;
     const filename = `${slugify(type.label)}${suffix ? `-${slugify(suffix)}` : ""}.docx`;
     await finishDownload(blob, filename, type.label);
@@ -2327,6 +2423,22 @@ async function loadCotaTemplate() {
   return template.slice(0);
 }
 
+async function loadMemorandumTemplate() {
+  if (!memorandumTemplatePromise) {
+    memorandumTemplatePromise = fetch(MEMORANDUM_TEMPLATE_URL)
+      .then((response) => {
+        if (!response.ok) throw new Error("O modelo oficial do memorando não pôde ser carregado.");
+        return response.arrayBuffer();
+      })
+      .catch((error) => {
+        memorandumTemplatePromise = null;
+        throw error;
+      });
+  }
+  const data = await memorandumTemplatePromise;
+  return data.slice(0);
+}
+
 async function loadNotificationTemplate() {
   if (!notificationTemplatePromise) {
     notificationTemplatePromise = fetch(NOTIFICATION_TEMPLATE_URL)
@@ -2453,6 +2565,104 @@ async function buildNotificationDocument(onProgress) {
     recursive: false,
   });
   onProgress(100, `${notice.label} concluída.`);
+  return blob;
+}
+
+function formatMemorandumRecipient(value) {
+  const recipient = String(value || "").trim().replace(/^(?:à|a)\s+/iu, "");
+  return `À ${recipient}`;
+}
+
+function memorandumRun(text, bold = false) {
+  const { TextRun } = window.docx;
+  return new TextRun({ text: String(text || ""), font: "Arial", size: 24, bold, color: "000000" });
+}
+
+function memorandumBlankParagraph() {
+  const { Paragraph } = window.docx;
+  return new Paragraph({ children: [memorandumRun("")] });
+}
+
+function memorandumBodyParagraphs(text) {
+  const { Paragraph, AlignmentType } = window.docx;
+  return String(text || "")
+    .replace(/\r\n?/g, "\n")
+    .split(/\n\s*\n/)
+    .filter((paragraph) => paragraph.trim())
+    .map((paragraph) => new Paragraph({
+      alignment: AlignmentType.JUSTIFIED,
+      indent: { firstLine: 1134 },
+      spacing: { before: 100, after: 100, line: 360 },
+      children: [memorandumRun(paragraph.replace(/\s*\n\s*/g, " ").trim())],
+    }));
+}
+
+async function buildMemorandumDocument(onProgress) {
+  const { Paragraph, AlignmentType, patchDocument, PatchType } = window.docx;
+  const c = state.correspondence;
+  if (typeof patchDocument !== "function" || !PatchType) {
+    throw new Error("O componente de preenchimento do modelo Word não está disponível.");
+  }
+
+  onProgress(18, "Carregando o modelo oficial do memorando…");
+  const template = await loadMemorandumTemplate();
+  const children = [
+    new Paragraph({
+      alignment: AlignmentType.RIGHT,
+      children: [memorandumRun(`${c.place.trim()}, ${formatDateLong(c.date)}.`, true)],
+    }),
+    memorandumBlankParagraph(),
+    memorandumBlankParagraph(),
+    new Paragraph({
+      alignment: AlignmentType.JUSTIFIED,
+      children: [memorandumRun(`Memorando nº ${c.number.trim()}`, true)],
+    }),
+    memorandumBlankParagraph(),
+    memorandumBlankParagraph(),
+    memorandumBlankParagraph(),
+    new Paragraph({
+      alignment: AlignmentType.JUSTIFIED,
+      children: [memorandumRun(formatMemorandumRecipient(c.recipient), true)],
+    }),
+    new Paragraph({
+      alignment: AlignmentType.JUSTIFIED,
+      children: [memorandumRun(c.salutation.trim(), true)],
+    }),
+    memorandumBlankParagraph(),
+    memorandumBlankParagraph(),
+    memorandumBlankParagraph(),
+  ];
+
+  onProgress(45, "Formatando o texto em Arial 12 e espaçamento de 1,5 linha…");
+  children.push(...memorandumBodyParagraphs(c.finalText));
+  for (let index = 0; index < 5; index += 1) children.push(memorandumBlankParagraph());
+  children.push(
+    new Paragraph({
+      alignment: AlignmentType.CENTER,
+      indent: { left: -357, right: -318 },
+      children: [memorandumRun(c.signer.trim(), true)],
+    }),
+    new Paragraph({
+      alignment: AlignmentType.CENTER,
+      indent: { left: -357, right: -318 },
+      children: [memorandumRun(c.signerRole.trim(), true)],
+    }),
+  );
+
+  onProgress(92, "Preenchendo o modelo sem alterar o cabeçalho e a paginação…");
+  const blob = await patchDocument({
+    outputType: "blob",
+    data: template,
+    patches: {
+      memorandum_content: {
+        type: PatchType.DOCUMENT,
+        children,
+      },
+    },
+    keepOriginalStyles: true,
+    recursive: false,
+  });
+  onProgress(100, "Memorando concluído.");
   return blob;
 }
 

@@ -70,6 +70,8 @@ test("keeps the editable and deployable DocFlow assets synchronized", async () =
     builtTemplate,
     sourceNotificationTemplate,
     builtNotificationTemplate,
+    sourceMemorandumTemplate,
+    builtMemorandumTemplate,
     sourceLoginImage,
     builtLoginImage,
   ] = await Promise.all([
@@ -83,6 +85,10 @@ test("keeps the editable and deployable DocFlow assets synchronized", async () =
     readFile(
       new URL("dist/client/docflow/templates/MODELO_NOTIFICACAO.docx", siteRoot),
     ),
+    readFile(new URL("public/docflow/templates/MODELO_MEMORANDO.docx", siteRoot)),
+    readFile(
+      new URL("dist/client/docflow/templates/MODELO_MEMORANDO.docx", siteRoot),
+    ),
     readFile(new URL("public/docflow/assets/bertioga-praia-login.png", siteRoot)),
     readFile(new URL("dist/client/docflow/assets/bertioga-praia-login.png", siteRoot)),
   ]);
@@ -90,6 +96,7 @@ test("keeps the editable and deployable DocFlow assets synchronized", async () =
   assert.deepEqual(builtApp, sourceApp);
   assert.deepEqual(builtTemplate, sourceTemplate);
   assert.deepEqual(builtNotificationTemplate, sourceNotificationTemplate);
+  assert.deepEqual(builtMemorandumTemplate, sourceMemorandumTemplate);
   assert.deepEqual(builtLoginImage, sourceLoginImage);
 });
 
@@ -151,19 +158,47 @@ test("requires an account and keeps registrations and encrypted API keys in D1",
 });
 
 
-test("labels the cota, notification, and warning as ready", async () => {
+test("labels the cota, memorandum, notification, and warning as ready", async () => {
   const [app, styles] = await Promise.all([
     readFile(new URL("public/docflow/app.js", siteRoot), "utf8"),
     readFile(new URL("public/docflow/styles.css", siteRoot), "utf8"),
   ]);
 
-  assert.equal((app.match(/card-status is-ready/g) || []).length, 3);
-  assert.equal((app.match(/card-status is-development/g) || []).length, 3);
+  assert.equal((app.match(/card-status is-ready/g) || []).length, 4);
+  assert.equal((app.match(/card-status is-development/g) || []).length, 2);
   assert.match(app, /card-status is-ready">Pronto<\/span>[\s\S]*?<h3>Folha de cota<\/h3>/);
+  assert.match(app, /data-kind="memorando">[\s\S]*?card-status is-ready">Pronto<\/span>[\s\S]*?<h3>Memorando<\/h3>/);
   assert.match(app, /data-action="start-notification">[\s\S]*?card-status is-ready">Pronto<\/span>[\s\S]*?<h3>Notificação<\/h3>/);
   assert.match(app, /data-action="start-warning">[\s\S]*?card-status is-ready">Pronto<\/span>[\s\S]*?<h3>Advertência<\/h3>/);
   assert.match(styles, /\.card-status\s*\{/);
   assert.match(styles, /\.card-status\.is-ready\s*\{/);
+});
+
+
+test("builds memoranda from the supplied Bertioga model with its respective fields", async () => {
+  const [app, template] = await Promise.all([
+    readFile(new URL("public/docflow/app.js", siteRoot), "utf8"),
+    readFile(new URL("public/docflow/templates/MODELO_MEMORANDO.docx", siteRoot)),
+  ]);
+
+  assert.ok(template.byteLength > 200_000 && template.byteLength < 280_000);
+  assert.match(app, /MEMORANDUM_TEMPLATE_URL\s*=\s*"templates\/MODELO_MEMORANDO\.docx"/);
+  assert.match(app, /function renderMemorandumInfo/);
+  assert.match(app, /data-bind="correspondence\.place"/);
+  assert.match(app, /data-bind="correspondence\.date"/);
+  assert.match(app, /data-bind="correspondence\.number"/);
+  assert.match(app, /data-bind="correspondence\.recipient"/);
+  assert.match(app, /data-bind="correspondence\.salutation"/);
+  assert.match(app, /data-bind="correspondence\.baseText"/);
+  assert.match(app, /data-bind="correspondence\.signer"/);
+  assert.match(app, /data-bind="correspondence\.signerRole"/);
+  assert.match(app, /async function buildMemorandumDocument/);
+  assert.match(app, /Memorando nº \$\{c\.number\.trim\(\)\}/);
+  assert.match(app, /font:\s*"Arial",\s*size:\s*24/);
+  assert.match(app, /spacing:\s*\{\s*before:\s*100,\s*after:\s*100,\s*line:\s*360\s*\}/);
+  assert.match(app, /memorandum_content:\s*\{[\s\S]*?type:\s*PatchType\.DOCUMENT/);
+  assert.match(app, /keepOriginalStyles:\s*true/);
+  assert.match(app, /await finishDownload\(blob, filename, type\.label\)/);
 });
 
 
