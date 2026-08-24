@@ -11,7 +11,7 @@ if (LEGACY_DOCFLOW_PATHS.has(window.location.pathname)) {
 
 const REPORT_STEPS = ["Informações", "Fotografias", "Conteúdo e formato", "Revisão"];
 const COTA_STEPS = ["Conteúdo", "Revisão e download"];
-const MEMORANDUM_STEPS = ["Dados do memorando", "Conteúdo", "Revisão e download"];
+const OFFICIAL_CORRESPONDENCE_STEPS = ["Dados do documento", "Conteúdo", "Revisão e download"];
 const CORRESPONDENCE_STEPS = ["Dados do documento", "Conteúdo", "Revisão e download"];
 const NOTIFICATION_STEPS = ["Dados da notificação", "Conteúdo e anexos", "Revisão e download"];
 const WARNING_STEPS = ["Dados da advertência", "Conteúdo e anexos", "Revisão e download"];
@@ -21,7 +21,7 @@ const CORRESPONDENCE_TYPES = {
     article: "o",
     completed: "concluído",
     description: "Comunicação interna objetiva entre setores, unidades ou responsáveis.",
-    recipientPrefix: "Ao(À)",
+    recipientPrefix: "À",
   },
   oficio: {
     label: "Ofício",
@@ -48,7 +48,7 @@ const CORRESPONDENCE_TYPES = {
 const MAX_COTA_TEXT = 2500;
 const MAX_COTA_LINES = 32;
 const COTA_TEMPLATE_URL = "templates/MODELO_FOLHA_COTA.docx";
-const MEMORANDUM_TEMPLATE_URL = "templates/MODELO_MEMORANDO.docx";
+const OFFICIAL_CORRESPONDENCE_TEMPLATE_URL = "templates/MODELO_MEMORANDO.docx";
 const NOTIFICATION_TEMPLATE_URL = "templates/MODELO_NOTIFICACAO.docx";
 const COTA_TEXT_STYLE = { font: "Arial", size: 24, language: { value: "pt-BR" } };
 const COTA_HEADER_FIELD_STYLE = { ...COTA_TEXT_STYLE, bold: true, italics: false };
@@ -182,7 +182,7 @@ const state = {
 let toastTimer = null;
 let saveTimer = null;
 let cotaTemplatePromise = null;
-let memorandumTemplatePromise = null;
+let officialCorrespondenceTemplatePromise = null;
 let notificationTemplatePromise = null;
 
 function createReportState(saved = {}) {
@@ -627,8 +627,8 @@ function render() {
         ? renderCota()
         : isNoticeFlow()
           ? renderNotification()
-          : isMemorandumFlow()
-            ? renderMemorandum()
+          : isOfficialCorrespondenceFlow()
+            ? renderOfficialCorrespondence()
             : renderCorrespondence();
     configureActionBar();
   }
@@ -646,7 +646,7 @@ function currentSteps() {
   if (state.flow === "cota") return COTA_STEPS;
   if (state.flow === "notification") return NOTIFICATION_STEPS;
   if (state.flow === "warning") return WARNING_STEPS;
-  if (isMemorandumFlow()) return MEMORANDUM_STEPS;
+  if (isOfficialCorrespondenceFlow()) return OFFICIAL_CORRESPONDENCE_STEPS;
   return CORRESPONDENCE_STEPS;
 }
 
@@ -664,9 +664,10 @@ function renderSidebar() {
     elements.flowEyebrow.textContent = notice.label;
     elements.flowTitle.textContent = `Prepare a ${notice.lower}`;
     elements.flowDescription.textContent = "Use o timbre oficial, assinaturas e fotos opcionais.";
-  } else if (isMemorandumFlow()) {
-    elements.flowEyebrow.textContent = "Memorando";
-    elements.flowTitle.textContent = "Prepare o memorando";
+  } else if (isOfficialCorrespondenceFlow()) {
+    const type = correspondenceType();
+    elements.flowEyebrow.textContent = type.label;
+    elements.flowTitle.textContent = `Prepare ${type.article} ${type.label.toLowerCase()}`;
     elements.flowDescription.textContent = "Use o modelo oficial da Prefeitura de Bertioga.";
   } else {
     const type = correspondenceType();
@@ -726,10 +727,10 @@ function renderHome() {
         <span class="card-link">Criar memorando <span aria-hidden="true">→</span></span>
       </article>
       <article class="document-card is-admin" tabindex="0" role="button" data-action="start-correspondence" data-kind="oficio">
-        <span class="card-status is-development">Em desenvolvimento</span>
+        <span class="card-status is-ready">Pronto</span>
         <span class="card-number" aria-hidden="true">04</span><span class="card-icon" aria-hidden="true">O</span>
         <h3>Ofício</h3>
-        <p>Prepare uma comunicação formal para órgãos, entidades ou destinatários externos.</p>
+        <p>Gere o ofício no modelo oficial da Prefeitura de Bertioga, com assinatura e fotos opcionais.</p>
         <span class="card-link">Criar ofício <span aria-hidden="true">→</span></span>
       </article>
       <article class="document-card is-alert" tabindex="0" role="button" data-action="start-notification">
@@ -1137,24 +1138,30 @@ function renderNotificationReview() {
   <div class="notice"><span aria-hidden="true">✓</span><span><strong>Modelo conferido.</strong> O arquivo será criado com o cabeçalho oficial da Prefeitura de Bertioga e a formatação do documento fornecido.</span></div>`;
 }
 
-function isMemorandumFlow(flow = state.flow) {
-  return flow === "correspondence" && state.correspondence.kind === "memorando";
+function isOfficialCorrespondenceFlow(flow = state.flow) {
+  return flow === "correspondence" && ["memorando", "oficio"].includes(state.correspondence.kind);
 }
 
-function renderMemorandum() {
-  const renders = [renderMemorandumInfo, renderMemorandumContent, renderMemorandumReview];
+function renderOfficialCorrespondence() {
+  const renders = [
+    renderOfficialCorrespondenceInfo,
+    renderOfficialCorrespondenceContent,
+    renderOfficialCorrespondenceReview,
+  ];
   return renders[state.step]();
 }
 
-function renderMemorandumInfo() {
+function renderOfficialCorrespondenceInfo() {
   const c = state.correspondence;
-  return `${pageHeading("Etapa 1", "Identifique o memorando", "Preencha os campos que aparecerão no modelo oficial da Prefeitura de Bertioga.")}
+  const type = correspondenceType();
+  const typeLower = type.label.toLowerCase();
+  return `${pageHeading("Etapa 1", `Identifique ${type.article} ${typeLower}`, "Preencha os campos que aparecerão no modelo oficial da Prefeitura de Bertioga.")}
   <section class="panel">
     ${panelHeader("Modelo oficial", "O brasão, o cabeçalho, a página A4, as margens e a tipografia serão preservados conforme o arquivo fornecido.")}
     <div class="field-grid three">
       <label class="field"><span>Cidade *</span><input type="text" data-bind="correspondence.place" value="${e(c.place)}" placeholder="Ex.: Bertioga" /></label>
       <label class="field"><span>Data *</span><input type="date" data-bind="correspondence.date" value="${e(c.date)}" /></label>
-      <label class="field"><span>Número do memorando *</span><input type="text" data-bind="correspondence.number" value="${e(c.number)}" placeholder="Ex.: 0268/2026" /></label>
+      <label class="field"><span>Número d${type.article === "a" ? "a" : "o"} ${typeLower} *</span><input type="text" data-bind="correspondence.number" value="${e(c.number)}" placeholder="Ex.: 0268/2026" /></label>
     </div>
   </section>
   <section class="panel">
@@ -1166,12 +1173,14 @@ function renderMemorandumInfo() {
   </section>`;
 }
 
-function renderMemorandumContent() {
+function renderOfficialCorrespondenceContent() {
   const c = state.correspondence;
-  return `${pageHeading("Etapa 2", "Escreva o memorando", "Informe o texto e a pessoa que assinará o documento.")}
+  const type = correspondenceType();
+  const typeLower = type.label.toLowerCase();
+  return `${pageHeading("Etapa 2", `Escreva ${type.article} ${typeLower}`, "Informe o texto e a pessoa que assinará o documento.")}
   <section class="panel">
-    ${panelHeader("Texto do memorando", "Separe os parágrafos com uma linha em branco; o Word manterá Arial 12, alinhamento justificado e espaçamento de 1,5 linha.")}
-    <label class="field"><span>Conteúdo *</span><textarea data-bind="correspondence.baseText" maxlength="${MAX_CORRESPONDENCE_TEXT}" placeholder="Escreva o texto integral do memorando…">${e(c.baseText)}</textarea><span class="text-counter"><span>Use parágrafos para organizar as informações</span><span>${c.baseText.length}/${MAX_CORRESPONDENCE_TEXT}</span></span></label>
+    ${panelHeader(`Texto d${type.article === "a" ? "a" : "o"} ${typeLower}`, "Separe os parágrafos com uma linha em branco; o Word manterá Arial 12, alinhamento justificado e espaçamento de 1,5 linha.")}
+    <label class="field"><span>Conteúdo *</span><textarea data-bind="correspondence.baseText" maxlength="${MAX_CORRESPONDENCE_TEXT}" placeholder="Escreva o texto integral d${type.article === "a" ? "a" : "o"} ${typeLower}…">${e(c.baseText)}</textarea><span class="text-counter"><span>Use parágrafos para organizar as informações</span><span>${c.baseText.length}/${MAX_CORRESPONDENCE_TEXT}</span></span></label>
   </section>
   <section class="panel">
     ${panelHeader("Assinatura", "O cargo será colocado imediatamente abaixo do nome, ambos centralizados e em negrito.")}
@@ -1182,43 +1191,45 @@ function renderMemorandumContent() {
   </section>
   <section class="panel">
     ${panelHeader("Fotos e legendas", "Opcional. Cada foto será colocada em uma página própria, com numeração automática e a legenda abaixo.")}
-    <label class="upload-box" data-drop="memorandum-photos">
-      <input type="file" multiple accept="image/jpeg,image/png,image/bmp,image/gif,image/webp" data-file="memorandum-photos" />
+    <label class="upload-box" data-drop="correspondence-photos">
+      <input type="file" multiple accept="image/jpeg,image/png,image/bmp,image/gif,image/webp" data-file="correspondence-photos" />
       <span class="upload-icon" aria-hidden="true">+</span>
       <span class="upload-copy"><strong>Anexar fotos</strong><span>JPEG, PNG, BMP, GIF ou WebP • até 20 MB por arquivo</span></span>
     </label>
-    ${c.photos.length ? `<div class="photo-list notification-photo-list">${c.photos.map(renderMemorandumPhoto).join("")}</div>` : `<div class="empty-state notification-empty-state"><div><strong>Nenhuma foto anexada</strong><span>Esta parte é opcional e não aparecerá no Word se permanecer vazia.</span></div></div>`}
+    ${c.photos.length ? `<div class="photo-list notification-photo-list">${c.photos.map(renderOfficialCorrespondencePhoto).join("")}</div>` : `<div class="empty-state notification-empty-state"><div><strong>Nenhuma foto anexada</strong><span>Esta parte é opcional e não aparecerá no Word se permanecer vazia.</span></div></div>`}
   </section>
   <div class="notice is-warning"><span aria-hidden="true">!</span><span>A IA pode revisar a linguagem na etapa seguinte, sem inventar fatos, datas, números ou providências. Confira o texto antes de gerar o Word.</span></div>`;
 }
 
-function renderMemorandumPhoto(photo, index) {
-  return `<article class="photo-card" data-memorandum-photo-id="${e(photo.id)}">
+function renderOfficialCorrespondencePhoto(photo, index) {
+  return `<article class="photo-card" data-correspondence-photo-id="${e(photo.id)}">
     <img src="${e(photo.url)}" alt="Imagem ${index + 1}: ${e(photo.file.name)}" />
     <div class="photo-card-main">
       <div class="photo-card-heading"><span class="photo-index">${String(index + 1).padStart(2, "0")}</span><strong>${e(photo.file.name)}</strong></div>
-      <textarea data-memorandum-photo-caption="${e(photo.id)}" maxlength="500" placeholder="Legenda da foto…">${e(photo.caption)}</textarea>
+      <textarea data-correspondence-photo-caption="${e(photo.id)}" maxlength="500" placeholder="Legenda da foto…">${e(photo.caption)}</textarea>
     </div>
-    <div class="photo-card-actions"><button class="icon-button" type="button" data-action="remove-memorandum-photo" data-id="${e(photo.id)}" aria-label="Remover foto" title="Remover">×</button></div>
+    <div class="photo-card-actions"><button class="icon-button" type="button" data-action="remove-correspondence-photo" data-id="${e(photo.id)}" aria-label="Remover foto" title="Remover">×</button></div>
   </article>`;
 }
 
-function renderMemorandumReview() {
+function renderOfficialCorrespondenceReview() {
   const c = state.correspondence;
-  return `${pageHeading("Etapa 3", "Revise o memorando", "Confira os dados e ajuste o texto final antes de baixar o Word.")}
+  const type = correspondenceType();
+  const typeLower = type.label.toLowerCase();
+  return `${pageHeading("Etapa 3", `Revise ${type.article} ${typeLower}`, "Confira os dados e ajuste o texto final antes de baixar o Word.")}
   <section class="panel">
-    ${panelHeader("Texto final", "Somente o conteúdo deste campo será usado como corpo do memorando.", `<button class="button button-secondary" type="button" data-action="improve-correspondence">✦ Revisar com IA</button>`)}
+    ${panelHeader("Texto final", `Somente o conteúdo deste campo será usado como corpo d${type.article === "a" ? "a" : "o"} ${typeLower}.`, `<button class="button button-secondary" type="button" data-action="improve-correspondence">✦ Revisar com IA</button>`)}
     <label class="field"><span>Redação final *</span><textarea data-bind="correspondence.finalText" maxlength="${MAX_CORRESPONDENCE_TEXT}">${e(c.finalText)}</textarea><span class="text-counter"><span>Revise nomes, datas, valores e números</span><span>${c.finalText.length}/${MAX_CORRESPONDENCE_TEXT}</span></span></label>
   </section>
   <div class="summary-grid">
-    ${summaryCard("Memorando", c.number, `${c.place}, ${formatDateLong(c.date)}`)}
-    ${summaryCard("Destinatário", formatMemorandumRecipient(c.recipient), c.salutation)}
+    ${summaryCard(type.label, c.number, `${c.place}, ${formatDateLong(c.date)}`)}
+    ${summaryCard("Destinatário", formatOfficialCorrespondenceRecipient(c.recipient), c.salutation)}
     ${summaryCard("Anexos", `${c.photos.length} foto(s)`, c.photos.length ? "Todas com legenda" : "Sem fotografias")}
   </div>
   <section class="panel review-panel">
     <div class="review-block"><h3>Assinatura</h3><p>${e(c.signer)} — ${e(c.signerRole)}</p></div>
   </section>
-  <div class="notice"><span aria-hidden="true">✓</span><span><strong>Modelo conferido.</strong> O arquivo será criado com o cabeçalho oficial, a paginação e a formatação do memorando fornecido.</span></div>`;
+  <div class="notice"><span aria-hidden="true">✓</span><span><strong>Modelo conferido.</strong> O arquivo será criado com o cabeçalho oficial, a paginação e a mesma formatação usada no memorando.</span></div>`;
 }
 
 function correspondenceType() {
@@ -1449,9 +1460,11 @@ function validateCurrentStep() {
 
   if (state.flow === "correspondence") {
     const c = state.correspondence;
-    if (isMemorandumFlow()) {
+    if (isOfficialCorrespondenceFlow()) {
+      const type = correspondenceType();
+      const typeLower = type.label.toLowerCase();
       if (state.step === 0 && (!c.place.trim() || !c.date || !c.number.trim() || !c.recipient.trim() || !c.salutation.trim())) {
-        showMessage({ title: "Complete a identificação", text: "Informe cidade, data, número do memorando, destinatário e saudação antes de continuar." });
+        showMessage({ title: "Complete a identificação", text: `Informe cidade, data, número d${type.article === "a" ? "a" : "o"} ${typeLower}, destinatário e saudação antes de continuar.` });
         return false;
       }
       if (state.step === 1 && (!c.baseText.trim() || !c.signer.trim() || !c.signerRole.trim())) {
@@ -1459,11 +1472,11 @@ function validateCurrentStep() {
         return false;
       }
       if (state.step === 1 && c.photos.some((photo) => !photo.caption.trim())) {
-        showMessage({ title: "Complete as legendas", text: "Toda foto anexada ao memorando precisa ter uma legenda, ou deve ser removida." });
+        showMessage({ title: "Complete as legendas", text: `Toda foto anexada a${type.article} ${typeLower} precisa ter uma legenda, ou deve ser removida.` });
         return false;
       }
       if (state.step === 2 && !c.finalText.trim()) {
-        showMessage({ title: "Texto final vazio", text: "Mantenha algum conteúdo antes de gerar o memorando." });
+        showMessage({ title: "Texto final vazio", text: `Mantenha algum conteúdo antes de gerar ${type.article} ${typeLower}.` });
         return false;
       }
       return true;
@@ -1603,8 +1616,8 @@ async function handleFiles(kind, files, id = "") {
     return;
   }
 
-  if (["memorandum-photos", "notification-photos", "warning-photos"].includes(kind)) {
-    const owner = kind === "memorandum-photos"
+  if (["correspondence-photos", "notification-photos", "warning-photos"].includes(kind)) {
+    const owner = kind === "correspondence-photos"
       ? state.correspondence
       : kind === "warning-photos"
         ? state.warning
@@ -1657,7 +1670,7 @@ function removeNotificationPhoto(id) {
   render();
 }
 
-function removeMemorandumPhoto(id) {
+function removeCorrespondencePhoto(id) {
   const photo = state.correspondence.photos.find((item) => item.id === id);
   if (photo?.url) URL.revokeObjectURL(photo.url);
   state.correspondence.photos = state.correspondence.photos.filter((item) => item.id !== id);
@@ -2159,14 +2172,14 @@ async function generateCorrespondence() {
   state.generation = {
     running: true,
     progress: 12,
-    message: isMemorandumFlow()
-      ? "Aplicando o modelo oficial do memorando…"
+    message: isOfficialCorrespondenceFlow()
+      ? `Aplicando o modelo oficial d${type.article === "a" ? "a" : "o"} ${type.label.toLowerCase()}…`
       : `Montando ${type.article} ${type.label.toLowerCase()}…`,
   };
   render();
   try {
-    const blob = isMemorandumFlow()
-      ? await buildMemorandumDocument((progress, message) => setGenerationProgress(progress, message))
+    const blob = isOfficialCorrespondenceFlow()
+      ? await buildOfficialCorrespondenceDocument((progress, message) => setGenerationProgress(progress, message))
       : await buildCorrespondenceDocument((progress, message) => setGenerationProgress(progress, message));
     const suffix = state.correspondence.number || state.correspondence.date;
     const filename = `${slugify(type.label)}${suffix ? `-${slugify(suffix)}` : ""}.docx`;
@@ -2804,19 +2817,19 @@ async function loadCotaTemplate() {
   return template.slice(0);
 }
 
-async function loadMemorandumTemplate() {
-  if (!memorandumTemplatePromise) {
-    memorandumTemplatePromise = fetch(MEMORANDUM_TEMPLATE_URL)
+async function loadOfficialCorrespondenceTemplate() {
+  if (!officialCorrespondenceTemplatePromise) {
+    officialCorrespondenceTemplatePromise = fetch(OFFICIAL_CORRESPONDENCE_TEMPLATE_URL)
       .then((response) => {
-        if (!response.ok) throw new Error("O modelo oficial do memorando não pôde ser carregado.");
+        if (!response.ok) throw new Error("O modelo oficial do documento não pôde ser carregado.");
         return response.arrayBuffer();
       })
       .catch((error) => {
-        memorandumTemplatePromise = null;
+        officialCorrespondenceTemplatePromise = null;
         throw error;
       });
   }
-  const data = await memorandumTemplatePromise;
+  const data = await officialCorrespondenceTemplatePromise;
   return data.slice(0);
 }
 
@@ -2949,27 +2962,28 @@ async function buildNotificationDocument(onProgress) {
   return blob;
 }
 
-function formatMemorandumRecipient(value) {
-  const recipient = String(value || "").trim().replace(/^(?:à|a)\s+/iu, "");
-  return `À ${recipient}`;
+function formatOfficialCorrespondenceRecipient(value) {
+  const type = correspondenceType();
+  const recipient = String(value || "").trim().replace(/^(?:ao|à|a)\s+/iu, "");
+  return `${type.recipientPrefix} ${recipient}`;
 }
 
-function memorandumRun(text, bold = false) {
+function officialCorrespondenceRun(text, bold = false) {
   const { TextRun } = window.docx;
   return new TextRun({ text: String(text || ""), font: "Arial", size: 24, bold, color: "000000" });
 }
 
-function memorandumBlankParagraph() {
+function officialCorrespondenceBlankParagraph() {
   const { Paragraph } = window.docx;
-  return new Paragraph({ children: [memorandumRun("")] });
+  return new Paragraph({ children: [officialCorrespondenceRun("")] });
 }
 
-function memorandumPhotoSpacerParagraph() {
+function officialCorrespondencePhotoSpacerParagraph() {
   const { Paragraph } = window.docx;
-  return new Paragraph({ spacing: { after: 1500 }, children: [memorandumRun("\u00A0")] });
+  return new Paragraph({ spacing: { after: 1500 }, children: [officialCorrespondenceRun("\u00A0")] });
 }
 
-function memorandumBodyParagraphs(text) {
+function officialCorrespondenceBodyParagraphs(text) {
   const { Paragraph, AlignmentType } = window.docx;
   return String(text || "")
     .replace(/\r\n?/g, "\n")
@@ -2979,59 +2993,61 @@ function memorandumBodyParagraphs(text) {
       alignment: AlignmentType.JUSTIFIED,
       indent: { firstLine: 1134 },
       spacing: { before: 100, after: 100, line: 360 },
-      children: [memorandumRun(paragraph.replace(/\s*\n\s*/g, " ").trim())],
+      children: [officialCorrespondenceRun(paragraph.replace(/\s*\n\s*/g, " ").trim())],
     }));
 }
 
-async function buildMemorandumDocument(onProgress) {
+async function buildOfficialCorrespondenceDocument(onProgress) {
   const { Paragraph, AlignmentType, PageBreak, patchDocument, PatchType } = window.docx;
   const c = state.correspondence;
+  const type = correspondenceType();
+  const typeLower = type.label.toLowerCase();
   if (typeof patchDocument !== "function" || !PatchType) {
     throw new Error("O componente de preenchimento do modelo Word não está disponível.");
   }
 
-  onProgress(18, "Carregando o modelo oficial do memorando…");
-  const template = await loadMemorandumTemplate();
+  onProgress(18, `Carregando o modelo oficial d${type.article === "a" ? "a" : "o"} ${typeLower}…`);
+  const template = await loadOfficialCorrespondenceTemplate();
   const children = [
     new Paragraph({
       alignment: AlignmentType.RIGHT,
-      children: [memorandumRun(`${c.place.trim()}, ${formatDateLong(c.date)}.`, true)],
+      children: [officialCorrespondenceRun(`${c.place.trim()}, ${formatDateLong(c.date)}.`, true)],
     }),
-    memorandumBlankParagraph(),
-    memorandumBlankParagraph(),
+    officialCorrespondenceBlankParagraph(),
+    officialCorrespondenceBlankParagraph(),
     new Paragraph({
       alignment: AlignmentType.JUSTIFIED,
-      children: [memorandumRun(`Memorando nº ${c.number.trim()}`, true)],
+      children: [officialCorrespondenceRun(`${type.label} nº ${c.number.trim()}`, true)],
     }),
-    memorandumBlankParagraph(),
-    memorandumBlankParagraph(),
-    memorandumBlankParagraph(),
+    officialCorrespondenceBlankParagraph(),
+    officialCorrespondenceBlankParagraph(),
+    officialCorrespondenceBlankParagraph(),
     new Paragraph({
       alignment: AlignmentType.JUSTIFIED,
-      children: [memorandumRun(formatMemorandumRecipient(c.recipient), true)],
+      children: [officialCorrespondenceRun(formatOfficialCorrespondenceRecipient(c.recipient), true)],
     }),
     new Paragraph({
       alignment: AlignmentType.JUSTIFIED,
-      children: [memorandumRun(c.salutation.trim(), true)],
+      children: [officialCorrespondenceRun(c.salutation.trim(), true)],
     }),
-    memorandumBlankParagraph(),
-    memorandumBlankParagraph(),
-    memorandumBlankParagraph(),
+    officialCorrespondenceBlankParagraph(),
+    officialCorrespondenceBlankParagraph(),
+    officialCorrespondenceBlankParagraph(),
   ];
 
   onProgress(45, "Formatando o texto em Arial 12 e espaçamento de 1,5 linha…");
-  children.push(...memorandumBodyParagraphs(c.finalText));
-  for (let index = 0; index < 5; index += 1) children.push(memorandumBlankParagraph());
+  children.push(...officialCorrespondenceBodyParagraphs(c.finalText));
+  for (let index = 0; index < 5; index += 1) children.push(officialCorrespondenceBlankParagraph());
   children.push(
     new Paragraph({
       alignment: AlignmentType.CENTER,
       indent: { left: -357, right: -318 },
-      children: [memorandumRun(c.signer.trim(), true)],
+      children: [officialCorrespondenceRun(c.signer.trim(), true)],
     }),
     new Paragraph({
       alignment: AlignmentType.CENTER,
       indent: { left: -357, right: -318 },
-      children: [memorandumRun(c.signerRole.trim(), true)],
+      children: [officialCorrespondenceRun(c.signerRole.trim(), true)],
     }),
   );
 
@@ -3040,7 +3056,7 @@ async function buildMemorandumDocument(onProgress) {
     onProgress(55 + Math.round(((index + 1) / c.photos.length) * 35), `Inserindo imagem ${index + 1} de ${c.photos.length}…`);
     const run = await imageRunFor(photo.file, 500, 570, `Imagem ${String(index + 1).padStart(2, "0")}`);
     children.push(new Paragraph({ children: [new PageBreak()] }));
-    children.push(memorandumPhotoSpacerParagraph());
+    children.push(officialCorrespondencePhotoSpacerParagraph());
     children.push(new Paragraph({
       alignment: AlignmentType.CENTER,
       keepNext: true,
@@ -3050,7 +3066,7 @@ async function buildMemorandumDocument(onProgress) {
     children.push(new Paragraph({
       alignment: AlignmentType.CENTER,
       spacing: { after: 0, line: 240 },
-      children: [memorandumRun(`Imagem ${String(index + 1).padStart(2, "0")} - ${photo.caption.trim()}`, true)],
+      children: [officialCorrespondenceRun(`Imagem ${String(index + 1).padStart(2, "0")} - ${photo.caption.trim()}`, true)],
     }));
   }
 
@@ -3067,7 +3083,7 @@ async function buildMemorandumDocument(onProgress) {
     keepOriginalStyles: true,
     recursive: false,
   });
-  onProgress(100, "Memorando concluído.");
+  onProgress(100, `${type.label} ${type.completed}.`);
   return blob;
 }
 
@@ -3210,7 +3226,7 @@ async function handleAction(action, target) {
   if (action === "remove-file") return removeFile(target.dataset.kind, target.dataset.id);
   if (action === "remove-photo") return removePhoto(target.dataset.id);
   if (action === "remove-notification-photo") return removeNotificationPhoto(target.dataset.id);
-  if (action === "remove-memorandum-photo") return removeMemorandumPhoto(target.dataset.id);
+  if (action === "remove-correspondence-photo") return removeCorrespondencePhoto(target.dataset.id);
   if (action === "analyze-photo") return analyzePhoto(target.dataset.id);
   if (action === "analyze-all") return analyzeAllPhotos();
   if (action === "add-topic") {
@@ -3298,8 +3314,8 @@ document.addEventListener("input", (event) => {
     const photo = noticeState().photos.find((item) => item.id === target.dataset.notificationPhotoCaption);
     if (photo) photo.caption = target.value;
   }
-  if (target.dataset.memorandumPhotoCaption) {
-    const photo = state.correspondence.photos.find((item) => item.id === target.dataset.memorandumPhotoCaption);
+  if (target.dataset.correspondencePhotoCaption) {
+    const photo = state.correspondence.photos.find((item) => item.id === target.dataset.correspondencePhotoCaption);
     if (photo) photo.caption = target.value;
   }
   if (target.dataset.topicField) {
@@ -3349,7 +3365,7 @@ document.addEventListener("drop", (event) => {
   if (!dropZone) return;
   event.preventDefault();
   dropZone.classList.remove("is-dragging");
-  handleFiles(["memorandum-photos", "notification-photos", "warning-photos"].includes(dropZone.dataset.drop) ? dropZone.dataset.drop : "report-photos", event.dataTransfer.files);
+  handleFiles(["correspondence-photos", "notification-photos", "warning-photos"].includes(dropZone.dataset.drop) ? dropZone.dataset.drop : "report-photos", event.dataTransfer.files);
 });
 
 elements.modelSelect.addEventListener("change", () => {

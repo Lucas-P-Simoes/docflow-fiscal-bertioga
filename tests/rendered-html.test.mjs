@@ -161,16 +161,17 @@ test("requires an account and keeps registrations and encrypted API keys in D1",
 });
 
 
-test("labels the cota, memorandum, notification, and warning as ready", async () => {
+test("labels the cota, memorandum, oficio, notification, and warning as ready", async () => {
   const [app, styles] = await Promise.all([
     readFile(new URL("public/docflow/app.js", siteRoot), "utf8"),
     readFile(new URL("public/docflow/styles.css", siteRoot), "utf8"),
   ]);
 
-  assert.equal((app.match(/card-status is-ready/g) || []).length, 4);
-  assert.equal((app.match(/card-status is-development/g) || []).length, 2);
+  assert.equal((app.match(/card-status is-ready/g) || []).length, 5);
+  assert.equal((app.match(/card-status is-development/g) || []).length, 1);
   assert.match(app, /card-status is-ready">Pronto<\/span>[\s\S]*?<h3>Folha de cota<\/h3>/);
   assert.match(app, /data-kind="memorando">[\s\S]*?card-status is-ready">Pronto<\/span>[\s\S]*?<h3>Memorando<\/h3>/);
+  assert.match(app, /data-kind="oficio">[\s\S]*?card-status is-ready">Pronto<\/span>[\s\S]*?<h3>Ofício<\/h3>/);
   assert.match(app, /data-action="start-notification">[\s\S]*?card-status is-ready">Pronto<\/span>[\s\S]*?<h3>Notificação<\/h3>/);
   assert.match(app, /data-action="start-warning">[\s\S]*?card-status is-ready">Pronto<\/span>[\s\S]*?<h3>Advertência<\/h3>/);
   assert.match(styles, /\.card-status\s*\{/);
@@ -178,15 +179,17 @@ test("labels the cota, memorandum, notification, and warning as ready", async ()
 });
 
 
-test("builds memoranda from the supplied Bertioga model with its respective fields", async () => {
+test("builds memoranda and oficios from the same supplied Bertioga model", async () => {
   const [app, template] = await Promise.all([
     readFile(new URL("public/docflow/app.js", siteRoot), "utf8"),
     readFile(new URL("public/docflow/templates/MODELO_MEMORANDO.docx", siteRoot)),
   ]);
 
   assert.ok(template.byteLength > 200_000 && template.byteLength < 280_000);
-  assert.match(app, /MEMORANDUM_TEMPLATE_URL\s*=\s*"templates\/MODELO_MEMORANDO\.docx"/);
-  assert.match(app, /function renderMemorandumInfo/);
+  assert.match(app, /OFFICIAL_CORRESPONDENCE_TEMPLATE_URL\s*=\s*"templates\/MODELO_MEMORANDO\.docx"/);
+  assert.match(app, /function isOfficialCorrespondenceFlow/);
+  assert.match(app, /\["memorando", "oficio"\]\.includes/);
+  assert.match(app, /function renderOfficialCorrespondenceInfo/);
   assert.match(app, /data-bind="correspondence\.place"/);
   assert.match(app, /data-bind="correspondence\.date"/);
   assert.match(app, /data-bind="correspondence\.number"/);
@@ -195,17 +198,17 @@ test("builds memoranda from the supplied Bertioga model with its respective fiel
   assert.match(app, /data-bind="correspondence\.baseText"/);
   assert.match(app, /data-bind="correspondence\.signer"/);
   assert.match(app, /data-bind="correspondence\.signerRole"/);
-  assert.match(app, /data-file="memorandum-photos"/);
-  assert.match(app, /data-memorandum-photo-caption/);
-  assert.match(app, /data-action="remove-memorandum-photo"/);
-  assert.match(app, /async function buildMemorandumDocument/);
-  assert.match(app, /Memorando nº \$\{c\.number\.trim\(\)\}/);
+  assert.match(app, /data-file="correspondence-photos"/);
+  assert.match(app, /data-correspondence-photo-caption/);
+  assert.match(app, /data-action="remove-correspondence-photo"/);
+  assert.match(app, /async function buildOfficialCorrespondenceDocument/);
+  assert.match(app, /\$\{type\.label\} nº \$\{c\.number\.trim\(\)\}/);
   assert.match(app, /font:\s*"Arial",\s*size:\s*24/);
   assert.match(app, /spacing:\s*\{\s*before:\s*100,\s*after:\s*100,\s*line:\s*360\s*\}/);
   assert.match(app, /memorandum_content:\s*\{[\s\S]*?type:\s*PatchType\.DOCUMENT/);
   assert.match(app, /imageRunFor\(photo\.file, 500, 570/);
   assert.match(app, /Imagem \$\{String\(index \+ 1\)\.padStart\(2, "0"\)\} - \$\{photo\.caption\.trim\(\)\}/);
-  assert.match(app, /Toda foto anexada ao memorando precisa ter uma legenda/);
+  assert.match(app, /Toda foto anexada a\$\{type\.article\} \$\{typeLower\} precisa ter uma legenda/);
   assert.match(app, /keepOriginalStyles:\s*true/);
   assert.match(app, /await finishDownload\(blob, filename, type\.label\)/);
 });
