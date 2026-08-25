@@ -2712,9 +2712,9 @@ async function buildReportDocument(onProgress) {
   onProgress(93, "Finalizando cabeçalho e paginação…");
   const header = await headerFor(r);
   const documentFile = new Document({
-    creator: "DocFlow",
+    creator: "Fiscal Bertioga",
     title: r.title,
-    description: "Relatório fotográfico gerado no DocFlow",
+    description: "Relatório fotográfico gerado no Fiscal Bertioga",
     styles: defaultDocumentStyles(),
     sections: [{
       properties: { page: { size: { width: 11906, height: 16838 }, margin: { top: 1134, right: 1134, bottom: 1134, left: 1134, header: 500, footer: 500 }, pageNumbers: { start: 1 } } },
@@ -3137,9 +3137,9 @@ async function buildCorrespondenceDocument(onProgress) {
   onProgress(82, "Aplicando cabeçalho e paginação…");
   const header = await headerFor({ organization: c.organization, department: c.department, logo: null });
   const documentFile = new Document({
-    creator: "DocFlow",
+    creator: "Fiscal Bertioga",
     title: `${type.label}${documentNumber}`,
-    description: `${type.label} gerado no DocFlow`,
+    description: `${type.label} gerado no Fiscal Bertioga`,
     styles: defaultDocumentStyles(),
     sections: [{
       properties: { page: { size: { width: 11906, height: 16838 }, margin: { top: 1134, right: 1134, bottom: 1134, left: 1134, header: 500, footer: 500 }, pageNumbers: { start: 1 } } },

@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "DocFlow — Assistente de Documentos",
+  title: "Fiscal Bertioga — Assistente de Documentos",
   description:
     "Crie relatórios fotográficos e folhas de cota em Word direto do navegador.",
   icons: {
