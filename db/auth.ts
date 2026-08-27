@@ -2,6 +2,9 @@ export type AccountSummary = {
   id: string;
   name: string;
   email: string;
+  status: "pending" | "approved" | "rejected";
+  isAdmin: boolean;
+  lastLoginAt: number | null;
   hasApiKey: boolean;
   apiModel: string | null;
   apiKeyLastFour: string | null;
@@ -14,6 +17,8 @@ export type PasswordUser = {
   passwordHash: string;
   passwordSalt: string;
   passwordIterations: number;
+  status: "pending" | "approved" | "rejected";
+  isAdmin: boolean;
 };
 
 export type StoredOpenAICredential = {
@@ -27,6 +32,9 @@ type SessionRow = {
   id: string;
   name: string;
   email: string;
+  status: "pending" | "approved" | "rejected";
+  is_admin: number;
+  last_login_at: number | null;
   api_model: string | null;
   api_key_last_four: string | null;
 };
@@ -38,6 +46,8 @@ type PasswordUserRow = {
   password_hash: string;
   password_salt: string;
   password_iterations: number;
+  status: "pending" | "approved" | "rejected";
+  is_admin: number;
 };
 
 type CredentialRow = {
@@ -59,7 +69,9 @@ export async function findUserByEmail(
 ): Promise<PasswordUser | null> {
   const row = await db
     .prepare(
-      `SELECT id, name, email, password_hash, password_salt, password_iterations
+      `SELECT
+         id, name, email, password_hash, password_salt, password_iterations,
+         status, is_admin
        FROM users
        WHERE email = ?
        LIMIT 1`,
@@ -75,10 +87,12 @@ export async function findUserByEmail(
     passwordHash: row.password_hash,
     passwordSalt: row.password_salt,
     passwordIterations: row.password_iterations,
+    status: row.status,
+    isAdmin: Boolean(row.is_admin),
   };
 }
 
-export async function createUserAndSession(
+export async function createPendingUser(
   db: D1Database,
   values: {
     userId: string;
@@ -87,36 +101,27 @@ export async function createUserAndSession(
     passwordHash: string;
     passwordSalt: string;
     passwordIterations: number;
-    tokenHash: string;
     now: number;
-    expiresAt: number;
   },
 ): Promise<void> {
-  await db.batch([
-    db
-      .prepare(
-        `INSERT INTO users (
-          id, name, email, password_hash, password_salt,
-          password_iterations, created_at, updated_at
-        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-      )
-      .bind(
-        values.userId,
-        values.name,
-        values.email,
-        values.passwordHash,
-        values.passwordSalt,
-        values.passwordIterations,
-        values.now,
-        values.now,
-      ),
-    db
-      .prepare(
-        `INSERT INTO sessions (token_hash, user_id, created_at, expires_at)
-         VALUES (?, ?, ?, ?)`,
-      )
-      .bind(values.tokenHash, values.userId, values.now, values.expiresAt),
-  ]);
+  await db
+    .prepare(
+      `INSERT INTO users (
+         id, name, email, password_hash, password_salt,
+         password_iterations, status, is_admin, created_at, updated_at
+       ) VALUES (?, ?, ?, ?, ?, ?, 'pending', 0, ?, ?)`,
+    )
+    .bind(
+      values.userId,
+      values.name,
+      values.email,
+      values.passwordHash,
+      values.passwordSalt,
+      values.passwordIterations,
+      values.now,
+      values.now,
+    )
+    .run();
 }
 
 export async function createSession(
@@ -127,14 +132,25 @@ export async function createSession(
     now: number;
     expiresAt: number;
   },
-): Promise<void> {
-  await db
-    .prepare(
-      `INSERT INTO sessions (token_hash, user_id, created_at, expires_at)
-       VALUES (?, ?, ?, ?)`,
-    )
-    .bind(values.tokenHash, values.userId, values.now, values.expiresAt)
-    .run();
+): Promise<boolean> {
+  const [sessionResult] = await db.batch([
+    db
+      .prepare(
+        `INSERT INTO sessions (token_hash, user_id, created_at, expires_at)
+         SELECT ?, id, ?, ?
+         FROM users
+         WHERE id = ? AND status = 'approved'`,
+      )
+      .bind(values.tokenHash, values.now, values.expiresAt, values.userId),
+    db
+      .prepare(
+        `UPDATE users
+         SET last_login_at = ?, updated_at = ?
+         WHERE id = ? AND status = 'approved'`,
+      )
+      .bind(values.now, values.now, values.userId),
+  ]);
+  return sessionResult.meta.changes > 0;
 }
 
 export async function getAccountBySession(
@@ -148,12 +164,15 @@ export async function getAccountBySession(
          u.id,
          u.name,
          u.email,
+         u.status,
+         u.is_admin,
+         u.last_login_at,
          c.model AS api_model,
          c.last_four AS api_key_last_four
        FROM sessions AS s
        INNER JOIN users AS u ON u.id = s.user_id
        LEFT JOIN openai_credentials AS c ON c.user_id = u.id
-       WHERE s.token_hash = ? AND s.expires_at > ?
+       WHERE s.token_hash = ? AND s.expires_at > ? AND u.status = 'approved'
        LIMIT 1`,
     )
     .bind(tokenHash, now)
@@ -164,6 +183,9 @@ export async function getAccountBySession(
     id: row.id,
     name: row.name,
     email: row.email,
+    status: row.status,
+    isAdmin: Boolean(row.is_admin),
+    lastLoginAt: row.last_login_at,
     hasApiKey: Boolean(row.api_model && row.api_key_last_four),
     apiModel: row.api_model,
     apiKeyLastFour: row.api_key_last_four,

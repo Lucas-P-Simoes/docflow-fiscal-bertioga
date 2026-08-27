@@ -9,10 +9,20 @@ export const users = sqliteTable(
     passwordHash: text("password_hash").notNull(),
     passwordSalt: text("password_salt").notNull(),
     passwordIterations: integer("password_iterations").notNull(),
+    status: text("status", { enum: ["pending", "approved", "rejected"] })
+      .notNull()
+      .default("approved"),
+    isAdmin: integer("is_admin", { mode: "boolean" }).notNull().default(false),
+    lastLoginAt: integer("last_login_at"),
+    reviewedAt: integer("reviewed_at"),
+    reviewedBy: text("reviewed_by"),
     createdAt: integer("created_at").notNull(),
     updatedAt: integer("updated_at").notNull(),
   },
-  (table) => [uniqueIndex("idx_users_email").on(table.email)],
+  (table) => [
+    uniqueIndex("idx_users_email").on(table.email),
+    index("idx_users_status_created").on(table.status, table.createdAt),
+  ],
 );
 
 export const sessions = sqliteTable(

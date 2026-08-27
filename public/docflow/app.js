@@ -148,6 +148,8 @@ const elements = {
   registerPasswordConfirmation: document.querySelector("#registerPasswordConfirmation"),
   loginFeedback: document.querySelector("#loginFeedback"),
   registerFeedback: document.querySelector("#registerFeedback"),
+  adminButton: document.querySelector("#adminButton"),
+  adminPendingBadge: document.querySelector("#adminPendingBadge"),
   accountName: document.querySelector("#accountName"),
   view: document.querySelector("#view"),
   main: document.querySelector("#main"),
@@ -211,6 +213,17 @@ function createHistoryState() {
   };
 }
 
+function createAdminState() {
+  return {
+    open: false,
+    loading: false,
+    loaded: false,
+    users: [],
+    error: "",
+    busy: new Map(),
+  };
+}
+
 const state = {
   auth: {
     user: null,
@@ -233,6 +246,7 @@ const state = {
   generation: { running: false, progress: 0, message: "" },
   lastDownload: null,
   history: createHistoryState(),
+  admin: createAdminState(),
   messageCallbacks: new Map(),
 };
 
@@ -738,9 +752,9 @@ function showAuthView(view) {
   setTimeout(() => (isRegister ? elements.registerName : elements.loginEmail).focus(), 50);
 }
 
-function setAuthFeedback(element, message) {
+function setAuthFeedback(element, message, kind = "error") {
   element.textContent = message;
-  element.classList.toggle("is-hidden", !message);
+  element.className = `inline-feedback${message ? "" : " is-hidden"}${kind === "error" ? " is-error" : ""}`;
 }
 
 function setFormBusy(form, busy, busyLabel) {
@@ -754,6 +768,7 @@ function setFormBusy(form, busy, busyLabel) {
 function applyAccount(payload) {
   state.auth.user = payload.user;
   state.signatures = createSignatureConfigurationState();
+  state.admin = createAdminState();
   const selectedModel = payload.api?.model || "gpt-5.6-terra";
   const knownModels = new Set(["gpt-5.6-terra", "gpt-5.6-sol", "gpt-5.6-luna"]);
   state.api = {
@@ -762,6 +777,8 @@ function applyAccount(payload) {
     model: knownModels.has(selectedModel) ? selectedModel : "custom",
     customModel: knownModels.has(selectedModel) ? "" : selectedModel,
   };
+  const isAdmin = Boolean(payload.user?.isAdmin);
+  elements.adminButton.classList.toggle("is-hidden", !isAdmin);
   elements.accountName.textContent = payload.user?.name || payload.user?.email || "";
   elements.authGate.classList.add("is-hidden");
   elements.siteShell.hidden = false;
@@ -769,13 +786,18 @@ function applyAccount(payload) {
   render();
   loadSignatureProfiles();
   loadDocumentHistory();
+  if (isAdmin) loadAdminUsers({ silent: true });
 }
 
 function showAuthGate(view = "login") {
   state.auth.user = null;
   state.signatures = createSignatureConfigurationState();
+  state.admin = createAdminState();
   state.history.pdfCache.forEach((cached) => cached.url && URL.revokeObjectURL(cached.url));
   state.history = createHistoryState();
+  elements.adminButton.classList.add("is-hidden");
+  elements.adminPendingBadge.classList.add("is-hidden");
+  elements.adminPendingBadge.textContent = "";
   elements.siteShell.hidden = true;
   elements.siteShell.classList.add("is-hidden");
   elements.authGate.classList.remove("is-hidden");
@@ -825,7 +847,7 @@ async function submitRegistration() {
   }
   setFormBusy(elements.registerForm, true, "Criando conta…");
   try {
-    const account = await apiRequest("/api/auth/register", {
+    const result = await apiRequest("/api/auth/register", {
       method: "POST",
       body: {
         name: elements.registerName.value.trim(),
@@ -833,9 +855,15 @@ async function submitRegistration() {
         password: elements.registerPassword.value,
       },
     });
-    applyAccount(account);
     elements.registerForm.reset();
-    showToast("Conta criada com sucesso.");
+    showAuthView("login");
+    elements.loginEmail.value = result.user?.email || "";
+    setAuthFeedback(
+      elements.loginFeedback,
+      result.message || "Solicitação enviada. Aguarde a aprovação do administrador.",
+      "success",
+    );
+    showToast("Solicitação de cadastro enviada.");
   } catch (error) {
     setAuthFeedback(elements.registerFeedback, error.message);
   } finally {
@@ -912,6 +940,13 @@ function panelHeader(title, description, action = "") {
 
 function render() {
   updateApiBadge();
+  if (state.admin.open) {
+    elements.sidebar.classList.add("is-hidden");
+    elements.actionBar.classList.add("is-hidden");
+    elements.view.className = "view home-view";
+    elements.view.innerHTML = renderAdminPanel();
+    return;
+  }
   if (state.history.open) {
     elements.sidebar.classList.add("is-hidden");
     elements.actionBar.classList.add("is-hidden");
@@ -1069,6 +1104,159 @@ function renderHome() {
   </section>`;
 }
 
+function renderAdminPanel() {
+  const users = state.admin.users;
+  const pendingUsers = users.filter((user) => user.status === "pending");
+  const reviewedUsers = users.filter((user) => user.status !== "pending");
+  const approvedCount = users.filter((user) => user.status === "approved").length;
+  const rejectedCount = users.filter((user) => user.status === "rejected").length;
+  const errorNotice = state.admin.error
+    ? `<div class="notice is-warning"><span aria-hidden="true">!</span><span>${e(state.admin.error)}</span></div>`
+    : "";
+
+  const pendingContent = state.admin.loading && !state.admin.loaded
+    ? renderAdminLoading("Carregando solicitações…")
+    : pendingUsers.length
+      ? `<div class="admin-user-list">${pendingUsers.map(renderAdminUser).join("")}</div>`
+      : `<div class="admin-empty-state"><strong>Nenhuma solicitação pendente</strong><span>Novos pedidos de cadastro aparecerão aqui.</span></div>`;
+
+  const reviewedContent = state.admin.loading && !state.admin.loaded
+    ? renderAdminLoading("Carregando usuários…")
+    : reviewedUsers.length
+      ? `<div class="admin-user-list">${reviewedUsers.map(renderAdminUser).join("")}</div>`
+      : `<div class="admin-empty-state"><strong>Nenhum usuário revisado</strong><span>As contas aprovadas ou recusadas aparecerão aqui.</span></div>`;
+
+  return `<section class="document-section admin-section">
+    <div class="admin-heading">
+      <div><span class="eyebrow eyebrow-dark">Acesso restrito</span><h2>Administração de usuários</h2><p>Revise solicitações de cadastro e acompanhe o último acesso registrado de cada pessoa.</p></div>
+      <div class="admin-heading-actions">
+        <button class="button button-secondary" type="button" data-action="home">← Voltar</button>
+        <button class="button button-secondary" type="button" data-action="refresh-admin" ${state.admin.loading ? "disabled" : ""}>Atualizar</button>
+      </div>
+    </div>
+    <div class="admin-summary" aria-label="Resumo dos usuários">
+      <article><span>Pendentes</span><strong>${pendingUsers.length}</strong></article>
+      <article><span>Aprovados</span><strong>${approvedCount}</strong></article>
+      <article><span>Recusados</span><strong>${rejectedCount}</strong></article>
+    </div>
+    ${errorNotice}
+    <section class="admin-group" aria-labelledby="pendingUsersTitle">
+      <div class="admin-group-heading"><div><span class="eyebrow eyebrow-dark">Aguardando decisão</span><h3 id="pendingUsersTitle">Solicitações pendentes</h3></div><span class="admin-count">${pendingUsers.length}</span></div>
+      ${pendingContent}
+    </section>
+    <section class="admin-group" aria-labelledby="reviewedUsersTitle">
+      <div class="admin-group-heading"><div><span class="eyebrow eyebrow-dark">Contas cadastradas</span><h3 id="reviewedUsersTitle">Usuários revisados</h3></div><span class="admin-count">${reviewedUsers.length}</span></div>
+      ${reviewedContent}
+    </section>
+  </section>`;
+}
+
+function renderAdminLoading(message) {
+  return `<div class="admin-empty-state"><span class="history-spinner" aria-hidden="true"></span><strong>${e(message)}</strong></div>`;
+}
+
+function renderAdminUser(user) {
+  const busyAction = state.admin.busy.get(user.id) || "";
+  const disabled = busyAction ? "disabled" : "";
+  const statusLabel = user.isAdmin
+    ? "Administrador"
+    : user.status === "approved"
+      ? "Aprovado"
+      : user.status === "rejected"
+        ? "Recusado"
+        : "Pendente";
+  const actions = user.isAdmin
+    ? `<span class="admin-protected-label">Conta protegida</span>`
+    : `<div class="admin-user-actions">
+        ${user.status !== "approved" ? `<button class="button button-primary" type="button" data-action="approve-admin-user" data-id="${e(user.id)}" ${disabled}>${busyAction === "approved" ? "Aprovando…" : "Aprovar"}</button>` : ""}
+        ${user.status !== "rejected" ? `<button class="button button-secondary button-danger" type="button" data-action="reject-admin-user" data-id="${e(user.id)}" ${disabled}>${busyAction === "rejected" ? "Recusando…" : "Recusar"}</button>` : ""}
+      </div>`;
+  return `<article class="admin-user-item">
+    <span class="admin-user-avatar" aria-hidden="true">${e(String(user.name || user.email || "U").slice(0, 1).toUpperCase())}</span>
+    <div class="admin-user-copy">
+      <div class="admin-user-title"><strong>${e(user.name)}</strong><span class="admin-status is-${e(user.isAdmin ? "admin" : user.status)}">${e(statusLabel)}</span></div>
+      <span>${e(user.email)}</span>
+      <small>Solicitação: ${e(formatHistoryDate(user.createdAt))} • Último acesso: ${e(user.lastLoginAt ? formatHistoryDate(user.lastLoginAt) : "Ainda não acessou")}</small>
+    </div>
+    ${actions}
+  </article>`;
+}
+
+function updateAdminBadge() {
+  const pendingCount = state.admin.users.filter((user) => user.status === "pending").length;
+  elements.adminPendingBadge.textContent = pendingCount ? String(pendingCount) : "";
+  elements.adminPendingBadge.classList.toggle("is-hidden", pendingCount === 0);
+  elements.adminButton.setAttribute(
+    "aria-label",
+    pendingCount
+      ? `Abrir administração de usuários. ${pendingCount} solicitação(ões) pendente(s).`
+      : "Abrir administração de usuários",
+  );
+}
+
+async function loadAdminUsers({ silent = false } = {}) {
+  if (!state.auth.user?.isAdmin || state.admin.loading) return;
+  state.admin.loading = true;
+  state.admin.error = "";
+  if (state.admin.open) render();
+  try {
+    const payload = await apiRequest("/api/admin/users");
+    state.admin.users = Array.isArray(payload.users) ? payload.users : [];
+    state.admin.loaded = true;
+    updateAdminBadge();
+  } catch (error) {
+    state.admin.error = error.message;
+    if (!silent) showToast("Não foi possível carregar os usuários.");
+  } finally {
+    state.admin.loading = false;
+    if (state.admin.open) render();
+  }
+}
+
+function showAdminPanel() {
+  if (!state.auth.user?.isAdmin) return;
+  state.flow = null;
+  state.history.open = false;
+  state.admin.open = true;
+  render();
+  focusMain();
+  if (!state.admin.loaded) loadAdminUsers();
+}
+
+async function setAdminUserStatus(userId, status) {
+  if (!state.auth.user?.isAdmin || state.admin.busy.has(userId)) return;
+  state.admin.busy.set(userId, status);
+  state.admin.error = "";
+  if (state.admin.open) render();
+  try {
+    const payload = await apiRequest(`/api/admin/users/${encodeURIComponent(userId)}`, {
+      method: "PATCH",
+      body: { status },
+    });
+    state.admin.users = state.admin.users.map((user) => user.id === userId ? payload.user : user);
+    updateAdminBadge();
+    showToast(status === "approved" ? "Acesso aprovado." : "Acesso recusado.");
+  } catch (error) {
+    state.admin.error = error.message;
+  } finally {
+    state.admin.busy.delete(userId);
+    if (state.admin.open) render();
+  }
+}
+
+function confirmAdminUserRejection(userId) {
+  const user = state.admin.users.find((item) => item.id === userId);
+  if (!user || user.isAdmin) return;
+  showMessage({
+    title: "Recusar acesso?",
+    text: `${user.name} não poderá entrar na plataforma enquanto a conta estiver recusada.`,
+    actions: [
+      { label: "Cancelar" },
+      { label: "Recusar acesso", primary: true, onClick: () => setAdminUserStatus(userId, "rejected") },
+    ],
+  });
+}
+
 function renderDocumentHistory() {
   const history = state.history;
   const content = history.loading && !history.loaded
@@ -1141,6 +1329,7 @@ async function loadDocumentHistory() {
 
 function showDocumentHistory() {
   state.flow = null;
+  state.admin.open = false;
   state.history.open = true;
   render();
   focusMain();
@@ -1696,6 +1885,7 @@ function wrapCotaText(text) {
 }
 
 function startFlow(flow, kind = "") {
+  state.admin.open = false;
   state.history.open = false;
   state.flow = flow;
   if (flow === "correspondence" && CORRESPONDENCE_TYPES[kind]) {
@@ -1716,6 +1906,7 @@ function startFlow(flow, kind = "") {
 
 function goHome() {
   state.flow = null;
+  state.admin.open = false;
   state.history.open = false;
   state.step = 0;
   state.generation.running = false;
@@ -3525,6 +3716,10 @@ async function handleAction(action, target) {
     return;
   }
   if (action === "home") return goHome();
+  if (action === "show-admin") return showAdminPanel();
+  if (action === "refresh-admin") return loadAdminUsers();
+  if (action === "approve-admin-user") return setAdminUserStatus(target.dataset.id, "approved");
+  if (action === "reject-admin-user") return confirmAdminUserRejection(target.dataset.id);
   if (action === "show-history") return showDocumentHistory();
   if (action === "refresh-history") return loadDocumentHistory();
   if (action === "download-history") return triggerHistoryDownload(target.dataset.id);

@@ -2,7 +2,7 @@ import { timingSafeEqual } from "node:crypto";
 import {
   clearLoginAttempts,
   createSession,
-  createUserAndSession,
+  createPendingUser,
   deleteExpiredSessions,
   deleteOpenAICredential,
   deleteSession,
@@ -15,6 +15,7 @@ import {
   updateOpenAIModel,
   type AccountSummary,
 } from "../db/auth";
+import { ADMIN_EMAIL } from "./constants";
 
 const SESSION_SECONDS = 60 * 60 * 24 * 7;
 // Cloudflare Workers caps a single Web Crypto PBKDF2 operation at 100,000 rounds.
@@ -53,7 +54,6 @@ export function authError(status: number, message: string): Response {
 export async function handleRegister(
   request: Request,
   env: Env,
-  ctx: ExecutionContext,
 ): Promise<Response> {
   if (request.method !== "POST") return authError(405, "Método não permitido.");
 
@@ -76,26 +76,24 @@ export async function handleRegister(
   if (await findUserByEmail(env.DB, email)) {
     return authError(409, "Este e-mail já possui uma conta. Entre com sua senha.");
   }
+  if (email === ADMIN_EMAIL) {
+    return authError(409, "A conta administrativa já deve existir na plataforma.");
+  }
 
   const salt = randomBytes(16);
   const passwordHash = await derivePassword(password, salt, PASSWORD_ITERATIONS);
-  const sessionToken = randomToken();
-  const tokenHash = await hashText(sessionToken);
   const now = unixNow();
-  const expiresAt = now + SESSION_SECONDS;
   const userId = crypto.randomUUID();
 
   try {
-    await createUserAndSession(env.DB, {
+    await createPendingUser(env.DB, {
       userId,
       name,
       email,
       passwordHash: bytesToBase64Url(passwordHash),
       passwordSalt: bytesToBase64Url(salt),
       passwordIterations: PASSWORD_ITERATIONS,
-      tokenHash,
       now,
-      expiresAt,
     });
   } catch (error) {
     if (error instanceof Error && /unique/i.test(error.message)) {
@@ -104,14 +102,13 @@ export async function handleRegister(
     throw error;
   }
 
-  ctx.waitUntil(deleteExpiredSessions(env.DB, now));
   return authJson(
-    201,
+    202,
     {
-      user: { id: userId, name, email },
-      api: { hasKey: false, model: null, lastFour: null },
+      pending: true,
+      user: { name, email },
+      message: "Solicitação enviada. Aguarde a aprovação do administrador para entrar.",
     },
-    { "Set-Cookie": sessionCookie(request, sessionToken, SESSION_SECONDS) },
   );
 }
 
@@ -158,11 +155,26 @@ export async function handleLogin(
     return authError(401, "E-mail ou senha incorretos.");
   }
 
+  await clearLoginAttempts(env.DB, attemptKey);
+  if (user.status === "pending") {
+    return authError(403, "Seu cadastro aguarda aprovação do administrador.");
+  }
+  if (user.status === "rejected") {
+    return authError(403, "Seu cadastro foi recusado. Entre em contato com o administrador.");
+  }
+
   const sessionToken = randomToken();
   const tokenHash = await hashText(sessionToken);
   const expiresAt = now + SESSION_SECONDS;
-  await createSession(env.DB, { tokenHash, userId: user.id, now, expiresAt });
-  await clearLoginAttempts(env.DB, attemptKey);
+  const sessionCreated = await createSession(env.DB, {
+    tokenHash,
+    userId: user.id,
+    now,
+    expiresAt,
+  });
+  if (!sessionCreated) {
+    return authError(403, "Seu acesso não está liberado.");
+  }
   ctx.waitUntil(deleteExpiredSessions(env.DB, now));
 
   const account = await getAccountBySession(env.DB, tokenHash, now);
@@ -279,7 +291,12 @@ export async function openAICredentialForUser(
 
 function accountPayload(account: AccountSummary): JsonObject {
   return {
-    user: { id: account.id, name: account.name, email: account.email },
+    user: {
+      id: account.id,
+      name: account.name,
+      email: account.email,
+      isAdmin: account.isAdmin && account.email === ADMIN_EMAIL,
+    },
     api: {
       hasKey: account.hasApiKey,
       model: account.apiModel,

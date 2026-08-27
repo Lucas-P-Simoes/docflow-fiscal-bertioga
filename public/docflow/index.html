@@ -69,9 +69,9 @@
                 <input id="registerPasswordConfirmation" type="password" name="passwordConfirmation" autocomplete="new-password" minlength="8" maxlength="128" required />
               </label>
             </div>
-            <small class="auth-password-help">Use pelo menos 8 caracteres.</small>
+            <small class="auth-password-help">Use pelo menos 8 caracteres. O acesso será liberado após a aprovação do administrador.</small>
             <div id="registerFeedback" class="inline-feedback is-error is-hidden" role="alert"></div>
-            <button class="button button-primary auth-submit" type="submit">Criar conta e continuar</button>
+            <button class="button button-primary auth-submit" type="submit">Enviar solicitação de cadastro</button>
             <p class="auth-switch">Já possui uma conta? <button type="button" data-auth-view="login">Entrar</button></p>
           </form>
         </article>
@@ -103,6 +103,11 @@
 
         <div class="topbar-actions">
           <span id="saveStatus" class="save-status">Preferências locais</span>
+          <button id="adminButton" class="admin-button is-hidden" type="button" data-action="show-admin" aria-label="Abrir administração de usuários">
+            <span aria-hidden="true">◆</span>
+            <span>Administração</span>
+            <span id="adminPendingBadge" class="admin-pending-badge is-hidden" aria-label="Solicitações pendentes"></span>
+          </button>
           <button class="history-button" type="button" data-action="show-history" aria-label="Abrir histórico de documentos">
             <span aria-hidden="true">↻</span>
             <span>Histórico</span>

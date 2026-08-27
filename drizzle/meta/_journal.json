@@ -22,6 +22,13 @@
       "when": 1787837822212,
       "tag": "0002_rainy_wendigo",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "6",
+      "when": 1787854048377,
+      "tag": "0003_free_thor",
+      "breakpoints": true
     }
   ]
 }

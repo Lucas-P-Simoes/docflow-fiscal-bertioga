@@ -15,6 +15,7 @@ import {
   handleSession,
   openAICredentialForUser,
 } from "./auth";
+import { handleAdminUserMutation, handleAdminUsers } from "./admin";
 import { handleDocumentDownload, handleDocumentMutation, handleDocuments } from "./documents";
 import { handleSignatureMutation, handleSignatures } from "./signatures";
 
@@ -187,7 +188,7 @@ const worker = {
       }
 
       if (url.pathname === "/api/auth/register") {
-        return await handleRegister(request, env, ctx);
+        return await handleRegister(request, env);
       }
       if (url.pathname === "/api/auth/login") {
         return await handleLogin(request, env, ctx);
@@ -200,6 +201,13 @@ const worker = {
       }
       if (url.pathname === "/api/account/api-key") {
         return await handleApiKey(request, env);
+      }
+      if (url.pathname === "/api/admin/users") {
+        return await handleAdminUsers(request, env);
+      }
+      const adminUserMutation = url.pathname.match(/^\/api\/admin\/users\/([0-9a-f-]{36})$/i);
+      if (adminUserMutation) {
+        return await handleAdminUserMutation(request, env, adminUserMutation[1]);
       }
       if (url.pathname === "/api/openai") {
         return await proxyOpenAI(request, env);
