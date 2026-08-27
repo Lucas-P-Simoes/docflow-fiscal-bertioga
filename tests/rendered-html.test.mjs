@@ -24,7 +24,7 @@ test("serves the DocFlow interface at the site root without exposing its asset p
   assert.match(docflowApp, /window\.history\.replaceState/);
   assert.match(manifest, /"start_url": "\/"/);
   assert.match(manifest, /"scope": "\/"/);
-  assert.match(layout, /DocFlow — Assistente de Documentos/);
+  assert.match(layout, /Fiscal Bertioga — Assistente de Documentos/);
   assert.doesNotMatch(page, /codex-preview|_sites-preview|SkeletonPreview/);
 });
 
@@ -196,8 +196,7 @@ test("builds memoranda and oficios from the same supplied Bertioga model", async
   assert.match(app, /data-bind="correspondence\.recipient"/);
   assert.match(app, /data-bind="correspondence\.salutation"/);
   assert.match(app, /data-bind="correspondence\.baseText"/);
-  assert.match(app, /data-bind="correspondence\.signer"/);
-  assert.match(app, /data-bind="correspondence\.signerRole"/);
+  assert.match(app, /data-signature-target="correspondence"/);
   assert.match(app, /data-file="correspondence-photos"/);
   assert.match(app, /data-correspondence-photo-caption/);
   assert.match(app, /data-action="remove-correspondence-photo"/);
@@ -231,8 +230,7 @@ test("builds notifications and warnings from the same Bertioga model with fillab
   assert.match(app, /data-bind="\$\{notice\.key\}\.work"/);
   assert.match(app, /data-bind="\$\{notice\.key\}\.contractor"/);
   assert.match(app, /data-bind="\$\{notice\.key\}\.baseText"/);
-  assert.match(app, /data-notification-signatory-field="name"/);
-  assert.match(app, /data-notification-signatory-field="role"/);
+  assert.match(app, /data-signature-target="notice"/);
   assert.match(app, /data-file="\$\{notice\.key\}-photos"/);
   assert.match(app, /data-notification-photo-caption/);
   assert.match(app, /async function buildNotificationDocument/);
@@ -243,6 +241,45 @@ test("builds notifications and warnings from the same Bertioga model with fillab
   assert.match(app, /text:\s*`\$\{n\.number\.trim\(\)\} \$\{notice\.title\}`/);
   assert.match(app, /await finishDownload\(blob, filename, notice\.label\)/);
   assert.match(app, /Imagem \$\{String\(index \+ 1\)\.padStart\(2, "0"\)\} - \$\{photo\.caption\.trim\(\)\}/);
+});
+
+
+test("saves reusable signatures per account and formats name and role correctly", async () => {
+  const [app, page, styles, worker, signatureWorker, signatureDb, schema, migration] = await Promise.all([
+    readFile(new URL("public/docflow/app.js", siteRoot), "utf8"),
+    readFile(new URL("public/docflow/index.html", siteRoot), "utf8"),
+    readFile(new URL("public/docflow/styles.css", siteRoot), "utf8"),
+    readFile(new URL("worker/index.ts", siteRoot), "utf8"),
+    readFile(new URL("worker/signatures.ts", siteRoot), "utf8"),
+    readFile(new URL("db/signatures.ts", siteRoot), "utf8"),
+    readFile(new URL("db/schema.ts", siteRoot), "utf8"),
+    readFile(new URL("drizzle/0002_rainy_wendigo.sql", siteRoot), "utf8"),
+  ]);
+
+  assert.match(page, /id="signatureButton"/);
+  assert.match(page, /id="signatureDialog"/);
+  assert.match(page, /id="signatureProfileForm"/);
+  assert.match(app, /OTHER_SIGNATURE_VALUE\s*=\s*"__other__"/);
+  assert.match(app, /Outro — cadastrar nova assinatura/);
+  assert.match(app, /apiRequest\("\/api\/signatures"\)/);
+  assert.match(app, /data-signature-target="report"/);
+  assert.match(app, /data-signature-target="correspondence"/);
+  assert.match(app, /data-signature-target="notice"/);
+  assert.match(app, /new TextRun\(\{ text: signature\.name, bold: true/);
+  assert.match(app, /text: signature\.role, bold: false, italics: true/);
+  assert.match(app, /text: signatory\.role\.trim\(\), font: "Arial", size: 24, bold: false, italics: true/);
+  assert.match(app, /officialCorrespondenceRun\(c\.signerRole\.trim\(\), false, true\)/);
+  assert.match(styles, /\.signature-profile-list/);
+  assert.match(styles, /\.signature-preview em/);
+  assert.match(worker, /url\.pathname === "\/api\/signatures"/);
+  assert.match(worker, /handleSignatureMutation/);
+  assert.match(signatureWorker, /authenticateRequest\(request, env\)/);
+  assert.match(signatureDb, /WHERE user_id = \?/);
+  assert.match(signatureDb, /WHERE id = \? AND user_id = \?/);
+  assert.match(schema, /signatureProfiles/);
+  assert.match(schema, /idx_signature_profiles_user_name/);
+  assert.match(migration, /CREATE TABLE `signature_profiles`/);
+  assert.match(migration, /PRAGMA optimize/);
 });
 
 

@@ -69,3 +69,20 @@ export const generatedDocuments = sqliteTable(
     index("idx_generated_documents_user_created").on(table.userId, table.createdAt),
   ],
 );
+
+export const signatureProfiles = sqliteTable(
+  "signature_profiles",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    name: text("name").notNull(),
+    role: text("role").notNull(),
+    createdAt: integer("created_at").notNull(),
+    updatedAt: integer("updated_at").notNull(),
+  },
+  (table) => [
+    index("idx_signature_profiles_user_name").on(table.userId, table.name),
+  ],
+);

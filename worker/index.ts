@@ -16,6 +16,7 @@ import {
   openAICredentialForUser,
 } from "./auth";
 import { handleDocumentDownload, handleDocumentMutation, handleDocuments } from "./documents";
+import { handleSignatureMutation, handleSignatures } from "./signatures";
 
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
 const PERSONAL_CLOUDFLARE_API_ORIGIN =
@@ -205,6 +206,13 @@ const worker = {
       }
       if (url.pathname === "/api/documents") {
         return await handleDocuments(request, env);
+      }
+      if (url.pathname === "/api/signatures") {
+        return await handleSignatures(request, env);
+      }
+      const signatureMutation = url.pathname.match(/^\/api\/signatures\/([0-9a-f-]{36})$/i);
+      if (signatureMutation) {
+        return await handleSignatureMutation(request, env, signatureMutation[1]);
       }
       const documentDownload = url.pathname.match(/^\/api\/documents\/([0-9a-f-]{36})\/download$/i);
       if (documentDownload) {

@@ -386,7 +386,8 @@ select:focus-visible,
   transition: border-color 160ms ease, transform 160ms ease, background 160ms ease;
 }
 
-.history-button {
+.history-button,
+.signature-button {
   display: inline-flex;
   align-items: center;
   gap: 8px;
@@ -401,7 +402,8 @@ select:focus-visible,
   cursor: pointer;
 }
 
-.history-button:hover {
+.history-button:hover,
+.signature-button:hover {
   border-color: var(--line);
   color: var(--forest-dark);
   background: var(--canvas);
@@ -1599,6 +1601,75 @@ textarea::placeholder {
   gap: 9px;
 }
 
+.panel-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.signature-select-field {
+  max-width: 680px;
+}
+
+.selected-signature-list,
+.review-signatures {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.selected-signature-card {
+  display: grid;
+  grid-template-columns: 34px minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+  padding: 13px 15px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: #ffffff;
+}
+
+.signatory-card-main {
+  display: grid;
+  gap: 10px;
+}
+
+.signature-preview {
+  display: grid;
+  gap: 3px;
+  padding: 12px 14px;
+  border-left: 3px solid var(--forest);
+  border-radius: 0 10px 10px 0;
+  background: var(--forest-soft);
+}
+
+.signature-preview strong,
+.signature-preview em {
+  display: block;
+}
+
+.signature-preview strong {
+  font-size: 12px;
+}
+
+.signature-preview em {
+  color: var(--muted);
+  font-size: 11px;
+  font-weight: 400;
+}
+
+.signature-preview.is-empty {
+  border-left-color: var(--line-strong);
+  color: var(--muted);
+  background: var(--canvas);
+  font-size: 11px;
+}
+
+.review-signatures .signature-preview {
+  max-width: 520px;
+}
+
 .signatory-list {
   display: grid;
   gap: 12px;
@@ -2120,6 +2191,106 @@ textarea::placeholder {
   background: var(--paper);
 }
 
+.signature-dialog {
+  width: min(calc(100% - 32px), 720px);
+}
+
+.signature-profile-list {
+  display: grid;
+  gap: 9px;
+  max-height: 260px;
+  padding-right: 4px;
+  overflow-y: auto;
+}
+
+.signature-profile-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 12px 13px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  background: #ffffff;
+}
+
+.signature-profile-copy {
+  min-width: 0;
+}
+
+.signature-profile-copy strong,
+.signature-profile-copy em {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.signature-profile-copy strong {
+  color: var(--ink);
+  font-size: 12px;
+}
+
+.signature-profile-copy em {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 10.5px;
+  font-weight: 400;
+}
+
+.signature-profile-actions {
+  display: flex;
+  align-items: center;
+  gap: 4px;
+}
+
+.signature-profile-state {
+  display: grid;
+  gap: 5px;
+  padding: 18px;
+  border: 1px dashed var(--line-strong);
+  border-radius: 12px;
+  color: var(--muted);
+  background: var(--canvas);
+  font-size: 11px;
+  line-height: 1.5;
+  text-align: center;
+}
+
+.signature-profile-state strong {
+  color: var(--ink-soft);
+}
+
+.signature-profile-state.is-error {
+  color: #76332c;
+  background: var(--red-soft);
+}
+
+.signature-profile-state .button {
+  justify-self: center;
+  margin-top: 7px;
+}
+
+.signature-profile-form {
+  margin-top: 20px;
+  padding-top: 19px;
+  border-top: 1px solid var(--line);
+}
+
+.signature-form-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 3px;
+  color: var(--ink-soft);
+  font-size: 12px;
+}
+
+.signature-profile-form .field {
+  margin-top: 12px;
+}
+
 .dialog-small {
   width: min(calc(100% - 32px), 450px);
   text-align: center;
@@ -2440,11 +2611,13 @@ textarea::placeholder {
 
   .brand-copy small,
   .api-button span:not(.api-dot),
-  .history-button span:last-child {
+    .history-button span:last-child,
+    .signature-button span:last-child {
     display: none;
   }
 
-  .history-button {
+  .history-button,
+  .signature-button {
     width: 40px;
     padding: 0;
     justify-content: center;
@@ -2558,6 +2731,18 @@ textarea::placeholder {
   .signatory-card {
     grid-template-columns: 30px minmax(0, 1fr) auto;
     align-items: start;
+  }
+
+  .signature-profile-item {
+    align-items: flex-start;
+  }
+
+  .panel-actions {
+    justify-content: stretch;
+  }
+
+  .panel-actions .button {
+    flex: 1;
   }
 
   .document-card {

@@ -54,18 +54,7 @@ const COTA_TEXT_STYLE = { font: "Arial", size: 24, language: { value: "pt-BR" } 
 const COTA_HEADER_FIELD_STYLE = { ...COTA_TEXT_STYLE, bold: true, italics: false };
 const MAX_CORRESPONDENCE_TEXT = 7000;
 const ACCEPTED_IMAGES = ["image/jpeg", "image/png", "image/bmp", "image/gif", "image/webp"];
-
-const DEFAULT_RESPONSIBLES = [
-  "Lucas P. Simões",
-  "Pedro Sodré Almeida",
-  "Rogério Araújo dos Santos",
-  "Leonardo Piccoli",
-  "José Ferreira Filho",
-  "Jéssica Simão",
-  "John Kennedy Batista Reis",
-  "Guilherme Teixeira de Almeida",
-  "Diego Martins de Souza",
-];
+const OTHER_SIGNATURE_VALUE = "__other__";
 
 const PHOTO_PROMPT = `Você é um inspetor de pavimentação urbana. Examine somente o pavimento, a calçada, a sarjeta e os dispositivos de drenagem visíveis na fotografia.
 
@@ -126,6 +115,16 @@ const elements = {
   apiFeedback: document.querySelector("#apiFeedback"),
   testApiButton: document.querySelector("#testApiButton"),
   removeApiButton: document.querySelector("#removeApiButton"),
+  signatureDialog: document.querySelector("#signatureDialog"),
+  signatureProfileList: document.querySelector("#signatureProfileList"),
+  signatureProfileForm: document.querySelector("#signatureProfileForm"),
+  signatureProfileId: document.querySelector("#signatureProfileId"),
+  signatureNameInput: document.querySelector("#signatureNameInput"),
+  signatureRoleInput: document.querySelector("#signatureRoleInput"),
+  signatureFormTitle: document.querySelector("#signatureFormTitle"),
+  signatureFeedback: document.querySelector("#signatureFeedback"),
+  saveSignatureButton: document.querySelector("#saveSignatureButton"),
+  cancelSignatureEditButton: document.querySelector("#cancelSignatureEditButton"),
   messageDialog: document.querySelector("#messageDialog"),
   messageIcon: document.querySelector("#messageIcon"),
   messageTitle: document.querySelector("#messageTitle"),
@@ -167,6 +166,7 @@ const state = {
     model: "gpt-5.6-terra",
     customModel: "",
   },
+  signatures: createSignatureConfigurationState(),
   report: createReportState(persisted),
   cota: createCotaState(persisted),
   correspondence: createCorrespondenceState(persisted),
@@ -184,6 +184,17 @@ let saveTimer = null;
 let cotaTemplatePromise = null;
 let officialCorrespondenceTemplatePromise = null;
 let notificationTemplatePromise = null;
+let pendingSignatureTarget = null;
+
+function createSignatureConfigurationState() {
+  return {
+    loading: false,
+    loaded: false,
+    saving: false,
+    items: [],
+    error: "",
+  };
+}
 
 function createReportState(saved = {}) {
   return {
@@ -197,10 +208,7 @@ function createReportState(saved = {}) {
     photos: [],
     order: "name",
     topics: [],
-    responsibleOptions: Array.isArray(saved.responsibleOptions)
-      ? unique([...DEFAULT_RESPONSIBLES, ...saved.responsibleOptions])
-      : [...DEFAULT_RESPONSIBLES],
-    responsibles: Array.isArray(saved.responsibles) ? saved.responsibles : [],
+    responsibles: [],
     onePerPage: Boolean(saved.onePerPage),
     startPhotosNewPage: saved.startPhotosNewPage !== false,
     complete: false,
@@ -238,6 +246,7 @@ function createCorrespondenceState(saved = {}) {
     finalText: "",
     signer: "",
     signerRole: "",
+    signerProfileId: "",
     photos: [],
     complete: false,
   };
@@ -253,7 +262,7 @@ function createNotificationState(saved = {}, kind = "notification") {
     contractor: "",
     baseText: "",
     finalText: "",
-    signatories: [{ id: makeId(`${kind}-signer`), name: "", role: "" }],
+    signatories: [{ id: makeId(`${kind}-signer`), profileId: "", name: "", role: "" }],
     photos: [],
     complete: false,
   };
@@ -263,10 +272,6 @@ function todayInputValue() {
   const now = new Date();
   const offset = now.getTimezoneOffset() * 60_000;
   return new Date(now.getTime() - offset).toISOString().slice(0, 10);
-}
-
-function unique(values) {
-  return [...new Set(values.filter(Boolean))];
 }
 
 function readStorage(key, fallback) {
@@ -286,8 +291,6 @@ function scheduleSave() {
       const preferences = {
         organization: state.report.organization || state.cota.organization || state.correspondence.organization,
         department: state.report.department || state.cota.department || state.correspondence.department,
-        responsibleOptions: state.report.responsibleOptions,
-        responsibles: state.report.responsibles,
         onePerPage: state.report.onePerPage,
         startPhotosNewPage: state.report.startPhotosNewPage,
         memorandumCity: state.correspondence.kind === "memorando" ? state.correspondence.place : (persisted.memorandumCity || "Bertioga"),
@@ -373,6 +376,259 @@ function modelDisplayName(model) {
   return labels[model] || model || "Configurar IA";
 }
 
+function sortedSignatureProfiles() {
+  return [...state.signatures.items].sort((left, right) =>
+    `${left.name}\n${left.role}`.localeCompare(`${right.name}\n${right.role}`, "pt-BR", { sensitivity: "base" }),
+  );
+}
+
+function signatureSelectOptions(selectedProfileId = "", placeholder = "Selecione uma assinatura") {
+  const profiles = sortedSignatureProfiles();
+  const statusLabel = state.signatures.loading
+    ? "Carregando assinaturas…"
+    : state.signatures.error
+      ? "Não foi possível carregar as assinaturas"
+      : placeholder;
+  return `<option value="" ${selectedProfileId ? "" : "selected"}>${e(statusLabel)}</option>
+    ${profiles.map((profile) => `<option value="${e(profile.id)}" ${profile.id === selectedProfileId ? "selected" : ""}>${e(profile.name)} — ${e(profile.role)}</option>`).join("")}
+    <option value="${OTHER_SIGNATURE_VALUE}">Outro — cadastrar nova assinatura</option>`;
+}
+
+function signaturePreview(profile, emptyText = "Nenhuma assinatura selecionada") {
+  if (!profile?.name || !profile?.role) {
+    return `<div class="signature-preview is-empty"><span>${e(emptyText)}</span></div>`;
+  }
+  return `<div class="signature-preview"><strong>${e(profile.name)}</strong><em>${e(profile.role)}</em></div>`;
+}
+
+async function loadSignatureProfiles() {
+  if (!state.auth.user || state.signatures.loading) return;
+  state.signatures.loading = true;
+  state.signatures.error = "";
+  render();
+  try {
+    const payload = await apiRequest("/api/signatures");
+    state.signatures.items = Array.isArray(payload.signatures) ? payload.signatures : [];
+    state.signatures.loaded = true;
+  } catch (error) {
+    state.signatures.error = error.message;
+  } finally {
+    state.signatures.loading = false;
+    render();
+    if (elements.signatureDialog.open) renderSignatureProfileList();
+  }
+}
+
+function setSignatureFeedback(message = "", kind = "error") {
+  elements.signatureFeedback.textContent = message;
+  elements.signatureFeedback.className = `inline-feedback${message ? "" : " is-hidden"}${kind === "error" ? " is-error" : ""}`;
+}
+
+function resetSignatureProfileForm() {
+  elements.signatureProfileForm.reset();
+  elements.signatureProfileId.value = "";
+  elements.signatureFormTitle.textContent = "Adicionar assinatura";
+  elements.saveSignatureButton.textContent = "Salvar assinatura";
+  elements.cancelSignatureEditButton.classList.add("is-hidden");
+  setSignatureFeedback("");
+}
+
+function renderSignatureProfileList() {
+  const profiles = sortedSignatureProfiles();
+  if (state.signatures.loading) {
+    elements.signatureProfileList.innerHTML = `<div class="signature-profile-state">Carregando assinaturas…</div>`;
+    return;
+  }
+  if (state.signatures.error) {
+    elements.signatureProfileList.innerHTML = `<div class="signature-profile-state is-error"><strong>Não foi possível carregar</strong><span>${e(state.signatures.error)}</span><button class="button button-secondary" type="button" data-action="reload-signatures">Tentar novamente</button></div>`;
+    return;
+  }
+  elements.signatureProfileList.innerHTML = profiles.length
+    ? profiles.map((profile) => `<article class="signature-profile-item">
+        <div class="signature-profile-copy"><strong>${e(profile.name)}</strong><em>${e(profile.role)}</em></div>
+        <div class="signature-profile-actions">
+          <button class="button button-quiet" type="button" data-action="edit-signature-profile" data-id="${e(profile.id)}">Editar</button>
+          <button class="icon-button" type="button" data-action="delete-signature-profile" data-id="${e(profile.id)}" aria-label="Excluir assinatura de ${e(profile.name)}" title="Excluir">×</button>
+        </div>
+      </article>`).join("")
+    : `<div class="signature-profile-state"><strong>Nenhuma assinatura cadastrada</strong><span>Preencha o nome e o cargo abaixo para criar a primeira.</span></div>`;
+}
+
+function openSignatureConfiguration(options = {}) {
+  if (options.pendingTarget) pendingSignatureTarget = options.pendingTarget;
+  resetSignatureProfileForm();
+  renderSignatureProfileList();
+  openDialog(elements.signatureDialog);
+  if (options.focusForm) requestAnimationFrame(() => elements.signatureNameInput.focus());
+}
+
+function closeSignatureConfiguration() {
+  pendingSignatureTarget = null;
+  resetSignatureProfileForm();
+  closeDialog(elements.signatureDialog);
+}
+
+function editSignatureProfile(profileId) {
+  const profile = state.signatures.items.find((item) => item.id === profileId);
+  if (!profile) return;
+  elements.signatureProfileId.value = profile.id;
+  elements.signatureNameInput.value = profile.name;
+  elements.signatureRoleInput.value = profile.role;
+  elements.signatureFormTitle.textContent = "Editar assinatura";
+  elements.saveSignatureButton.textContent = "Salvar alterações";
+  elements.cancelSignatureEditButton.classList.remove("is-hidden");
+  setSignatureFeedback("");
+  elements.signatureNameInput.focus();
+}
+
+function applySignatureProfile(target, profile) {
+  if (!target || !profile) return;
+  if (target.type === "report") {
+    if (state.report.responsibles.some((item) => item.profileId === profile.id)) {
+      showToast("Essa assinatura já foi adicionada ao relatório.");
+      return;
+    }
+    state.report.responsibles.push({ profileId: profile.id, name: profile.name, role: profile.role });
+  } else if (target.type === "correspondence") {
+    state.correspondence.signerProfileId = profile.id;
+    state.correspondence.signer = profile.name;
+    state.correspondence.signerRole = profile.role;
+  } else if (target.type === "notice") {
+    const signatory = noticeState().signatories.find((item) => item.id === target.signatoryId);
+    if (signatory) {
+      signatory.profileId = profile.id;
+      signatory.name = profile.name;
+      signatory.role = profile.role;
+    }
+  }
+}
+
+function updateSignatureReferences(profile) {
+  state.report.responsibles = state.report.responsibles.map((item) =>
+    item.profileId === profile.id ? { profileId: profile.id, name: profile.name, role: profile.role } : item,
+  );
+  if (state.correspondence.signerProfileId === profile.id) {
+    state.correspondence.signer = profile.name;
+    state.correspondence.signerRole = profile.role;
+  }
+  [state.notification, state.warning].forEach((notice) => {
+    notice.signatories.forEach((signatory) => {
+      if (signatory.profileId === profile.id) {
+        signatory.name = profile.name;
+        signatory.role = profile.role;
+      }
+    });
+  });
+}
+
+async function saveSignatureProfile() {
+  if (state.signatures.saving) return;
+  const profileId = elements.signatureProfileId.value;
+  const name = elements.signatureNameInput.value.trim();
+  const role = elements.signatureRoleInput.value.trim();
+  if (!name || !role) {
+    setSignatureFeedback("Informe o nome e o cargo ou função.");
+    return;
+  }
+
+  state.signatures.saving = true;
+  elements.saveSignatureButton.disabled = true;
+  elements.saveSignatureButton.textContent = profileId ? "Salvando…" : "Cadastrando…";
+  setSignatureFeedback("");
+  try {
+    const payload = await apiRequest(
+      profileId ? `/api/signatures/${encodeURIComponent(profileId)}` : "/api/signatures",
+      { method: profileId ? "PATCH" : "POST", body: { name, role } },
+    );
+    const previous = state.signatures.items.find((item) => item.id === profileId);
+    const signature = { ...previous, ...payload.signature, name, role };
+    if (profileId) {
+      state.signatures.items = state.signatures.items.map((item) => item.id === profileId ? signature : item);
+      updateSignatureReferences(signature);
+    } else {
+      state.signatures.items.push(signature);
+    }
+
+    const target = pendingSignatureTarget;
+    if (target) applySignatureProfile(target, signature);
+    resetSignatureProfileForm();
+    renderSignatureProfileList();
+    render();
+    showToast(profileId ? "Assinatura atualizada." : "Assinatura cadastrada.");
+    if (target) {
+      pendingSignatureTarget = null;
+      closeDialog(elements.signatureDialog);
+      focusMain();
+    }
+  } catch (error) {
+    setSignatureFeedback(error.message);
+  } finally {
+    state.signatures.saving = false;
+    elements.saveSignatureButton.disabled = false;
+    if (elements.signatureProfileId.value) elements.saveSignatureButton.textContent = "Salvar alterações";
+    else elements.saveSignatureButton.textContent = "Salvar assinatura";
+  }
+}
+
+function confirmSignatureProfileDelete(profileId) {
+  const profile = state.signatures.items.find((item) => item.id === profileId);
+  if (!profile) return;
+  closeDialog(elements.signatureDialog);
+  showMessage({
+    title: "Excluir assinatura?",
+    text: `${profile.name} — ${profile.role} deixará de aparecer nos dropdowns. Documentos em preenchimento manterão os dados já selecionados.`,
+    actions: [
+      { label: "Cancelar", onClick: () => openSignatureConfiguration() },
+      { label: "Excluir", primary: true, onClick: () => deleteSignatureProfile(profile, pendingSignatureTarget) },
+    ],
+  });
+}
+
+async function deleteSignatureProfile(profile, targetAfterDelete = null) {
+  try {
+    await apiRequest(`/api/signatures/${encodeURIComponent(profile.id)}`, { method: "DELETE" });
+    state.signatures.items = state.signatures.items.filter((item) => item.id !== profile.id);
+    state.report.responsibles = state.report.responsibles.map((item) =>
+      item.profileId === profile.id ? { ...item, profileId: "" } : item,
+    );
+    if (state.correspondence.signerProfileId === profile.id) state.correspondence.signerProfileId = "";
+    [state.notification, state.warning].forEach((notice) => {
+      notice.signatories.forEach((signatory) => {
+        if (signatory.profileId === profile.id) signatory.profileId = "";
+      });
+    });
+    render();
+    showToast("Assinatura excluída.");
+    if (targetAfterDelete) {
+      openSignatureConfiguration({ pendingTarget: targetAfterDelete, focusForm: true });
+    } else {
+      pendingSignatureTarget = null;
+    }
+  } catch (error) {
+    pendingSignatureTarget = null;
+    showMessage({ title: "Não foi possível excluir", text: error.message, kind: "error" });
+  }
+}
+
+function handleSignatureSelection(select) {
+  const target = select.dataset.signatureTarget === "report"
+    ? { type: "report" }
+    : select.dataset.signatureTarget === "correspondence"
+      ? { type: "correspondence" }
+      : { type: "notice", signatoryId: select.dataset.id };
+  if (select.value === OTHER_SIGNATURE_VALUE) {
+    if (target.type === "correspondence") select.value = state.correspondence.signerProfileId;
+    else if (target.type === "notice") {
+      select.value = noticeState().signatories.find((item) => item.id === target.signatoryId)?.profileId || "";
+    } else select.value = "";
+    openSignatureConfiguration({ pendingTarget: target, focusForm: true });
+    return;
+  }
+  const profile = state.signatures.items.find((item) => item.id === select.value);
+  if (profile) applySignatureProfile(target, profile);
+  render();
+}
+
 class ApiRequestError extends Error {
   constructor(message, status) {
     super(message);
@@ -438,6 +694,7 @@ function setFormBusy(form, busy, busyLabel) {
 
 function applyAccount(payload) {
   state.auth.user = payload.user;
+  state.signatures = createSignatureConfigurationState();
   const selectedModel = payload.api?.model || "gpt-5.6-terra";
   const knownModels = new Set(["gpt-5.6-terra", "gpt-5.6-sol", "gpt-5.6-luna"]);
   state.api = {
@@ -451,11 +708,13 @@ function applyAccount(payload) {
   elements.siteShell.hidden = false;
   elements.siteShell.classList.remove("is-hidden");
   render();
+  loadSignatureProfiles();
   loadDocumentHistory();
 }
 
 function showAuthGate(view = "login") {
   state.auth.user = null;
+  state.signatures = createSignatureConfigurationState();
   state.history.pdfCache.forEach((cached) => cached.url && URL.revokeObjectURL(cached.url));
   state.history = createHistoryState();
   elements.siteShell.hidden = true;
@@ -929,9 +1188,18 @@ function renderReportContent() {
     ${r.topics.length ? `<div class="topic-list">${r.topics.map(renderTopic).join("")}</div>` : `<div class="empty-state"><div><strong>Nenhum tópico adicional</strong><span>Esta parte é opcional. A introdução pode ser seguida diretamente pelas fotografias.</span></div></div>`}
   </section>
   <section class="panel">
-    ${panelHeader("Responsáveis pelas assinaturas", "Selecione pelo menos uma pessoa. Você também pode adicionar outro nome.")}
-    <div class="responsible-list">${r.responsibleOptions.map((name) => `<label class="check-row"><input type="checkbox" data-responsible="${e(name)}" ${r.responsibles.includes(name) ? "checked" : ""} /><span>${e(name)}</span></label>`).join("")}</div>
-    <div class="inline-add"><input id="newResponsible" type="text" placeholder="Nome de outro responsável" maxlength="100" /><button class="button button-secondary" type="button" data-action="add-responsible">Adicionar</button></div>
+    ${panelHeader("Responsáveis pelas assinaturas", "Escolha uma assinatura salva. Para cadastrar uma nova, selecione Outro.", `<button class="button button-secondary" type="button" data-action="open-signatures">Configurar assinaturas</button>`)}
+    <label class="field signature-select-field">
+      <span>Adicionar responsável</span>
+      <select data-signature-target="report" ${state.signatures.loading ? "disabled" : ""}>${signatureSelectOptions("", "Selecione uma pessoa")}</select>
+    </label>
+    <div class="selected-signature-list">
+      ${r.responsibles.length ? r.responsibles.map((signature, index) => `<article class="selected-signature-card">
+        <span class="signatory-index">${String(index + 1).padStart(2, "0")}</span>
+        <div class="signature-profile-copy"><strong>${e(signature.name)}</strong><em>${e(signature.role)}</em></div>
+        <button class="icon-button" type="button" data-action="remove-report-signature" data-index="${index}" aria-label="Remover assinatura de ${e(signature.name)}" title="Remover">×</button>
+      </article>`).join("") : `<div class="signature-profile-state"><strong>Nenhuma assinatura selecionada</strong><span>Use o dropdown acima para adicionar os responsáveis.</span></div>`}
+    </div>
   </section>
   <section class="panel">
     ${panelHeader("Formato do documento", "Defina a densidade das fotografias e a separação das seções.")}
@@ -968,7 +1236,7 @@ function renderReportReview() {
     <div class="review-block"><h3>Cabeçalho</h3><p>${e([r.organization, r.department].filter(Boolean).join(" — ") || "Sem identificação institucional")}</p></div>
     <div class="review-block"><h3>Introdução</h3><p>${e(r.introduction)}</p></div>
     <div class="review-block"><h3>Tópicos adicionais</h3><p>${r.topics.length ? r.topics.map((topic) => e(topic.title)).join(" • ") : "Nenhum"}</p></div>
-    <div class="review-block"><h3>Responsáveis</h3><p>${e(r.responsibles.join(" • "))}</p></div>
+    <div class="review-block"><h3>Responsáveis</h3><div class="review-signatures">${r.responsibles.map((signature) => signaturePreview(signature)).join("")}</div></div>
   </section>
   <div class="notice"><span aria-hidden="true">✓</span><span><strong>O documento será criado localmente.</strong> A geração do Word não envia seus arquivos a nenhum servidor.</span></div>`;
 }
@@ -1079,7 +1347,7 @@ function renderNotificationContent() {
     <label class="field"><span>Conteúdo *</span><textarea data-bind="${notice.key}.baseText" maxlength="${MAX_CORRESPONDENCE_TEXT}" placeholder="Escreva o texto integral da ${notice.lower}…">${e(n.baseText)}</textarea><span class="text-counter"><span>Os fatos e prazos devem ser conferidos antes da emissão</span><span>${n.baseText.length}/${MAX_CORRESPONDENCE_TEXT}</span></span></label>
   </section>
   <section class="panel">
-    ${panelHeader("Pessoas que vão assinar", "O cargo de cada pessoa aparecerá imediatamente abaixo do respectivo nome.", `<button class="button button-secondary" type="button" data-action="add-notification-signer">+ Adicionar pessoa</button>`)}
+    ${panelHeader("Pessoas que vão assinar", "Escolha as assinaturas salvas. O nome sairá em negrito e o cargo em itálico.", `<div class="panel-actions"><button class="button button-secondary" type="button" data-action="open-signatures">Configurar</button><button class="button button-secondary" type="button" data-action="add-notification-signer">+ Adicionar pessoa</button></div>`)}
     <div class="signatory-list">
       ${n.signatories.map((signatory, index) => renderNotificationSignatory(signatory, index)).join("")}
     </div>
@@ -1098,9 +1366,9 @@ function renderNotificationContent() {
 function renderNotificationSignatory(signatory, index) {
   return `<article class="signatory-card" data-notification-signatory-id="${e(signatory.id)}">
     <span class="signatory-index">${String(index + 1).padStart(2, "0")}</span>
-    <div class="field-grid">
-      <label class="field"><span>Nome completo *</span><input type="text" data-notification-signatory-field="name" data-id="${e(signatory.id)}" value="${e(signatory.name)}" placeholder="Nome da pessoa" /></label>
-      <label class="field"><span>Cargo ou função *</span><input type="text" data-notification-signatory-field="role" data-id="${e(signatory.id)}" value="${e(signatory.role)}" placeholder="Ex.: Fiscal do contrato" /></label>
+    <div class="signatory-card-main">
+      <label class="field"><span>Assinatura *</span><select data-signature-target="notice" data-id="${e(signatory.id)}" ${state.signatures.loading ? "disabled" : ""}>${signatureSelectOptions(signatory.profileId, "Selecione uma pessoa")}</select></label>
+      ${signaturePreview(signatory, "Selecione uma assinatura no dropdown")}
     </div>
     <button class="icon-button" type="button" data-action="remove-notification-signer" data-id="${e(signatory.id)}" aria-label="Remover pessoa" title="Remover">×</button>
   </article>`;
@@ -1120,7 +1388,6 @@ function renderNotificationPhoto(photo, index) {
 function renderNotificationReview() {
   const n = noticeState();
   const notice = noticeCopy();
-  const signerNames = n.signatories.map((item) => `${item.name} — ${item.role}`).join(" • ");
   return `${pageHeading("Etapa 3", `Revise a ${notice.lower}`, "Confira os dados e ajuste o texto final antes de baixar o Word.")}
   <section class="panel">
     ${panelHeader("Texto final", `Somente o conteúdo deste campo será usado como corpo da ${notice.lower}.`)}
@@ -1133,7 +1400,7 @@ function renderNotificationReview() {
   </div>
   <section class="panel review-panel">
     <div class="review-block"><h3>Obra</h3><p>${e(n.work)}</p></div>
-    <div class="review-block"><h3>Assinaturas</h3><p>${e(signerNames)}</p></div>
+    <div class="review-block"><h3>Assinaturas</h3><div class="review-signatures">${n.signatories.map((signature) => signaturePreview(signature)).join("")}</div></div>
   </section>
   <div class="notice"><span aria-hidden="true">✓</span><span><strong>Modelo conferido.</strong> O arquivo será criado com o cabeçalho oficial da Prefeitura de Bertioga e a formatação do documento fornecido.</span></div>`;
 }
@@ -1183,11 +1450,9 @@ function renderOfficialCorrespondenceContent() {
     <label class="field"><span>Conteúdo *</span><textarea data-bind="correspondence.baseText" maxlength="${MAX_CORRESPONDENCE_TEXT}" placeholder="Escreva o texto integral d${type.article === "a" ? "a" : "o"} ${typeLower}…">${e(c.baseText)}</textarea><span class="text-counter"><span>Use parágrafos para organizar as informações</span><span>${c.baseText.length}/${MAX_CORRESPONDENCE_TEXT}</span></span></label>
   </section>
   <section class="panel">
-    ${panelHeader("Assinatura", "O cargo será colocado imediatamente abaixo do nome, ambos centralizados e em negrito.")}
-    <div class="field-grid">
-      <label class="field"><span>Nome do signatário *</span><input type="text" data-bind="correspondence.signer" value="${e(c.signer)}" placeholder="Nome completo" /></label>
-      <label class="field"><span>Cargo ou função *</span><input type="text" data-bind="correspondence.signerRole" value="${e(c.signerRole)}" placeholder="Ex.: Secretário de Obras e Habitação" /></label>
-    </div>
+    ${panelHeader("Assinatura", "O nome será colocado em negrito e o cargo logo abaixo, em itálico e sem negrito.", `<button class="button button-secondary" type="button" data-action="open-signatures">Configurar assinaturas</button>`)}
+    <label class="field signature-select-field"><span>Pessoa que vai assinar *</span><select data-signature-target="correspondence" ${state.signatures.loading ? "disabled" : ""}>${signatureSelectOptions(c.signerProfileId, "Selecione uma pessoa")}</select></label>
+    ${signaturePreview({ name: c.signer, role: c.signerRole }, "Selecione uma assinatura no dropdown")}
   </section>
   <section class="panel">
     ${panelHeader("Fotos e legendas", "Opcional. Cada foto será colocada em uma página própria, com numeração automática e a legenda abaixo.")}
@@ -1227,7 +1492,7 @@ function renderOfficialCorrespondenceReview() {
     ${summaryCard("Anexos", `${c.photos.length} foto(s)`, c.photos.length ? "Todas com legenda" : "Sem fotografias")}
   </div>
   <section class="panel review-panel">
-    <div class="review-block"><h3>Assinatura</h3><p>${e(c.signer)} — ${e(c.signerRole)}</p></div>
+    <div class="review-block"><h3>Assinatura</h3>${signaturePreview({ name: c.signer, role: c.signerRole })}</div>
   </section>
   <div class="notice"><span aria-hidden="true">✓</span><span><strong>Modelo conferido.</strong> O arquivo será criado com o cabeçalho oficial, a paginação e a mesma formatação usada no memorando.</span></div>`;
 }
@@ -1276,11 +1541,9 @@ function renderCorrespondenceContent() {
     <label class="field"><span>Corpo do documento *</span><textarea data-bind="correspondence.baseText" maxlength="${MAX_CORRESPONDENCE_TEXT}" placeholder="Escreva o conteúdo do documento…">${e(c.baseText)}</textarea><span class="text-counter"><span>Use parágrafos para organizar as informações</span><span>${c.baseText.length}/${MAX_CORRESPONDENCE_TEXT}</span></span></label>
   </section>
   <section class="panel">
-    ${panelHeader("Assinatura", "Identifique a pessoa responsável pela emissão do documento.")}
-    <div class="field-grid">
-      <label class="field"><span>Nome do signatário *</span><input type="text" data-bind="correspondence.signer" value="${e(c.signer)}" placeholder="Nome completo" /></label>
-      <label class="field"><span>Cargo ou função</span><input type="text" data-bind="correspondence.signerRole" value="${e(c.signerRole)}" placeholder="Ex.: Diretor do Departamento" /></label>
-    </div>
+    ${panelHeader("Assinatura", "O nome será colocado em negrito e o cargo em itálico, sem negrito.", `<button class="button button-secondary" type="button" data-action="open-signatures">Configurar assinaturas</button>`)}
+    <label class="field signature-select-field"><span>Pessoa que vai assinar *</span><select data-signature-target="correspondence" ${state.signatures.loading ? "disabled" : ""}>${signatureSelectOptions(c.signerProfileId, "Selecione uma pessoa")}</select></label>
+    ${signaturePreview({ name: c.signer, role: c.signerRole }, "Selecione uma assinatura no dropdown")}
   </section>
   <div class="notice is-warning"><span aria-hidden="true">!</span><span>A IA será orientada a revisar a linguagem sem inventar fatos, datas, leis, prazos ou penalidades. Confira o texto antes de gerar o Word.</span></div>`;
 }
@@ -2661,12 +2924,15 @@ async function buildReportDocument(onProgress) {
 
   if (r.responsibles.length) {
     children.push(new Paragraph({ style: "SectionTitle", children: [new TextRun("Responsáveis")] }));
-    const cells = r.responsibles.map((name) => new TableCell({
+    const cells = r.responsibles.map((signature) => new TableCell({
       width: { size: 50, type: WidthType.PERCENTAGE },
       margins: { top: 520, bottom: 80, left: 120, right: 120 },
       verticalAlign: VerticalAlign.BOTTOM,
       borders: noBorders(),
-      children: [new Paragraph({ alignment: AlignmentType.CENTER, border: { top: { style: "single", size: 6, color: "68756F" } }, spacing: { before: 80 }, children: [new TextRun({ text: name, bold: true, size: 19 })] })],
+      children: [
+        new Paragraph({ alignment: AlignmentType.CENTER, border: { top: { style: "single", size: 6, color: "68756F" } }, spacing: { before: 80, after: 20 }, children: [new TextRun({ text: signature.name, bold: true, size: 19 })] }),
+        new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 0 }, children: [new TextRun({ text: signature.role, bold: false, italics: true, size: 19, color: "405049" })] }),
+      ],
     }));
     const rows = [];
     for (let index = 0; index < cells.length; index += 2) {
@@ -2888,7 +3154,7 @@ function notificationSignatureTable(signatories) {
       margins: { top: 240, bottom: 180, left: 0, right: 120 },
       children: [
         new Paragraph({ spacing: { after: 0, line: 240 }, children: [new TextRun({ text: signatory.name.trim(), font: "Arial", size: 24, bold: true, color: "222222" })] }),
-        new Paragraph({ spacing: { after: 0, line: 240 }, children: [new TextRun({ text: signatory.role.trim(), font: "Arial", size: 24, bold: true, color: "222222" })] }),
+        new Paragraph({ spacing: { after: 0, line: 240 }, children: [new TextRun({ text: signatory.role.trim(), font: "Arial", size: 24, bold: false, italics: true, color: "222222" })] }),
       ],
     }));
     if (cells.length === 1) {
@@ -2968,9 +3234,9 @@ function formatOfficialCorrespondenceRecipient(value) {
   return `${type.recipientPrefix} ${recipient}`;
 }
 
-function officialCorrespondenceRun(text, bold = false) {
+function officialCorrespondenceRun(text, bold = false, italics = false) {
   const { TextRun } = window.docx;
-  return new TextRun({ text: String(text || ""), font: "Arial", size: 24, bold, color: "000000" });
+  return new TextRun({ text: String(text || ""), font: "Arial", size: 24, bold, italics, color: "000000" });
 }
 
 function officialCorrespondenceBlankParagraph() {
@@ -3047,7 +3313,7 @@ async function buildOfficialCorrespondenceDocument(onProgress) {
     new Paragraph({
       alignment: AlignmentType.CENTER,
       indent: { left: -357, right: -318 },
-      children: [officialCorrespondenceRun(c.signerRole.trim(), true)],
+      children: [officialCorrespondenceRun(c.signerRole.trim(), false, true)],
     }),
   );
 
@@ -3131,7 +3397,7 @@ async function buildCorrespondenceDocument(onProgress) {
     new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 20 }, children: [new TextRun({ text: c.signer.trim(), bold: true, size: 21 })] }),
   );
   if (c.signerRole.trim()) {
-    children.push(new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: c.signerRole.trim(), size: 20, color: "405049" })] }));
+    children.push(new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: c.signerRole.trim(), bold: false, italics: true, size: 20, color: "405049" })] }));
   }
 
   onProgress(82, "Aplicando cabeçalho e paginação…");
@@ -3184,7 +3450,7 @@ async function handleAction(action, target) {
   if (state.messageCallbacks.has(action)) {
     const callback = state.messageCallbacks.get(action);
     closeDialog(elements.messageDialog);
-    if (callback) callback();
+    if (callback) await callback();
     return;
   }
   if (action === "home") return goHome();
@@ -3215,6 +3481,17 @@ async function handleAction(action, target) {
   }
   if (action === "open-api") return openApiConfiguration();
   if (action === "close-api") return closeDialog(elements.apiDialog);
+  if (action === "open-signatures") return openSignatureConfiguration();
+  if (action === "close-signatures") return closeSignatureConfiguration();
+  if (action === "reload-signatures") return loadSignatureProfiles();
+  if (action === "edit-signature-profile") return editSignatureProfile(target.dataset.id);
+  if (action === "cancel-signature-edit") return resetSignatureProfileForm();
+  if (action === "delete-signature-profile") return confirmSignatureProfileDelete(target.dataset.id);
+  if (action === "remove-report-signature") {
+    state.report.responsibles.splice(Number(target.dataset.index), 1);
+    render();
+    return;
+  }
   if (action === "toggle-key") {
     const visible = elements.apiKeyInput.type === "text";
     elements.apiKeyInput.type = visible ? "password" : "text";
@@ -3241,18 +3518,8 @@ async function handleAction(action, target) {
     render();
     return;
   }
-  if (action === "add-responsible") {
-    const input = document.querySelector("#newResponsible");
-    const name = input?.value.trim();
-    if (!name) return;
-    state.report.responsibleOptions = unique([...state.report.responsibleOptions, name]);
-    state.report.responsibles = unique([...state.report.responsibles, name]);
-    scheduleSave();
-    render();
-    return;
-  }
   if (action === "add-notification-signer") {
-    noticeState().signatories.push({ id: makeId(`${state.flow}-signer`), name: "", role: "" });
+    noticeState().signatories.push({ id: makeId(`${state.flow}-signer`), profileId: "", name: "", role: "" });
     render();
     return;
   }
@@ -3260,7 +3527,7 @@ async function handleAction(action, target) {
     const notice = noticeState();
     notice.signatories = notice.signatories.filter((item) => item.id !== target.dataset.id);
     if (!notice.signatories.length) {
-      notice.signatories.push({ id: makeId(`${state.flow}-signer`), name: "", role: "" });
+      notice.signatories.push({ id: makeId(`${state.flow}-signer`), profileId: "", name: "", role: "" });
     }
     render();
     return;
@@ -3306,10 +3573,6 @@ document.addEventListener("input", (event) => {
       if (photo.status === "done") photo.status = "idle";
     }
   }
-  if (target.dataset.notificationSignatoryField) {
-    const signatory = noticeState().signatories.find((item) => item.id === target.dataset.id);
-    if (signatory) signatory[target.dataset.notificationSignatoryField] = target.value;
-  }
   if (target.dataset.notificationPhotoCaption) {
     const photo = noticeState().photos.find((item) => item.id === target.dataset.notificationPhotoCaption);
     if (photo) photo.caption = target.value;
@@ -3326,6 +3589,10 @@ document.addEventListener("input", (event) => {
 
 document.addEventListener("change", (event) => {
   const target = event.target;
+  if (target.dataset.signatureTarget) {
+    handleSignatureSelection(target);
+    return;
+  }
   if (target.dataset.file) {
     handleFiles(target.dataset.file, target.files, target.dataset.id);
     return;
@@ -3337,13 +3604,6 @@ document.addEventListener("change", (event) => {
       render();
     }
     if (target.dataset.bind === "cota.useAI") render();
-    scheduleSave();
-  }
-  if (target.dataset.responsible) {
-    const name = target.dataset.responsible;
-    state.report.responsibles = target.checked
-      ? unique([...state.report.responsibles, name])
-      : state.report.responsibles.filter((item) => item !== name);
     scheduleSave();
   }
 });
@@ -3390,6 +3650,15 @@ elements.apiForm.addEventListener("submit", async (event) => {
 
 elements.apiDialog.addEventListener("click", (event) => {
   if (event.target === elements.apiDialog) closeDialog(elements.apiDialog);
+});
+
+elements.signatureProfileForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  await saveSignatureProfile();
+});
+
+elements.signatureDialog.addEventListener("click", (event) => {
+  if (event.target === elements.signatureDialog) closeSignatureConfiguration();
 });
 
 elements.messageDialog.addEventListener("click", (event) => {

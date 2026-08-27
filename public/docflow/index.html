@@ -107,6 +107,10 @@
             <span aria-hidden="true">↻</span>
             <span>Histórico</span>
           </button>
+          <button id="signatureButton" class="signature-button" type="button" data-action="open-signatures" aria-label="Configurar assinaturas">
+            <span aria-hidden="true">✎</span>
+            <span>Assinaturas</span>
+          </button>
           <button id="apiButton" class="api-button" type="button" data-action="open-api">
             <span class="api-dot" aria-hidden="true"></span>
             <span id="apiButtonLabel">Configurar IA</span>
@@ -199,6 +203,45 @@
           <button class="button button-primary" type="submit">Salvar configuração</button>
         </div>
       </form>
+    </dialog>
+
+    <dialog id="signatureDialog" class="dialog signature-dialog">
+      <div class="dialog-card">
+        <div class="dialog-topline">
+          <span class="dialog-icon" aria-hidden="true">✎</span>
+          <button class="icon-button" type="button" data-action="close-signatures" aria-label="Fechar">×</button>
+        </div>
+        <span class="eyebrow eyebrow-dark">Configurações</span>
+        <h2>Assinaturas salvas</h2>
+        <p class="dialog-lead">
+          Cadastre cada pessoa uma vez. Depois, nome e cargo estarão disponíveis nos campos de assinatura de todos os documentos.
+        </p>
+
+        <div id="signatureProfileList" class="signature-profile-list"></div>
+
+        <form id="signatureProfileForm" class="signature-profile-form">
+          <input id="signatureProfileId" type="hidden" />
+          <div class="signature-form-heading">
+            <strong id="signatureFormTitle">Adicionar assinatura</strong>
+            <button id="cancelSignatureEditButton" class="button button-quiet is-hidden" type="button" data-action="cancel-signature-edit">Cancelar edição</button>
+          </div>
+          <div class="field-grid">
+            <label class="field">
+              <span>Nome completo *</span>
+              <input id="signatureNameInput" type="text" maxlength="100" autocomplete="name" placeholder="Nome da pessoa" required />
+            </label>
+            <label class="field">
+              <span>Cargo ou função *</span>
+              <input id="signatureRoleInput" type="text" maxlength="120" placeholder="Ex.: Fiscal do contrato" required />
+            </label>
+          </div>
+          <div id="signatureFeedback" class="inline-feedback is-hidden" role="status"></div>
+          <div class="dialog-actions">
+            <button class="button button-secondary" type="button" data-action="close-signatures">Fechar</button>
+            <button id="saveSignatureButton" class="button button-primary" type="submit">Salvar assinatura</button>
+          </div>
+        </form>
+      </div>
     </dialog>
 
     <dialog id="messageDialog" class="dialog dialog-small">
