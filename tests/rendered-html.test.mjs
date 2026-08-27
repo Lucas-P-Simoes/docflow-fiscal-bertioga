@@ -55,6 +55,7 @@ test("ships the standard letterhead template and fills it in place", async () =>
   assert.match(app, /state\.cota\.finalText = state\.cota\.baseText\.trim\(\)/);
   assert.match(app, /A imagem será enviada somente para a análise e não aparecerá no Word/);
   assert.doesNotMatch(app, /panelHeader\("Assistência opcional da IA"/);
+  assert.doesNotMatch(app, /pageHeading\("Etapa 1", "Escreva a ideia principal"/);
   assert.ok(app.indexOf('panelHeader("Texto-base"') < app.indexOf('data-bind="cota.useAI"'));
   assert.ok(app.indexOf('data-bind="cota.useAI"') < app.indexOf('data-bind="cota.baseText"'));
   assert.match(app, /line_\$\{String\(index \+ 1\)\.padStart\(2, "0"\)\}/);

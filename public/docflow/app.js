@@ -1534,8 +1534,7 @@ function renderCota() {
 function renderCotaContent() {
   const c = state.cota;
   const metrics = cotaMetrics(c.baseText);
-  return `${pageHeading("Etapa 1", "Escreva a ideia principal", "Informe o texto-base, escolha se deseja assistência da IA e revise o resultado antes de gerar o Word.")}
-  <section class="panel">
+  return `<section class="panel">
     ${panelHeader("Identificação do documento", "O timbre, o cabeçalho, as margens e a pauta virão do modelo padrão fornecido. O conteúdo será formatado em Arial 12 e justificado.")}
     <div class="field-grid three">
       <label class="field"><span>Número do processo</span><input type="text" data-bind="cota.processNumber" value="${e(c.processNumber)}" placeholder="Ex.: 12345" /></label>
