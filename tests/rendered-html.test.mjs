@@ -444,7 +444,7 @@ test("keeps a private account history for every generated document", async () =>
   assert.doesNotMatch(app, /Escolha o documento/);
   assert.doesNotMatch(app, /O que você quer preparar\?/);
   assert.doesNotMatch(app, /history-callout/);
-  assert.match(app, /home-history-button[^>]*[\s\S]*?Histórico de documentos/);
+  assert.doesNotMatch(app, /home-history-button/);
   assert.match(app, /Histórico de documentos/);
   assert.match(app, /apiRequest\("\/api\/documents"/);
   assert.match(app, /requestOptions\.body instanceof FormData/);

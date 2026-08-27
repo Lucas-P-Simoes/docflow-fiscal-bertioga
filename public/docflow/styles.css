@@ -698,6 +698,10 @@ select:focus-visible,
   padding: 56px max(32px, calc((100vw - 1180px) / 2)) 130px;
 }
 
+.main-content.is-home {
+  padding-top: 28px;
+}
+
 .sidebar:not(.is-hidden) + .main-content {
   margin-left: 282px;
   padding-right: max(42px, calc((100vw - 1240px) / 2));
@@ -885,18 +889,6 @@ select:focus-visible,
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 18px;
-}
-
-.home-history-row {
-  display: flex;
-  justify-content: flex-end;
-  margin-bottom: 18px;
-}
-
-.home-history-button {
-  min-height: 46px;
-  padding-right: 20px;
-  padding-left: 20px;
 }
 
 .history-section {

@@ -942,6 +942,7 @@ function panelHeader(title, description, action = "") {
 
 function render() {
   updateApiBadge();
+  elements.main.classList.toggle("is-home", !state.admin.open && !state.history.open && !state.flow);
   if (state.admin.open) {
     elements.sidebar.classList.add("is-hidden");
     elements.actionBar.classList.add("is-hidden");
@@ -1054,11 +1055,6 @@ function configureActionBar() {
 
 function renderHome() {
   return `<section class="document-section">
-    <div class="home-history-row">
-      <button class="button button-primary home-history-button" type="button" data-action="show-history">
-        Histórico de documentos <span aria-hidden="true">→</span>
-      </button>
-    </div>
     <div class="document-grid">
       <article class="document-card" tabindex="0" role="button" data-action="start-report">
         <span class="card-status is-development">Em desenvolvimento</span>
