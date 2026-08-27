@@ -242,6 +242,58 @@ test("offers every municipal secretariat in the official correspondence recipien
 });
 
 
+test("offers common formal salutations with a custom fallback", async () => {
+  const app = await readFile(new URL("public/docflow/app.js", siteRoot), "utf8");
+  const salutations = [
+    "Sr.,",
+    "Sra.,",
+    "Sr.(a),",
+    "Senhor,",
+    "Senhora,",
+    "Senhor(a),",
+    "Prezado Senhor,",
+    "Prezada Senhora,",
+    "Prezado(a) Senhor(a),",
+    "Sr. Diretor,",
+    "Sra. Diretora,",
+    "Sr.(a) Diretor(a),",
+    "Sr. Secretário,",
+    "Sra. Secretária,",
+    "Sr.(a) Secretário(a),",
+    "Sr. Chefe,",
+    "Sra. Chefe,",
+    "Sr.(a) Chefe,",
+    "Excelentíssimo Senhor,",
+    "Excelentíssima Senhora,",
+    "Excelentíssimo(a) Senhor(a),",
+    "Ilustríssimo Senhor,",
+    "Ilustríssima Senhora,",
+    "Ilustríssimo(a) Senhor(a),",
+    "Vossa Senhoria,",
+    "Vossa Excelência,",
+    "Doutor,",
+    "Doutora,",
+    "Doutor(a),",
+    "Engenheiro,",
+    "Engenheira,",
+    "Engenheiro(a),",
+    "Arquiteto,",
+    "Arquiteta,",
+    "Arquiteto(a),",
+    "À autoridade competente,",
+    "A quem possa interessar,",
+  ];
+
+  for (const salutation of salutations) {
+    assert.ok(app.includes(`  "${salutation}",`));
+  }
+
+  assert.match(app, /data-correspondence-salutation-select/);
+  assert.match(app, /Outro tratamento/);
+  assert.match(app, /selectedValue === OTHER_SALUTATION_VALUE \? "" : selectedValue/);
+});
+
+
 test("builds notifications and warnings from the same Bertioga model with fillable fields, signatures, and optional photos", async () => {
   const [app, template] = await Promise.all([
     readFile(new URL("public/docflow/app.js", siteRoot), "utf8"),

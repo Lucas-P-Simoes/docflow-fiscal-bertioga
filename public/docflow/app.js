@@ -61,6 +61,45 @@ const MUNICIPAL_SECRETARIATS = [
   { acronym: "SB", name: "Secretaria Municipal de Trânsito e Mobilidade" },
   { acronym: "ST", name: "Secretaria Municipal de Turismo e Cultura" },
 ];
+const OFFICIAL_SALUTATIONS = [
+  "Sr.,",
+  "Sra.,",
+  "Sr.(a),",
+  "Senhor,",
+  "Senhora,",
+  "Senhor(a),",
+  "Prezado Senhor,",
+  "Prezada Senhora,",
+  "Prezado(a) Senhor(a),",
+  "Sr. Diretor,",
+  "Sra. Diretora,",
+  "Sr.(a) Diretor(a),",
+  "Sr. Secretário,",
+  "Sra. Secretária,",
+  "Sr.(a) Secretário(a),",
+  "Sr. Chefe,",
+  "Sra. Chefe,",
+  "Sr.(a) Chefe,",
+  "Excelentíssimo Senhor,",
+  "Excelentíssima Senhora,",
+  "Excelentíssimo(a) Senhor(a),",
+  "Ilustríssimo Senhor,",
+  "Ilustríssima Senhora,",
+  "Ilustríssimo(a) Senhor(a),",
+  "Vossa Senhoria,",
+  "Vossa Excelência,",
+  "Doutor,",
+  "Doutora,",
+  "Doutor(a),",
+  "Engenheiro,",
+  "Engenheira,",
+  "Engenheiro(a),",
+  "Arquiteto,",
+  "Arquiteta,",
+  "Arquiteto(a),",
+  "À autoridade competente,",
+  "A quem possa interessar,",
+];
 const MAX_COTA_TEXT = 2500;
 const MAX_COTA_LINES = 32;
 const COTA_TEMPLATE_URL = "templates/MODELO_FOLHA_COTA.docx";
@@ -72,6 +111,7 @@ const MAX_CORRESPONDENCE_TEXT = 7000;
 const ACCEPTED_IMAGES = ["image/jpeg", "image/png", "image/bmp", "image/gif", "image/webp"];
 const OTHER_SIGNATURE_VALUE = "__other__";
 const OTHER_RECIPIENT_VALUE = "__other_recipient__";
+const OTHER_SALUTATION_VALUE = "__other_salutation__";
 
 const PHOTO_PROMPT = `Você é um inspetor de pavimentação urbana. Examine somente o pavimento, a calçada, a sarjeta e os dispositivos de drenagem visíveis na fotografia.
 
@@ -259,6 +299,7 @@ function createCorrespondenceState(saved = {}) {
     recipientSecretariat: "",
     recipientRole: "",
     salutation: "",
+    salutationOption: "",
     subject: "",
     baseText: "",
     finalText: "",
@@ -1445,6 +1486,11 @@ function renderOfficialCorrespondenceInfo() {
     return `<option value="${secretariat.acronym}"${selected}>${secretariat.acronym} — ${e(secretariat.name)}</option>`;
   }).join("");
   const otherRecipientSelected = c.recipientSecretariat === OTHER_RECIPIENT_VALUE;
+  const salutationOptions = OFFICIAL_SALUTATIONS.map((salutation) => {
+    const selected = c.salutationOption === salutation ? " selected" : "";
+    return `<option value="${e(salutation)}"${selected}>${e(salutation)}</option>`;
+  }).join("");
+  const otherSalutationSelected = c.salutationOption === OTHER_SALUTATION_VALUE;
   return `${pageHeading("Etapa 1", `Identifique ${type.article} ${typeLower}`, "Preencha os campos que aparecerão no modelo oficial da Prefeitura de Bertioga.")}
   <section class="panel">
     ${panelHeader("Modelo oficial", "O brasão, o cabeçalho, a página A4, as margens e a tipografia serão preservados conforme o arquivo fornecido.")}
@@ -1458,8 +1504,9 @@ function renderOfficialCorrespondenceInfo() {
     ${panelHeader("Destinatário", "O setor ou destinatário e o tratamento serão apresentados em negrito, como no modelo original.")}
     <div class="field-grid">
       <label class="field"><span>Destinatário ou setor *</span><select data-correspondence-recipient-select><option value="">Selecione uma secretaria</option>${recipientOptions}<option value="${OTHER_RECIPIENT_VALUE}"${otherRecipientSelected ? " selected" : ""}>Outro destinatário ou setor</option></select></label>
-      <label class="field"><span>Saudação ou tratamento *</span><input type="text" data-bind="correspondence.salutation" value="${e(c.salutation)}" placeholder="Ex.: Sra. Chefe," /></label>
+      <label class="field"><span>Saudação ou tratamento *</span><select data-correspondence-salutation-select><option value="">Selecione um tratamento</option>${salutationOptions}<option value="${OTHER_SALUTATION_VALUE}"${otherSalutationSelected ? " selected" : ""}>Outro tratamento</option></select></label>
       ${otherRecipientSelected ? `<label class="field"><span>Outro destinatário ou setor *</span><input type="text" data-bind="correspondence.recipient" value="${e(c.recipient)}" placeholder="Digite a sigla, secretaria, pessoa ou setor" autofocus /></label>` : ""}
+      ${otherSalutationSelected ? `<label class="field"><span>Outro tratamento *</span><input type="text" data-bind="correspondence.salutation" value="${e(c.salutation)}" placeholder="Digite a saudação ou o tratamento" autofocus /></label>` : ""}
     </div>
   </section>`;
 }
@@ -3622,6 +3669,14 @@ document.addEventListener("change", (event) => {
       const secretariat = MUNICIPAL_SECRETARIATS.find((item) => item.acronym === selectedValue);
       state.correspondence.recipient = secretariat ? `${secretariat.acronym} — ${secretariat.name}` : "";
     }
+    render();
+    scheduleSave();
+    return;
+  }
+  if (target.dataset.correspondenceSalutationSelect !== undefined) {
+    const selectedValue = target.value;
+    state.correspondence.salutationOption = selectedValue;
+    state.correspondence.salutation = selectedValue === OTHER_SALUTATION_VALUE ? "" : selectedValue;
     render();
     scheduleSave();
     return;
