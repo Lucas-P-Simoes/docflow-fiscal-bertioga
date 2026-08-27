@@ -903,7 +903,7 @@ function showMessage({ title = "Atenção", text, kind = "warning", actions }) {
     const id = `message-action-${index}`;
     const button = document.createElement("button");
     button.type = "button";
-    button.className = `button ${action.primary ? "button-primary" : "button-secondary"}`;
+    button.className = `button ${action.danger ? "button-danger-solid" : action.primary ? "button-primary" : "button-secondary"}`;
     button.textContent = action.label;
     button.dataset.action = id;
     elements.messageActions.appendChild(button);
@@ -1172,6 +1172,7 @@ function renderAdminUser(user) {
     : `<div class="admin-user-actions">
         ${user.status !== "approved" ? `<button class="button button-primary" type="button" data-action="approve-admin-user" data-id="${e(user.id)}" ${disabled}>${busyAction === "approved" ? "Aprovando…" : "Aprovar"}</button>` : ""}
         ${user.status !== "rejected" ? `<button class="button button-secondary button-danger" type="button" data-action="reject-admin-user" data-id="${e(user.id)}" ${disabled}>${busyAction === "rejected" ? "Recusando…" : "Recusar"}</button>` : ""}
+        <button class="button button-secondary button-danger" type="button" data-action="delete-admin-user" data-id="${e(user.id)}" ${disabled}>${busyAction === "delete" ? "Excluindo…" : "Excluir"}</button>
       </div>`;
   return `<article class="admin-user-item">
     <span class="admin-user-avatar" aria-hidden="true">${e(String(user.name || user.email || "U").slice(0, 1).toUpperCase())}</span>
@@ -1256,6 +1257,40 @@ function confirmAdminUserRejection(userId) {
     actions: [
       { label: "Cancelar" },
       { label: "Recusar acesso", primary: true, onClick: () => setAdminUserStatus(userId, "rejected") },
+    ],
+  });
+}
+
+async function deleteAdminUser(userId) {
+  if (!state.auth.user?.isAdmin || state.admin.busy.has(userId)) return;
+  state.admin.busy.set(userId, "delete");
+  state.admin.error = "";
+  if (state.admin.open) render();
+  try {
+    await apiRequest(`/api/admin/users/${encodeURIComponent(userId)}`, {
+      method: "DELETE",
+    });
+    state.admin.users = state.admin.users.filter((user) => user.id !== userId);
+    updateAdminBadge();
+    showToast("Usuário excluído definitivamente.");
+  } catch (error) {
+    state.admin.error = error.message;
+  } finally {
+    state.admin.busy.delete(userId);
+    if (state.admin.open) render();
+  }
+}
+
+function confirmAdminUserDeletion(userId) {
+  const user = state.admin.users.find((item) => item.id === userId);
+  if (!user || user.isAdmin) return;
+  showMessage({
+    title: "Excluir usuário definitivamente?",
+    text: `${user.name} perderá o acesso e todos os documentos, assinaturas e configurações dessa conta serão removidos. Esta ação não pode ser desfeita.`,
+    kind: "error",
+    actions: [
+      { label: "Cancelar" },
+      { label: "Excluir definitivamente", danger: true, onClick: () => deleteAdminUser(userId) },
     ],
   });
 }
@@ -3723,6 +3758,7 @@ async function handleAction(action, target) {
   if (action === "refresh-admin") return loadAdminUsers();
   if (action === "approve-admin-user") return setAdminUserStatus(target.dataset.id, "approved");
   if (action === "reject-admin-user") return confirmAdminUserRejection(target.dataset.id);
+  if (action === "delete-admin-user") return confirmAdminUserDeletion(target.dataset.id);
   if (action === "show-history") return showDocumentHistory();
   if (action === "refresh-history") return loadDocumentHistory();
   if (action === "download-history") return triggerHistoryDownload(target.dataset.id);

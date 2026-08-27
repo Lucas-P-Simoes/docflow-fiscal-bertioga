@@ -187,6 +187,9 @@ test("keeps new registrations pending and limits user approval to the configured
   assert.match(app, /apiRequest\("\/api\/admin\/users"\)/);
   assert.match(app, /approve-admin-user/);
   assert.match(app, /reject-admin-user/);
+  assert.match(app, /delete-admin-user/);
+  assert.match(app, /Excluir usuário definitivamente/);
+  assert.match(app, /method: "DELETE"/);
   assert.match(app, /Último acesso/);
   assert.match(styles, /\.admin-button/);
   assert.match(styles, /\.admin-button\.has-pending \.admin-bell-icon/);
@@ -198,6 +201,8 @@ test("keeps new registrations pending and limits user approval to the configured
   assert.match(adminWorker, /authenticated\.account\.isAdmin/);
   assert.match(adminWorker, /authenticated\.account\.email !== ADMIN_EMAIL/);
   assert.match(adminWorker, /status !== "approved" && status !== "rejected"/);
+  assert.match(adminWorker, /request\.method !== "PATCH" && request\.method !== "DELETE"/);
+  assert.match(adminWorker, /env\.DOCUMENTS\.delete/);
   assert.match(authWorker, /authJson\(\s*202,/);
   assert.match(authWorker, /Seu cadastro aguarda aprovação do administrador/);
   assert.match(authWorker, /Seu cadastro foi recusado/);
@@ -206,6 +211,8 @@ test("keeps new registrations pending and limits user approval to the configured
   assert.match(dbAdmin, /CASE status/);
   assert.match(dbAdmin, /WHERE id = \? AND is_admin = 0/);
   assert.match(dbAdmin, /DELETE FROM sessions WHERE user_id = \?/);
+  assert.match(dbAdmin, /DELETE FROM users WHERE id = \? AND is_admin = 0/);
+  assert.match(dbAdmin, /FROM generated_documents/);
   assert.match(schema, /status:\s*text\("status"/);
   assert.match(schema, /isAdmin:\s*integer\("is_admin"/);
   assert.match(schema, /lastLoginAt:\s*integer\("last_login_at"/);

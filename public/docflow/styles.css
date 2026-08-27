@@ -1704,6 +1704,17 @@ textarea::placeholder {
   color: var(--red);
 }
 
+.button-danger-solid {
+  border-color: var(--red);
+  color: #ffffff;
+  background: var(--red);
+}
+
+.button-danger-solid:hover:not(:disabled) {
+  border-color: #8e332b;
+  background: #8e332b;
+}
+
 .icon-button {
   display: grid;
   flex: 0 0 auto;
@@ -3043,6 +3054,10 @@ textarea::placeholder {
   .admin-user-actions {
     display: grid;
     grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .admin-user-actions .button:nth-child(3):last-child {
+    grid-column: 1 / -1;
   }
 
   .history-item {

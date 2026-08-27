@@ -1,4 +1,6 @@
 import {
+  deleteManagedUser,
+  getManagedUserDeletion,
   listManagedUsers,
   updateManagedUserStatus,
 } from "../db/admin";
@@ -28,9 +30,26 @@ export async function handleAdminUserMutation(
   env: Env,
   userId: string,
 ): Promise<Response> {
-  if (request.method !== "PATCH") return authError(405, "Método não permitido.");
+  if (request.method !== "PATCH" && request.method !== "DELETE") {
+    return authError(405, "Método não permitido.");
+  }
   const authenticated = await authenticateAdmin(request, env);
   if (authenticated instanceof Response) return authenticated;
+
+  if (request.method === "DELETE") {
+    const deletion = await getManagedUserDeletion(env.DB, userId);
+    if (!deletion) {
+      return authError(404, "Usuário não encontrado ou não pode ser excluído.");
+    }
+
+    for (let offset = 0; offset < deletion.objectKeys.length; offset += 1_000) {
+      await env.DOCUMENTS.delete(deletion.objectKeys.slice(offset, offset + 1_000));
+    }
+    if (!(await deleteManagedUser(env.DB, userId))) {
+      return authError(404, "Usuário não encontrado ou não pode ser excluído.");
+    }
+    return authJson(200, { deleted: true, id: userId });
+  }
 
   let body: JsonObject;
   try {

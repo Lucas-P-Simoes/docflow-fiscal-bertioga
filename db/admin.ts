@@ -22,6 +22,10 @@ type ManagedUserRow = {
   reviewed_at: number | null;
 };
 
+type DocumentObjectKeyRow = {
+  object_key: string;
+};
+
 const MANAGED_USER_COLUMNS = `
   id, name, email, status, is_admin,
   created_at, last_login_at, reviewed_at
@@ -103,4 +107,42 @@ export async function updateManagedUserStatus(
     .first<ManagedUserRow>();
 
   return row ? managedUser(row) : null;
+}
+
+export async function getManagedUserDeletion(
+  db: D1Database,
+  userId: string,
+): Promise<{ objectKeys: string[] } | null> {
+  const user = await db
+    .prepare(
+      `SELECT id
+       FROM users
+       WHERE id = ? AND is_admin = 0
+       LIMIT 1`,
+    )
+    .bind(userId)
+    .first<{ id: string }>();
+  if (!user) return null;
+
+  const documents = await db
+    .prepare(
+      `SELECT object_key
+       FROM generated_documents
+       WHERE user_id = ?`,
+    )
+    .bind(userId)
+    .all<DocumentObjectKeyRow>();
+
+  return { objectKeys: documents.results.map((row) => row.object_key) };
+}
+
+export async function deleteManagedUser(
+  db: D1Database,
+  userId: string,
+): Promise<boolean> {
+  const result = await db
+    .prepare("DELETE FROM users WHERE id = ? AND is_admin = 0")
+    .bind(userId)
+    .run();
+  return result.meta.changes > 0;
 }
