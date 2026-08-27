@@ -104,8 +104,11 @@
         <div class="topbar-actions">
           <span id="saveStatus" class="save-status">Preferências locais</span>
           <button id="adminButton" class="admin-button is-hidden" type="button" data-action="show-admin" aria-label="Abrir administração de usuários">
-            <span aria-hidden="true">◆</span>
-            <span>Administração</span>
+            <span class="admin-icon-stack" aria-hidden="true">
+              <span class="admin-default-icon">◆</span>
+              <span class="admin-bell-icon">&#128276;&#65038;</span>
+            </span>
+            <span class="admin-button-label">Administração</span>
             <span id="adminPendingBadge" class="admin-pending-badge is-hidden" aria-label="Solicitações pendentes"></span>
           </button>
           <button class="history-button" type="button" data-action="show-history" aria-label="Abrir histórico de documentos">

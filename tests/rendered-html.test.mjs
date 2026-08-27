@@ -178,15 +178,19 @@ test("keeps new registrations pending and limits user approval to the configured
 
   assert.match(page, /id="adminButton"[^>]*is-hidden/);
   assert.match(page, /id="adminPendingBadge"/);
+  assert.match(page, /class="admin-bell-icon"/);
   assert.match(page, /Enviar solicitação de cadastro/);
   assert.match(page, /aprovação do administrador/);
   assert.match(app, /createAdminState/);
   assert.match(app, /state\.auth\.user\?\.isAdmin/);
+  assert.match(app, /classList\.toggle\("has-pending", pendingCount > 0\)/);
   assert.match(app, /apiRequest\("\/api\/admin\/users"\)/);
   assert.match(app, /approve-admin-user/);
   assert.match(app, /reject-admin-user/);
   assert.match(app, /Último acesso/);
   assert.match(styles, /\.admin-button/);
+  assert.match(styles, /\.admin-button\.has-pending \.admin-bell-icon/);
+  assert.match(styles, /color:\s*#b42318/);
   assert.match(styles, /\.admin-user-item/);
   assert.match(worker, /url\.pathname === "\/api\/admin\/users"/);
   assert.match(worker, /handleAdminUserMutation/);

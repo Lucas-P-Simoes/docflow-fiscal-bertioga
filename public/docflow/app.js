@@ -778,6 +778,7 @@ function applyAccount(payload) {
     customModel: knownModels.has(selectedModel) ? "" : selectedModel,
   };
   const isAdmin = Boolean(payload.user?.isAdmin);
+  elements.adminButton.classList.remove("has-pending");
   elements.adminButton.classList.toggle("is-hidden", !isAdmin);
   elements.accountName.textContent = payload.user?.name || payload.user?.email || "";
   elements.authGate.classList.add("is-hidden");
@@ -796,6 +797,7 @@ function showAuthGate(view = "login") {
   state.history.pdfCache.forEach((cached) => cached.url && URL.revokeObjectURL(cached.url));
   state.history = createHistoryState();
   elements.adminButton.classList.add("is-hidden");
+  elements.adminButton.classList.remove("has-pending");
   elements.adminPendingBadge.classList.add("is-hidden");
   elements.adminPendingBadge.textContent = "";
   elements.siteShell.hidden = true;
@@ -1186,6 +1188,7 @@ function updateAdminBadge() {
   const pendingCount = state.admin.users.filter((user) => user.status === "pending").length;
   elements.adminPendingBadge.textContent = pendingCount ? String(pendingCount) : "";
   elements.adminPendingBadge.classList.toggle("is-hidden", pendingCount === 0);
+  elements.adminButton.classList.toggle("has-pending", pendingCount > 0);
   elements.adminButton.setAttribute(
     "aria-label",
     pendingCount

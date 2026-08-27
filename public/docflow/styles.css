@@ -418,6 +418,57 @@ select:focus-visible,
   background: var(--forest-soft);
 }
 
+.admin-icon-stack {
+  display: inline-grid;
+  place-items: center;
+  width: 18px;
+  height: 20px;
+}
+
+.admin-default-icon,
+.admin-bell-icon {
+  grid-area: 1 / 1;
+}
+
+.admin-bell-icon {
+  display: none;
+  color: #b42318;
+  font-family: "Segoe UI Symbol", "Arial Unicode MS", sans-serif;
+  font-size: 17px;
+  font-weight: 900;
+  line-height: 1;
+  transform-origin: 50% 12%;
+}
+
+.admin-button.has-pending .admin-default-icon {
+  display: none;
+}
+
+.admin-button.has-pending .admin-bell-icon {
+  display: inline-block;
+  animation: admin-bell-ring 1.8s ease-in-out infinite;
+}
+
+@keyframes admin-bell-ring {
+  0%,
+  72%,
+  100% {
+    transform: rotate(0deg);
+  }
+  78% {
+    transform: rotate(13deg);
+  }
+  84% {
+    transform: rotate(-11deg);
+  }
+  90% {
+    transform: rotate(7deg);
+  }
+  96% {
+    transform: rotate(-4deg);
+  }
+}
+
 .admin-pending-badge {
   display: grid;
   place-items: center;
@@ -2869,7 +2920,7 @@ textarea::placeholder {
   .api-button span:not(.api-dot),
   .history-button span:last-child,
   .signature-button span:last-child,
-  .admin-button > span:nth-child(2) {
+  .admin-button-label {
     display: none;
   }
 
