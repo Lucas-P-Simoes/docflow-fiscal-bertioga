@@ -45,6 +45,22 @@ const CORRESPONDENCE_TYPES = {
     recipientPrefix: "Destinatário",
   },
 };
+const MUNICIPAL_SECRETARIATS = [
+  { acronym: "SA", name: "Secretaria Municipal de Administração" },
+  { acronym: "SD", name: "Secretaria Municipal de Desenvolvimento Social, Trabalho e Renda" },
+  { acronym: "SE", name: "Secretaria Municipal de Educação" },
+  { acronym: "SL", name: "Secretaria Municipal de Esporte e Lazer" },
+  { acronym: "SF", name: "Secretaria Municipal da Fazenda" },
+  { acronym: "SG", name: "Secretaria Municipal de Governo e Gestão Institucional" },
+  { acronym: "SM", name: "Secretaria Municipal de Meio Ambiente" },
+  { acronym: "SO", name: "Secretaria Municipal de Obras e Habitação" },
+  { acronym: "SP", name: "Secretaria Municipal de Planejamento Urbano" },
+  { acronym: "SS", name: "Secretaria Municipal de Saúde" },
+  { acronym: "SC", name: "Secretaria Municipal de Segurança" },
+  { acronym: "SU", name: "Secretaria Municipal de Serviços Urbanos" },
+  { acronym: "SB", name: "Secretaria Municipal de Trânsito e Mobilidade" },
+  { acronym: "ST", name: "Secretaria Municipal de Turismo e Cultura" },
+];
 const MAX_COTA_TEXT = 2500;
 const MAX_COTA_LINES = 32;
 const COTA_TEMPLATE_URL = "templates/MODELO_FOLHA_COTA.docx";
@@ -55,6 +71,7 @@ const COTA_HEADER_FIELD_STYLE = { ...COTA_TEXT_STYLE, bold: true, italics: false
 const MAX_CORRESPONDENCE_TEXT = 7000;
 const ACCEPTED_IMAGES = ["image/jpeg", "image/png", "image/bmp", "image/gif", "image/webp"];
 const OTHER_SIGNATURE_VALUE = "__other__";
+const OTHER_RECIPIENT_VALUE = "__other_recipient__";
 
 const PHOTO_PROMPT = `Você é um inspetor de pavimentação urbana. Examine somente o pavimento, a calçada, a sarjeta e os dispositivos de drenagem visíveis na fotografia.
 
@@ -239,6 +256,7 @@ function createCorrespondenceState(saved = {}) {
     place: saved.memorandumCity || "Bertioga",
     date: todayInputValue(),
     recipient: "",
+    recipientSecretariat: "",
     recipientRole: "",
     salutation: "",
     subject: "",
@@ -1422,6 +1440,11 @@ function renderOfficialCorrespondenceInfo() {
   const c = state.correspondence;
   const type = correspondenceType();
   const typeLower = type.label.toLowerCase();
+  const recipientOptions = MUNICIPAL_SECRETARIATS.map((secretariat) => {
+    const selected = c.recipientSecretariat === secretariat.acronym ? " selected" : "";
+    return `<option value="${secretariat.acronym}"${selected}>${secretariat.acronym} — ${e(secretariat.name)}</option>`;
+  }).join("");
+  const otherRecipientSelected = c.recipientSecretariat === OTHER_RECIPIENT_VALUE;
   return `${pageHeading("Etapa 1", `Identifique ${type.article} ${typeLower}`, "Preencha os campos que aparecerão no modelo oficial da Prefeitura de Bertioga.")}
   <section class="panel">
     ${panelHeader("Modelo oficial", "O brasão, o cabeçalho, a página A4, as margens e a tipografia serão preservados conforme o arquivo fornecido.")}
@@ -1434,8 +1457,9 @@ function renderOfficialCorrespondenceInfo() {
   <section class="panel">
     ${panelHeader("Destinatário", "O setor ou destinatário e o tratamento serão apresentados em negrito, como no modelo original.")}
     <div class="field-grid">
-      <label class="field"><span>Destinatário ou setor *</span><input type="text" data-bind="correspondence.recipient" value="${e(c.recipient)}" placeholder="Ex.: SCON" /></label>
+      <label class="field"><span>Destinatário ou setor *</span><select data-correspondence-recipient-select><option value="">Selecione uma secretaria</option>${recipientOptions}<option value="${OTHER_RECIPIENT_VALUE}"${otherRecipientSelected ? " selected" : ""}>Outro destinatário ou setor</option></select></label>
       <label class="field"><span>Saudação ou tratamento *</span><input type="text" data-bind="correspondence.salutation" value="${e(c.salutation)}" placeholder="Ex.: Sra. Chefe," /></label>
+      ${otherRecipientSelected ? `<label class="field"><span>Outro destinatário ou setor *</span><input type="text" data-bind="correspondence.recipient" value="${e(c.recipient)}" placeholder="Digite a sigla, secretaria, pessoa ou setor" autofocus /></label>` : ""}
     </div>
   </section>`;
 }
@@ -3589,6 +3613,19 @@ document.addEventListener("input", (event) => {
 
 document.addEventListener("change", (event) => {
   const target = event.target;
+  if (target.dataset.correspondenceRecipientSelect !== undefined) {
+    const selectedValue = target.value;
+    state.correspondence.recipientSecretariat = selectedValue;
+    if (selectedValue === OTHER_RECIPIENT_VALUE) {
+      state.correspondence.recipient = "";
+    } else {
+      const secretariat = MUNICIPAL_SECRETARIATS.find((item) => item.acronym === selectedValue);
+      state.correspondence.recipient = secretariat ? `${secretariat.acronym} — ${secretariat.name}` : "";
+    }
+    render();
+    scheduleSave();
+    return;
+  }
   if (target.dataset.signatureTarget) {
     handleSignatureSelection(target);
     return;

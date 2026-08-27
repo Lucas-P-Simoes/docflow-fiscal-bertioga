@@ -213,6 +213,35 @@ test("builds memoranda and oficios from the same supplied Bertioga model", async
 });
 
 
+test("offers every municipal secretariat in the official correspondence recipient dropdown", async () => {
+  const app = await readFile(new URL("public/docflow/app.js", siteRoot), "utf8");
+  const secretariats = [
+    ["SA", "Secretaria Municipal de Administração"],
+    ["SD", "Secretaria Municipal de Desenvolvimento Social, Trabalho e Renda"],
+    ["SE", "Secretaria Municipal de Educação"],
+    ["SL", "Secretaria Municipal de Esporte e Lazer"],
+    ["SF", "Secretaria Municipal da Fazenda"],
+    ["SG", "Secretaria Municipal de Governo e Gestão Institucional"],
+    ["SM", "Secretaria Municipal de Meio Ambiente"],
+    ["SO", "Secretaria Municipal de Obras e Habitação"],
+    ["SP", "Secretaria Municipal de Planejamento Urbano"],
+    ["SS", "Secretaria Municipal de Saúde"],
+    ["SC", "Secretaria Municipal de Segurança"],
+    ["SU", "Secretaria Municipal de Serviços Urbanos"],
+    ["SB", "Secretaria Municipal de Trânsito e Mobilidade"],
+    ["ST", "Secretaria Municipal de Turismo e Cultura"],
+  ];
+
+  for (const [acronym, name] of secretariats) {
+    assert.ok(app.includes(`{ acronym: "${acronym}", name: "${name}" }`));
+  }
+
+  assert.match(app, /data-correspondence-recipient-select/);
+  assert.match(app, /Outro destinatário ou setor/);
+  assert.match(app, /secretariat \? `\$\{secretariat\.acronym\} — \$\{secretariat\.name\}` : ""/);
+});
+
+
 test("builds notifications and warnings from the same Bertioga model with fillable fields, signatures, and optional photos", async () => {
   const [app, template] = await Promise.all([
     readFile(new URL("public/docflow/app.js", siteRoot), "utf8"),
