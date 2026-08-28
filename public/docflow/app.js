@@ -10,7 +10,7 @@ if (LEGACY_DOCFLOW_PATHS.has(window.location.pathname)) {
 }
 
 const REPORT_STEPS = ["Informações", "Fotografias", "Conteúdo e formato", "Revisão"];
-const COTA_STEPS = ["Conteúdo", "Revisão e download"];
+const COTA_STEPS = ["Conteúdo", "Revisão", "Assinatura e download"];
 const OFFICIAL_CORRESPONDENCE_STEPS = ["Dados do documento", "Conteúdo", "Revisão e download"];
 const CORRESPONDENCE_STEPS = ["Dados do documento", "Conteúdo", "Revisão e download"];
 const NOTIFICATION_STEPS = ["Dados da notificação", "Conteúdo e anexos", "Revisão e download"];
@@ -101,7 +101,13 @@ const OFFICIAL_SALUTATIONS = [
   "A quem possa interessar,",
 ];
 const MAX_COTA_TEXT = 2500;
-const MAX_COTA_LINES = 32;
+const COTA_TOTAL_LINES = 32;
+const COTA_PARAGRAPH_GAP_LINES = 1;
+const COTA_SIGNATURE_GAP_LINES = 1;
+const COTA_SIGNATURE_BLOCK_LINES = 3;
+const MAX_COTA_LINES = COTA_TOTAL_LINES - COTA_SIGNATURE_GAP_LINES - COTA_SIGNATURE_BLOCK_LINES;
+const COTA_LINE_WIDTH_PX = 296;
+const COTA_JUSTIFIED_WIDTH_PX = 304;
 const COTA_TEMPLATE_URL = "templates/MODELO_FOLHA_COTA.docx";
 const OFFICIAL_CORRESPONDENCE_TEMPLATE_URL = "templates/MODELO_MEMORANDO.docx";
 const NOTIFICATION_TEMPLATE_URL = "templates/MODELO_NOTIFICACAO.docx";
@@ -253,6 +259,7 @@ const state = {
 let toastTimer = null;
 let saveTimer = null;
 let cotaTemplatePromise = null;
+let cotaMeasureContext = null;
 let officialCorrespondenceTemplatePromise = null;
 let notificationTemplatePromise = null;
 let pendingSignatureTarget = null;
@@ -297,6 +304,9 @@ function createCotaState(saved = {}) {
     finalText: "",
     useAI: false,
     contextImage: null,
+    signerProfileId: "",
+    signer: "",
+    signerRole: "",
     complete: false,
   };
 }
@@ -562,6 +572,10 @@ function applySignatureProfile(target, profile) {
       return;
     }
     state.report.responsibles.push({ profileId: profile.id, name: profile.name, role: profile.role });
+  } else if (target.type === "cota") {
+    state.cota.signerProfileId = profile.id;
+    state.cota.signer = profile.name;
+    state.cota.signerRole = profile.role;
   } else if (target.type === "correspondence") {
     state.correspondence.signerProfileId = profile.id;
     state.correspondence.signer = profile.name;
@@ -580,6 +594,10 @@ function updateSignatureReferences(profile) {
   state.report.responsibles = state.report.responsibles.map((item) =>
     item.profileId === profile.id ? { profileId: profile.id, name: profile.name, role: profile.role } : item,
   );
+  if (state.cota.signerProfileId === profile.id) {
+    state.cota.signer = profile.name;
+    state.cota.signerRole = profile.role;
+  }
   if (state.correspondence.signerProfileId === profile.id) {
     state.correspondence.signer = profile.name;
     state.correspondence.signerRole = profile.role;
@@ -664,6 +682,7 @@ async function deleteSignatureProfile(profile, targetAfterDelete = null) {
     state.report.responsibles = state.report.responsibles.map((item) =>
       item.profileId === profile.id ? { ...item, profileId: "" } : item,
     );
+    if (state.cota.signerProfileId === profile.id) state.cota.signerProfileId = "";
     if (state.correspondence.signerProfileId === profile.id) state.correspondence.signerProfileId = "";
     [state.notification, state.warning].forEach((notice) => {
       notice.signatories.forEach((signatory) => {
@@ -686,11 +705,14 @@ async function deleteSignatureProfile(profile, targetAfterDelete = null) {
 function handleSignatureSelection(select) {
   const target = select.dataset.signatureTarget === "report"
     ? { type: "report" }
+    : select.dataset.signatureTarget === "cota"
+      ? { type: "cota" }
     : select.dataset.signatureTarget === "correspondence"
       ? { type: "correspondence" }
       : { type: "notice", signatoryId: select.dataset.id };
   if (select.value === OTHER_SIGNATURE_VALUE) {
-    if (target.type === "correspondence") select.value = state.correspondence.signerProfileId;
+    if (target.type === "cota") select.value = state.cota.signerProfileId;
+    else if (target.type === "correspondence") select.value = state.correspondence.signerProfileId;
     else if (target.type === "notice") {
       select.value = noticeState().signatories.find((item) => item.id === target.signatoryId)?.profileId || "";
     } else select.value = "";
@@ -1528,7 +1550,7 @@ function summaryCard(label, value, detail) {
 }
 
 function renderCota() {
-  return state.step === 0 ? renderCotaContent() : renderCotaReview();
+  return [renderCotaContent, renderCotaReview, renderCotaSignature][state.step]();
 }
 
 function renderCotaContent() {
@@ -1562,9 +1584,9 @@ function renderCotaReview() {
   const c = state.cota;
   const metrics = cotaMetrics(c.finalText);
   const reviewAction = c.useAI ? `<button class="button button-secondary" type="button" data-action="improve-cota">✦ Analisar novamente com IA</button>` : "";
-  return `${pageHeading("Etapa 2", "Revise a redação final", c.useAI ? "Confira o texto analisado pela IA e faça qualquer ajuste necessário." : "Confira o texto digitado antes de gerar o Word.")}
+  return `${pageHeading("Etapa 2", "Revise a redação final", c.useAI ? "Confira o texto analisado pela IA e faça qualquer ajuste necessário." : "Confira o texto digitado antes de escolher a assinatura.")}
   <section class="panel">
-    ${panelHeader("Texto final", "O conteúdo será distribuído em até 32 linhas na folha pautada.", reviewAction)}
+    ${panelHeader("Texto final", `O conteúdo será distribuído em até ${MAX_COTA_LINES} linhas, com uma linha em branco entre parágrafos.`, reviewAction)}
     <label class="field"><span>Redação administrativa *</span><textarea data-bind="cota.finalText" maxlength="${MAX_COTA_TEXT}">${e(c.finalText)}</textarea><span class="text-counter"><span id="cotaLineCount">${metrics.lines} de ${MAX_COTA_LINES} linhas estimadas</span><span id="cotaCharCount">${metrics.characters}/${MAX_COTA_TEXT}</span></span></label>
   </section>
   <div class="summary-grid">
@@ -1573,6 +1595,23 @@ function renderCotaReview() {
     ${summaryCard("Capacidade", `${metrics.lines}/${MAX_COTA_LINES} linhas`, `${metrics.characters} caracteres`)}
   </div>
   ${c.useAI ? `<div class="notice"><span aria-hidden="true">✦</span><span>Texto analisado com <strong>${e(modelDisplayName(getSelectedModel()))}</strong>${c.contextImage ? ` usando <strong>${e(c.contextImage.file.name)}</strong> como contexto visual` : ""}. Revise todas as informações.</span></div>` : `<div class="notice"><span aria-hidden="true">✓</span><span><strong>Modo direto:</strong> este é o texto digitado por você, sem análise da IA.</span></div>`}`;
+}
+
+function renderCotaSignature() {
+  const c = state.cota;
+  const metrics = cotaMetrics(c.finalText);
+  return `${pageHeading("Etapa 3", "Defina a assinatura", "Escolha quem assinará a folha de cota e confira o resumo antes de gerar o Word.")}
+  <section class="panel">
+    ${panelHeader("Assinatura", "A assinatura ficará a uma linha em branco do texto, com nome em negrito e cargo em itálico.", `<button class="button button-secondary" type="button" data-action="open-signatures">Configurar assinaturas</button>`)}
+    <label class="field signature-select-field"><span>Pessoa que vai assinar *</span><select data-signature-target="cota" ${state.signatures.loading ? "disabled" : ""}>${signatureSelectOptions(c.signerProfileId, "Selecione uma pessoa")}</select></label>
+    ${signaturePreview({ name: c.signer, role: c.signerRole }, "Selecione uma assinatura no dropdown")}
+  </section>
+  <div class="summary-grid">
+    ${summaryCard("Processo", c.processNumber || "Em branco", c.year || "Ano em branco")}
+    ${summaryCard("Texto", `${metrics.lines}/${MAX_COTA_LINES} linhas`, "Justificado, com 1 linha entre parágrafos")}
+    ${summaryCard("Assinatura", c.signer || "Não selecionada", c.signerRole || "Cargo não informado")}
+  </div>
+  <div class="notice"><span aria-hidden="true">✓</span><span>O Word manterá o texto na pauta e reservará as linhas seguintes para a assinatura.</span></div>`;
 }
 
 function isNoticeFlow(flow = state.flow) {
@@ -1892,29 +1931,69 @@ function renderSuccess() {
 }
 
 function cotaMetrics(text) {
-  return { characters: text.length, lines: wrapCotaText(text).length };
+  return { characters: text.length, lines: cotaTextLayout(text).length };
 }
 
-function wrapCotaText(text) {
+function measureCotaLine(text) {
+  if (!cotaMeasureContext) {
+    const canvas = document.createElement("canvas");
+    cotaMeasureContext = canvas.getContext("2d");
+    if (cotaMeasureContext) cotaMeasureContext.font = "16px Arial";
+  }
+  if (cotaMeasureContext) return cotaMeasureContext.measureText(text).width;
+  return Array.from(text).reduce((width, character) => width + (/[ilI1.,;:'!|]/.test(character) ? 3.4 : /[mwMW@%]/.test(character) ? 12.5 : character === " " ? 4.4 : 8), 0);
+}
+
+function cotaTextLayout(text) {
   const normalized = String(text || "").replace(/\r\n?/g, "\n").trim();
   if (!normalized) return [];
   const lines = [];
   const paragraphs = normalized.split(/\n\s*\n/);
   paragraphs.forEach((paragraph, paragraphIndex) => {
     const words = paragraph.replace(/\s+/g, " ").trim().split(" ").filter(Boolean);
-    let line = "";
+    const paragraphLines = [];
+    let currentLine = "";
     words.forEach((word) => {
-      const candidate = line ? `${line} ${word}` : word;
-      if (candidate.length <= 38 || !line) line = candidate;
+      const candidate = currentLine ? `${currentLine} ${word}` : word;
+      if (!currentLine || measureCotaLine(candidate) <= COTA_LINE_WIDTH_PX) currentLine = candidate;
       else {
-        lines.push(line);
-        line = word;
+        paragraphLines.push(currentLine);
+        currentLine = word;
       }
     });
-    if (line) lines.push(line);
-    if (paragraphIndex < paragraphs.length - 1) lines.push("");
+    if (currentLine) paragraphLines.push(currentLine);
+    paragraphLines.forEach((line, index) => lines.push({
+      text: line,
+      justify: index < paragraphLines.length - 1 && line.includes(" "),
+      kind: "body",
+    }));
+    if (paragraphIndex < paragraphs.length - 1) {
+      for (let gap = 0; gap < COTA_PARAGRAPH_GAP_LINES; gap += 1) {
+        lines.push({ text: "", justify: false, kind: "paragraph-gap" });
+      }
+    }
   });
   return lines;
+}
+
+function wrapCotaText(text) {
+  return cotaTextLayout(text).map((line) => line.text);
+}
+
+function justifyCotaLine(text) {
+  const words = String(text || "").trim().split(/\s+/).filter(Boolean);
+  if (words.length < 2) return words.join(" ");
+  const naturalText = words.join(" ");
+  const spaceWidth = Math.max(1, measureCotaLine(" "));
+  const extraSpaces = Math.max(0, Math.floor((COTA_JUSTIFIED_WIDTH_PX - measureCotaLine(naturalText)) / spaceWidth));
+  const gaps = words.length - 1;
+  const spacesPerGap = Math.floor(extraSpaces / gaps);
+  const remainder = extraSpaces % gaps;
+  return words.map((word, index) => {
+    if (index === gaps) return word;
+    const count = 1 + spacesPerGap + (index < remainder ? 1 : 0);
+    return `${word}${" ".repeat(count)}`;
+  }).join("");
 }
 
 function startFlow(flow, kind = "") {
@@ -2105,6 +2184,10 @@ function validateCurrentStep() {
       showMessage({ title: "Texto acima da capacidade", text: `Reduza o conteúdo para no máximo ${MAX_COTA_TEXT} caracteres e ${MAX_COTA_LINES} linhas estimadas.` });
       return false;
     }
+  }
+  if (state.step === 2 && (!c.signer.trim() || !c.signerRole.trim())) {
+    showMessage({ title: "Selecione a assinatura", text: "Escolha a pessoa que assinará a folha de cota antes de gerar o Word." });
+    return false;
   }
   return true;
 }
@@ -3305,10 +3388,11 @@ function captionParagraph(number, description) {
 }
 
 async function buildCotaDocument(onProgress) {
-  const { patchDocument, PatchType, TextRun } = window.docx;
+  const { patchDocument, PatchType, Paragraph, TextRun, AlignmentType, LineRuleType } = window.docx;
   const c = state.cota;
-  const lines = wrapCotaText(c.finalText);
-  if (lines.length > MAX_COTA_LINES) throw new Error(`O texto ocupa ${lines.length} linhas; o limite é ${MAX_COTA_LINES}.`);
+  const bodyLines = cotaTextLayout(c.finalText);
+  if (bodyLines.length > MAX_COTA_LINES) throw new Error(`O texto ocupa ${bodyLines.length} linhas; o limite é ${MAX_COTA_LINES}.`);
+  if (!c.signer.trim() || !c.signerRole.trim()) throw new Error("Selecione a pessoa que assinará a folha de cota.");
   if (typeof patchDocument !== "function" || !PatchType) {
     throw new Error("O componente de preenchimento do modelo Word não está disponível.");
   }
@@ -3332,14 +3416,35 @@ async function buildCotaDocument(onProgress) {
       children: [new TextRun({ text: processYear || "______", ...COTA_HEADER_FIELD_STYLE })],
     },
   };
-  for (let index = 0; index < MAX_COTA_LINES; index += 1) {
+  const lineLayout = [
+    ...bodyLines,
+    ...Array.from({ length: COTA_SIGNATURE_GAP_LINES }, () => ({ text: "", justify: false, kind: "signature-gap" })),
+    { text: "________________________________", justify: false, kind: "signature-rule" },
+    { text: c.signer.trim(), justify: false, kind: "signature-name" },
+    { text: c.signerRole.trim(), justify: false, kind: "signature-role" },
+  ];
+  for (let index = 0; index < COTA_TOTAL_LINES; index += 1) {
+    const line = lineLayout[index] || { text: "", justify: false, kind: "empty" };
+    const isSignature = line.kind.startsWith("signature-");
+    const alignment = isSignature ? AlignmentType.CENTER : AlignmentType.LEFT;
+    const lineText = line.justify ? justifyCotaLine(line.text) : line.text;
     patches[`line_${String(index + 1).padStart(2, "0")}`] = {
-      type: PatchType.PARAGRAPH,
-      children: [new TextRun({ text: lines[index] || "", ...COTA_TEXT_STYLE })],
+      type: PatchType.DOCUMENT,
+      children: [new Paragraph({
+        alignment,
+        snapToGrid: false,
+        spacing: { before: 0, after: 0, line: 360, lineRule: LineRuleType.EXACT },
+        children: lineText ? [new TextRun({
+          text: lineText,
+          ...COTA_TEXT_STYLE,
+          bold: line.kind === "signature-name",
+          italics: line.kind === "signature-role",
+        })] : [],
+      })],
     };
   }
 
-  onProgress(70, "Aplicando Arial 12 e alinhamento justificado…");
+  onProgress(70, "Aplicando justificação, espaçamento e assinatura…");
   const blob = await patchDocument({
     outputType: "blob",
     data: template,
