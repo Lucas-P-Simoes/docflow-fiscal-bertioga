@@ -103,6 +103,23 @@
 
         <div class="topbar-actions">
           <span id="saveStatus" class="save-status">Preferências locais</span>
+          <button id="kanbanButton" class="kanban-button" type="button" data-action="show-kanban" aria-label="Abrir quadro Kanban">
+            <span aria-hidden="true">▥</span>
+            <span>Kanban</span>
+          </button>
+          <div class="notification-center">
+            <button id="notificationButton" class="notification-button" type="button" data-action="toggle-notifications" aria-label="Abrir notificações" aria-expanded="false" aria-controls="notificationPopover">
+              <span class="notification-bell" aria-hidden="true">&#128276;&#65038;</span>
+              <span id="notificationBadge" class="notification-badge is-hidden" aria-label="Notificações não lidas"></span>
+            </button>
+            <div id="notificationPopover" class="notification-popover is-hidden" role="dialog" aria-label="Notificações">
+              <div class="notification-popover-heading">
+                <div><span class="eyebrow eyebrow-dark">Atualizações</span><strong>Notificações</strong></div>
+                <button class="icon-button" type="button" data-action="close-notifications" aria-label="Fechar notificações">×</button>
+              </div>
+              <div id="notificationList" class="notification-list"></div>
+            </div>
+          </div>
           <button id="adminButton" class="admin-button is-hidden" type="button" data-action="show-admin" aria-label="Abrir administração de usuários">
             <span class="admin-icon-stack" aria-hidden="true">
               <span class="admin-default-icon">◆</span>
@@ -259,6 +276,44 @@
         <p id="messageText" class="dialog-lead"></p>
         <div id="messageActions" class="dialog-actions"></div>
       </div>
+    </dialog>
+
+    <dialog id="kanbanCardDialog" class="dialog kanban-card-dialog">
+      <form id="kanbanCardForm" class="dialog-card" method="dialog">
+        <div class="dialog-topline">
+          <span class="dialog-icon" aria-hidden="true">▥</span>
+          <button class="icon-button" type="button" data-action="close-kanban-card" aria-label="Fechar">×</button>
+        </div>
+        <span class="eyebrow eyebrow-dark">Quadro compartilhado</span>
+        <h2 id="kanbanCardFormTitle">Novo cartão</h2>
+        <p class="dialog-lead">Descreva a atividade e marque as pessoas responsáveis. Cada nova pessoa marcada receberá uma notificação no sininho.</p>
+        <input id="kanbanCardId" type="hidden" />
+        <label class="field">
+          <span>Título do cartão *</span>
+          <input id="kanbanCardTitle" type="text" maxlength="160" autocomplete="off" placeholder="Ex.: Conferir medição da obra" required />
+        </label>
+        <label class="field">
+          <span>Descrição</span>
+          <textarea id="kanbanCardDescription" maxlength="2000" placeholder="Detalhes, prazo ou providências necessárias…"></textarea>
+        </label>
+        <label class="field">
+          <span>Coluna</span>
+          <select id="kanbanCardStatus">
+            <option value="todo">A fazer</option>
+            <option value="doing">Em andamento</option>
+            <option value="done">Concluído</option>
+          </select>
+        </label>
+        <fieldset class="kanban-assignee-fieldset">
+          <legend>Pessoas responsáveis</legend>
+          <div id="kanbanAssigneeList" class="kanban-assignee-list"></div>
+        </fieldset>
+        <div id="kanbanCardFeedback" class="inline-feedback is-hidden" role="status"></div>
+        <div class="dialog-actions">
+          <button class="button button-secondary" type="button" data-action="close-kanban-card">Cancelar</button>
+          <button id="saveKanbanCardButton" class="button button-primary" type="submit">Salvar cartão</button>
+        </div>
+      </form>
     </dialog>
 
     <dialog id="renameDialog" class="dialog dialog-small">

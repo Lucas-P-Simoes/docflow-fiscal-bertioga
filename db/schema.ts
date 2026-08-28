@@ -1,4 +1,4 @@
-import { index, integer, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
+import { index, integer, primaryKey, sqliteTable, text, uniqueIndex } from "drizzle-orm/sqlite-core";
 
 export const users = sqliteTable(
   "users",
@@ -94,5 +94,62 @@ export const signatureProfiles = sqliteTable(
   },
   (table) => [
     index("idx_signature_profiles_user_name").on(table.userId, table.name),
+  ],
+);
+
+export const kanbanCards = sqliteTable(
+  "kanban_cards",
+  {
+    id: text("id").primaryKey(),
+    title: text("title").notNull(),
+    description: text("description").notNull().default(""),
+    status: text("status", { enum: ["todo", "doing", "done"] }).notNull().default("todo"),
+    position: integer("position").notNull(),
+    createdBy: text("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: integer("created_at").notNull(),
+    updatedAt: integer("updated_at").notNull(),
+  },
+  (table) => [
+    index("idx_kanban_cards_status_position").on(table.status, table.position),
+    index("idx_kanban_cards_updated_at").on(table.updatedAt),
+  ],
+);
+
+export const kanbanCardAssignees = sqliteTable(
+  "kanban_card_assignees",
+  {
+    cardId: text("card_id")
+      .notNull()
+      .references(() => kanbanCards.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    assignedBy: text("assigned_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: integer("created_at").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.cardId, table.userId] }),
+    index("idx_kanban_assignees_user_card").on(table.userId, table.cardId),
+  ],
+);
+
+export const kanbanNotifications = sqliteTable(
+  "kanban_notifications",
+  {
+    id: text("id").primaryKey(),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    cardId: text("card_id")
+      .notNull()
+      .references(() => kanbanCards.id, { onDelete: "cascade" }),
+    actorUserId: text("actor_user_id").references(() => users.id, { onDelete: "set null" }),
+    message: text("message").notNull(),
+    readAt: integer("read_at"),
+    createdAt: integer("created_at").notNull(),
+  },
+  (table) => [
+    index("idx_kanban_notifications_user_read_created").on(table.userId, table.readAt, table.createdAt),
+    index("idx_kanban_notifications_card").on(table.cardId),
   ],
 );

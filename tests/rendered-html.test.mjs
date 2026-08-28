@@ -605,3 +605,54 @@ test("lets each account rename, delete, preview, and download its history as PDF
   assert.match(documentDb, /UPDATE generated_documents[\s\S]*?WHERE id = \? AND user_id = \?/);
   assert.match(documentDb, /DELETE FROM generated_documents[\s\S]*?WHERE id = \? AND user_id = \?/);
 });
+
+
+test("adds a shared Kanban with account assignees and bell notifications", async () => {
+  const [app, page, styles, worker, kanbanWorker, kanbanDb, schema, migration] = await Promise.all([
+    readFile(new URL("public/docflow/app.js", siteRoot), "utf8"),
+    readFile(new URL("public/docflow/index.html", siteRoot), "utf8"),
+    readFile(new URL("public/docflow/styles.css", siteRoot), "utf8"),
+    readFile(new URL("worker/index.ts", siteRoot), "utf8"),
+    readFile(new URL("worker/kanban.ts", siteRoot), "utf8"),
+    readFile(new URL("db/kanban.ts", siteRoot), "utf8"),
+    readFile(new URL("db/schema.ts", siteRoot), "utf8"),
+    readFile(new URL("drizzle/0004_loud_brood.sql", siteRoot), "utf8"),
+  ]);
+
+  assert.match(page, /id="kanbanButton"/);
+  assert.match(page, /data-action="show-kanban"/);
+  assert.match(page, /id="notificationButton"/);
+  assert.match(page, /class="notification-bell"/);
+  assert.match(page, /id="notificationBadge"/);
+  assert.match(page, /id="kanbanCardDialog"/);
+  assert.match(page, /id="kanbanAssigneeList"/);
+  assert.match(app, /const KANBAN_COLUMNS = \[/);
+  assert.match(app, /id: "todo"/);
+  assert.match(app, /id: "doing"/);
+  assert.match(app, /id: "done"/);
+  assert.match(app, /apiRequest\("\/api\/kanban"\)/);
+  assert.match(app, /\/api\/kanban\/cards\/\$\{encodeURIComponent\(cardId\)\}/);
+  assert.match(app, /data-kanban-column/);
+  assert.match(app, /data-kanban-status/);
+  assert.match(app, /data-kanban-assignee/);
+  assert.match(app, /setInterval\([\s\S]*?30_000/);
+  assert.match(styles, /\.kanban-board/);
+  assert.match(styles, /\.notification-button/);
+  assert.match(styles, /\.notification-badge/);
+
+  assert.match(worker, /url\.pathname === "\/api\/kanban"/);
+  assert.match(worker, /handleKanbanNotificationMutation/);
+  assert.match(kanbanWorker, /authenticateRequest\(request, env\)/);
+  assert.match(kanbanWorker, /listApprovedKanbanPeople/);
+  assert.match(kanbanWorker, /Selecione somente pessoas com acesso aprovado/);
+  assert.match(kanbanDb, /WHERE status = 'approved'/);
+  assert.match(kanbanDb, /const newlyAssigned = values\.assigneeIds\.filter/);
+  assert.match(kanbanDb, /marcou você no cartão/);
+  assert.match(schema, /kanbanCards/);
+  assert.match(schema, /kanbanCardAssignees/);
+  assert.match(schema, /kanbanNotifications/);
+  assert.match(migration, /CREATE TABLE `kanban_cards`/);
+  assert.match(migration, /CREATE TABLE `kanban_card_assignees`/);
+  assert.match(migration, /CREATE TABLE `kanban_notifications`/);
+  assert.match(migration, /PRAGMA optimize/);
+});

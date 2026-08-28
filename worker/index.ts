@@ -18,6 +18,14 @@ import {
 import { handleAdminUserMutation, handleAdminUsers } from "./admin";
 import { handleDocumentDownload, handleDocumentMutation, handleDocuments } from "./documents";
 import { handleSignatureMutation, handleSignatures } from "./signatures";
+import {
+  handleKanban,
+  handleKanbanCardMutation,
+  handleKanbanCards,
+  handleKanbanNotificationMutation,
+  handleKanbanNotifications,
+  handleKanbanNotificationsRead,
+} from "./kanban";
 
 const OPENAI_RESPONSES_URL = "https://api.openai.com/v1/responses";
 const PERSONAL_CLOUDFLARE_API_ORIGIN =
@@ -211,6 +219,26 @@ const worker = {
       }
       if (url.pathname === "/api/openai") {
         return await proxyOpenAI(request, env);
+      }
+      if (url.pathname === "/api/kanban") {
+        return await handleKanban(request, env);
+      }
+      if (url.pathname === "/api/kanban/cards") {
+        return await handleKanbanCards(request, env);
+      }
+      if (url.pathname === "/api/kanban/notifications") {
+        return await handleKanbanNotifications(request, env);
+      }
+      if (url.pathname === "/api/kanban/notifications/read") {
+        return await handleKanbanNotificationsRead(request, env);
+      }
+      const kanbanNotificationMutation = url.pathname.match(/^\/api\/kanban\/notifications\/([0-9a-f-]{36})$/i);
+      if (kanbanNotificationMutation) {
+        return await handleKanbanNotificationMutation(request, env, kanbanNotificationMutation[1]);
+      }
+      const kanbanCardMutation = url.pathname.match(/^\/api\/kanban\/cards\/([0-9a-f-]{36})$/i);
+      if (kanbanCardMutation) {
+        return await handleKanbanCardMutation(request, env, kanbanCardMutation[1]);
       }
       if (url.pathname === "/api/documents") {
         return await handleDocuments(request, env);

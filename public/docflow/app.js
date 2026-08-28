@@ -156,6 +156,11 @@ const elements = {
   registerFeedback: document.querySelector("#registerFeedback"),
   adminButton: document.querySelector("#adminButton"),
   adminPendingBadge: document.querySelector("#adminPendingBadge"),
+  kanbanButton: document.querySelector("#kanbanButton"),
+  notificationButton: document.querySelector("#notificationButton"),
+  notificationBadge: document.querySelector("#notificationBadge"),
+  notificationPopover: document.querySelector("#notificationPopover"),
+  notificationList: document.querySelector("#notificationList"),
   accountName: document.querySelector("#accountName"),
   view: document.querySelector("#view"),
   main: document.querySelector("#main"),
@@ -200,6 +205,16 @@ const elements = {
   renameInput: document.querySelector("#renameInput"),
   renameFeedback: document.querySelector("#renameFeedback"),
   renameSubmitButton: document.querySelector("#renameSubmitButton"),
+  kanbanCardDialog: document.querySelector("#kanbanCardDialog"),
+  kanbanCardForm: document.querySelector("#kanbanCardForm"),
+  kanbanCardFormTitle: document.querySelector("#kanbanCardFormTitle"),
+  kanbanCardId: document.querySelector("#kanbanCardId"),
+  kanbanCardTitle: document.querySelector("#kanbanCardTitle"),
+  kanbanCardDescription: document.querySelector("#kanbanCardDescription"),
+  kanbanCardStatus: document.querySelector("#kanbanCardStatus"),
+  kanbanAssigneeList: document.querySelector("#kanbanAssigneeList"),
+  kanbanCardFeedback: document.querySelector("#kanbanCardFeedback"),
+  saveKanbanCardButton: document.querySelector("#saveKanbanCardButton"),
   toast: document.querySelector("#toast"),
   saveStatus: document.querySelector("#saveStatus"),
 };
@@ -230,6 +245,23 @@ function createAdminState() {
   };
 }
 
+function createKanbanState() {
+  return {
+    open: false,
+    loading: false,
+    loaded: false,
+    cards: [],
+    people: [],
+    error: "",
+    busy: new Map(),
+    editingCardId: "",
+    notifications: [],
+    unreadCount: 0,
+    notificationsLoading: false,
+    notificationsOpen: false,
+  };
+}
+
 const state = {
   auth: {
     user: null,
@@ -253,6 +285,7 @@ const state = {
   lastDownload: null,
   history: createHistoryState(),
   admin: createAdminState(),
+  kanban: createKanbanState(),
   messageCallbacks: new Map(),
   validationFields: [],
 };
@@ -264,6 +297,8 @@ let cotaMeasureContext = null;
 let officialCorrespondenceTemplatePromise = null;
 let notificationTemplatePromise = null;
 let pendingSignatureTarget = null;
+let notificationPollTimer = null;
+let draggedKanbanCardId = "";
 
 function createSignatureConfigurationState() {
   return {
@@ -810,6 +845,7 @@ function applyAccount(payload) {
   state.auth.user = payload.user;
   state.signatures = createSignatureConfigurationState();
   state.admin = createAdminState();
+  state.kanban = createKanbanState();
   const selectedModel = payload.api?.model || "gpt-5.6-terra";
   const knownModels = new Set(["gpt-5.6-terra", "gpt-5.6-sol", "gpt-5.6-luna"]);
   state.api = {
@@ -828,6 +864,8 @@ function applyAccount(payload) {
   render();
   loadSignatureProfiles();
   loadDocumentHistory();
+  loadKanbanNotifications({ silent: true });
+  startNotificationPolling();
   if (isAdmin) loadAdminUsers({ silent: true });
 }
 
@@ -835,12 +873,18 @@ function showAuthGate(view = "login") {
   state.auth.user = null;
   state.signatures = createSignatureConfigurationState();
   state.admin = createAdminState();
+  state.kanban = createKanbanState();
+  stopNotificationPolling();
   state.history.pdfCache.forEach((cached) => cached.url && URL.revokeObjectURL(cached.url));
   state.history = createHistoryState();
   elements.adminButton.classList.add("is-hidden");
   elements.adminButton.classList.remove("has-pending");
   elements.adminPendingBadge.classList.add("is-hidden");
   elements.adminPendingBadge.textContent = "";
+  elements.notificationBadge.classList.add("is-hidden");
+  elements.notificationBadge.textContent = "";
+  elements.notificationPopover.classList.add("is-hidden");
+  elements.notificationButton.setAttribute("aria-expanded", "false");
   elements.siteShell.hidden = true;
   elements.siteShell.classList.add("is-hidden");
   elements.authGate.classList.remove("is-hidden");
@@ -983,7 +1027,7 @@ function panelHeader(title, description, action = "") {
 
 function render() {
   updateApiBadge();
-  elements.main.classList.toggle("is-home", !state.admin.open && !state.history.open && !state.flow);
+  elements.main.classList.toggle("is-home", !state.admin.open && !state.history.open && !state.kanban.open && !state.flow);
   if (state.admin.open) {
     elements.sidebar.classList.add("is-hidden");
     elements.actionBar.classList.add("is-hidden");
@@ -996,6 +1040,13 @@ function render() {
     elements.actionBar.classList.add("is-hidden");
     elements.view.className = "view home-view";
     elements.view.innerHTML = renderDocumentHistory();
+    return;
+  }
+  if (state.kanban.open) {
+    elements.sidebar.classList.add("is-hidden");
+    elements.actionBar.classList.add("is-hidden");
+    elements.view.className = "view home-view kanban-view";
+    elements.view.innerHTML = renderKanban();
     return;
   }
   if (!state.flow) {
@@ -1259,6 +1310,7 @@ function showAdminPanel() {
   if (!state.auth.user?.isAdmin) return;
   state.flow = null;
   state.history.open = false;
+  state.kanban.open = false;
   state.admin.open = true;
   render();
   focusMain();
@@ -1406,10 +1458,347 @@ async function loadDocumentHistory() {
 function showDocumentHistory() {
   state.flow = null;
   state.admin.open = false;
+  state.kanban.open = false;
   state.history.open = true;
   render();
   focusMain();
   if (!state.history.loaded) loadDocumentHistory();
+}
+
+const KANBAN_COLUMNS = [
+  { id: "todo", label: "A fazer", description: "Atividades que ainda não começaram" },
+  { id: "doing", label: "Em andamento", description: "Atividades em execução" },
+  { id: "done", label: "Concluído", description: "Atividades finalizadas" },
+];
+
+function renderKanban() {
+  const kanban = state.kanban;
+  const loading = kanban.loading && !kanban.loaded;
+  const content = loading
+    ? `<div class="kanban-loading"><span class="history-spinner" aria-hidden="true"></span><strong>Carregando o quadro…</strong></div>`
+    : `<div class="kanban-board" aria-label="Quadro Kanban">
+        ${KANBAN_COLUMNS.map((column) => renderKanbanColumn(column)).join("")}
+      </div>`;
+  const error = kanban.error
+    ? `<div class="notice is-warning"><span aria-hidden="true">!</span><span>${e(kanban.error)}</span></div>`
+    : "";
+
+  return `<section class="document-section kanban-section">
+    <div class="kanban-heading">
+      <div><span class="eyebrow eyebrow-dark">Trabalho em equipe</span><h2>Quadro Kanban</h2><p>Organize as atividades, mova os cartões entre as etapas e marque as pessoas responsáveis.</p></div>
+      <div class="kanban-heading-actions">
+        <button class="button button-secondary" type="button" data-action="home">← Voltar</button>
+        <button class="button button-secondary" type="button" data-action="refresh-kanban" ${kanban.loading ? "disabled" : ""}>Atualizar</button>
+        <button class="button button-primary" type="button" data-action="add-kanban-card" ${kanban.loading ? "disabled" : ""}>+ Novo cartão</button>
+      </div>
+    </div>
+    <div class="kanban-summary" aria-label="Resumo do quadro">
+      <article><span>Total</span><strong>${kanban.cards.length}</strong></article>
+      ${KANBAN_COLUMNS.map((column) => `<article><span>${e(column.label)}</span><strong>${kanban.cards.filter((card) => card.status === column.id).length}</strong></article>`).join("")}
+    </div>
+    ${error}
+    ${content}
+  </section>`;
+}
+
+function renderKanbanColumn(column) {
+  const cards = state.kanban.cards.filter((card) => card.status === column.id);
+  return `<section class="kanban-column" data-kanban-column="${e(column.id)}" aria-labelledby="kanban-${e(column.id)}-title">
+    <div class="kanban-column-heading">
+      <div><h3 id="kanban-${e(column.id)}-title">${e(column.label)}</h3><p>${e(column.description)}</p></div>
+      <span>${cards.length}</span>
+    </div>
+    <div class="kanban-column-cards">
+      ${cards.length ? cards.map(renderKanbanCard).join("") : `<div class="kanban-column-empty"><strong>Nenhum cartão</strong><span>Arraste uma atividade para cá ou crie um novo cartão.</span></div>`}
+    </div>
+  </section>`;
+}
+
+function renderKanbanCard(card) {
+  const busy = state.kanban.busy.get(card.id) || "";
+  const disabled = busy ? "disabled" : "";
+  const assignees = card.assignees.length
+    ? `<div class="kanban-card-assignees" aria-label="Responsáveis">${card.assignees.map((person) => `<span class="kanban-person-chip" title="${e(person.name)} — ${e(person.email)}"><span aria-hidden="true">${e(personInitials(person.name))}</span>${e(person.name)}</span>`).join("")}</div>`
+    : `<span class="kanban-unassigned">Sem responsável</span>`;
+  return `<article class="kanban-card${busy ? " is-busy" : ""}" draggable="${busy ? "false" : "true"}" data-kanban-card-id="${e(card.id)}" tabindex="0">
+    <div class="kanban-card-topline"><span>${e(kanbanStatusLabel(card.status))}</span><small>${e(formatHistoryDate(card.updatedAt))}</small></div>
+    <h4>${e(card.title)}</h4>
+    ${card.description ? `<p>${e(card.description).replace(/\n/g, "<br>")}</p>` : ""}
+    ${assignees}
+    <div class="kanban-card-footer">
+      <label><span class="sr-only">Mover ${e(card.title)}</span><select data-kanban-status data-id="${e(card.id)}" aria-label="Mover cartão ${e(card.title)}" ${disabled}>${KANBAN_COLUMNS.map((column) => `<option value="${e(column.id)}" ${card.status === column.id ? "selected" : ""}>${e(column.label)}</option>`).join("")}</select></label>
+      <div class="kanban-card-actions">
+        <button class="button button-quiet" type="button" data-action="edit-kanban-card" data-id="${e(card.id)}" ${disabled}>Editar</button>
+        <button class="button button-quiet button-danger" type="button" data-action="delete-kanban-card" data-id="${e(card.id)}" ${disabled}>${busy === "delete" ? "Excluindo…" : "Excluir"}</button>
+      </div>
+    </div>
+  </article>`;
+}
+
+function kanbanStatusLabel(status) {
+  return KANBAN_COLUMNS.find((column) => column.id === status)?.label || "A fazer";
+}
+
+function personInitials(name) {
+  const words = String(name || "U").trim().split(/\s+/).filter(Boolean);
+  return words.slice(0, 2).map((word) => word[0]).join("").toUpperCase() || "U";
+}
+
+async function loadKanban({ silent = false } = {}) {
+  if (!state.auth.user || state.kanban.loading) return;
+  state.kanban.loading = true;
+  state.kanban.error = "";
+  if (state.kanban.open) render();
+  try {
+    const payload = await apiRequest("/api/kanban");
+    state.kanban.cards = Array.isArray(payload.cards) ? payload.cards : [];
+    state.kanban.people = Array.isArray(payload.people) ? payload.people : [];
+    state.kanban.loaded = true;
+  } catch (error) {
+    state.kanban.error = error.message;
+    if (!silent) showToast("Não foi possível atualizar o Kanban.");
+  } finally {
+    state.kanban.loading = false;
+    if (state.kanban.open) render();
+  }
+}
+
+async function showKanban({ focusCardId = "" } = {}) {
+  state.flow = null;
+  state.admin.open = false;
+  state.history.open = false;
+  state.kanban.open = true;
+  closeNotificationPopover();
+  render();
+  focusMain();
+  if (!state.kanban.loaded) await loadKanban();
+  if (focusCardId) {
+    requestAnimationFrame(() => {
+      const card = document.querySelector(`[data-kanban-card-id="${focusCardId}"]`);
+      card?.scrollIntoView?.({ behavior: "smooth", block: "center", inline: "center" });
+      card?.classList.add("is-notification-target");
+      setTimeout(() => card?.classList.remove("is-notification-target"), 2200);
+    });
+  }
+}
+
+async function openKanbanCardDialog(cardId = "") {
+  if (!state.kanban.loaded) await loadKanban();
+  const card = cardId ? state.kanban.cards.find((item) => item.id === cardId) : null;
+  state.kanban.editingCardId = card?.id || "";
+  elements.kanbanCardId.value = card?.id || "";
+  elements.kanbanCardTitle.value = card?.title || "";
+  elements.kanbanCardDescription.value = card?.description || "";
+  elements.kanbanCardStatus.value = card?.status || "todo";
+  elements.kanbanCardFormTitle.textContent = card ? "Editar cartão" : "Novo cartão";
+  elements.saveKanbanCardButton.textContent = card ? "Salvar alterações" : "Criar cartão";
+  elements.saveKanbanCardButton.disabled = false;
+  setKanbanCardFeedback();
+  const selectedIds = new Set(card?.assignees.map((person) => person.id) || []);
+  elements.kanbanAssigneeList.innerHTML = state.kanban.people.length
+    ? state.kanban.people.map((person) => `<label class="kanban-assignee-option"><input type="checkbox" data-kanban-assignee value="${e(person.id)}" ${selectedIds.has(person.id) ? "checked" : ""} /><span class="kanban-assignee-avatar" aria-hidden="true">${e(personInitials(person.name))}</span><span><strong>${e(person.name)}</strong><small>${e(person.email)}</small></span></label>`).join("")
+    : `<div class="kanban-assignee-empty">Nenhuma pessoa com acesso aprovado foi encontrada.</div>`;
+  openDialog(elements.kanbanCardDialog);
+  setTimeout(() => elements.kanbanCardTitle.focus(), 40);
+}
+
+function closeKanbanCardDialog() {
+  if (elements.saveKanbanCardButton.disabled) return;
+  state.kanban.editingCardId = "";
+  elements.kanbanCardForm.reset();
+  setKanbanCardFeedback();
+  closeDialog(elements.kanbanCardDialog);
+}
+
+function setKanbanCardFeedback(message = "") {
+  elements.kanbanCardFeedback.textContent = message;
+  elements.kanbanCardFeedback.className = `inline-feedback${message ? " is-error" : " is-hidden"}`;
+  elements.kanbanCardTitle.classList.toggle("is-validation-error", Boolean(message && !elements.kanbanCardTitle.value.trim()));
+}
+
+async function saveKanbanCard() {
+  const cardId = elements.kanbanCardId.value;
+  const title = elements.kanbanCardTitle.value.trim();
+  if (!title) {
+    setKanbanCardFeedback("Informe o título do cartão.");
+    elements.kanbanCardTitle.focus();
+    return;
+  }
+  const body = {
+    title,
+    description: elements.kanbanCardDescription.value.trim(),
+    status: elements.kanbanCardStatus.value,
+    assigneeIds: Array.from(elements.kanbanAssigneeList.querySelectorAll("[data-kanban-assignee]:checked")).map((input) => input.value),
+  };
+  elements.saveKanbanCardButton.disabled = true;
+  elements.saveKanbanCardButton.textContent = cardId ? "Salvando…" : "Criando…";
+  setKanbanCardFeedback();
+  try {
+    const payload = await apiRequest(cardId ? `/api/kanban/cards/${encodeURIComponent(cardId)}` : "/api/kanban/cards", {
+      method: cardId ? "PATCH" : "POST",
+      body,
+    });
+    state.kanban.cards = cardId
+      ? state.kanban.cards.map((card) => card.id === cardId ? payload.card : card)
+      : [payload.card, ...state.kanban.cards];
+    state.kanban.editingCardId = "";
+    elements.saveKanbanCardButton.disabled = false;
+    closeDialog(elements.kanbanCardDialog);
+    render();
+    showToast(cardId ? "Cartão atualizado." : "Cartão criado.");
+    await loadKanbanNotifications({ silent: true });
+  } catch (error) {
+    elements.saveKanbanCardButton.disabled = false;
+    elements.saveKanbanCardButton.textContent = cardId ? "Salvar alterações" : "Criar cartão";
+    setKanbanCardFeedback(error.message);
+  }
+}
+
+async function moveKanbanCard(cardId, status) {
+  const card = state.kanban.cards.find((item) => item.id === cardId);
+  if (!card || card.status === status || state.kanban.busy.has(cardId)) return;
+  state.kanban.busy.set(cardId, "move");
+  render();
+  try {
+    const payload = await apiRequest(`/api/kanban/cards/${encodeURIComponent(cardId)}`, {
+      method: "PATCH",
+      body: {
+        title: card.title,
+        description: card.description,
+        status,
+        assigneeIds: card.assignees.map((person) => person.id),
+      },
+    });
+    state.kanban.cards = state.kanban.cards.map((item) => item.id === cardId ? payload.card : item);
+    showToast(`Cartão movido para ${kanbanStatusLabel(status)}.`);
+  } catch (error) {
+    state.kanban.error = error.message;
+  } finally {
+    state.kanban.busy.delete(cardId);
+    if (state.kanban.open) render();
+  }
+}
+
+function confirmKanbanCardDeletion(cardId) {
+  const card = state.kanban.cards.find((item) => item.id === cardId);
+  if (!card) return;
+  showMessage({
+    title: "Excluir este cartão?",
+    text: `O cartão “${card.title}” será removido do quadro para todas as pessoas.`,
+    kind: "error",
+    actions: [
+      { label: "Cancelar" },
+      { label: "Excluir cartão", danger: true, onClick: () => deleteKanbanCard(cardId) },
+    ],
+  });
+}
+
+async function deleteKanbanCard(cardId) {
+  if (state.kanban.busy.has(cardId)) return;
+  state.kanban.busy.set(cardId, "delete");
+  if (state.kanban.open) render();
+  try {
+    await apiRequest(`/api/kanban/cards/${encodeURIComponent(cardId)}`, { method: "DELETE" });
+    state.kanban.cards = state.kanban.cards.filter((card) => card.id !== cardId);
+    showToast("Cartão excluído.");
+  } catch (error) {
+    state.kanban.error = error.message;
+  } finally {
+    state.kanban.busy.delete(cardId);
+    if (state.kanban.open) render();
+  }
+}
+
+function updateNotificationBell() {
+  const count = state.kanban.unreadCount;
+  elements.notificationBadge.textContent = count > 99 ? "99+" : count ? String(count) : "";
+  elements.notificationBadge.classList.toggle("is-hidden", count === 0);
+  elements.notificationButton.classList.toggle("has-unread", count > 0);
+  elements.notificationButton.setAttribute("aria-label", count
+    ? `Abrir notificações. ${count} não lida(s).`
+    : "Abrir notificações");
+}
+
+function renderNotificationPopover() {
+  const notifications = state.kanban.notifications;
+  elements.notificationList.innerHTML = state.kanban.notificationsLoading && !notifications.length
+    ? `<div class="notification-state"><span class="history-spinner" aria-hidden="true"></span><strong>Carregando…</strong></div>`
+    : notifications.length
+      ? `<div class="notification-items">${notifications.map((notification) => `<button class="notification-item${notification.readAt ? "" : " is-unread"}" type="button" data-action="open-kanban-notification" data-id="${e(notification.id)}" data-card-id="${e(notification.cardId)}"><span class="notification-item-bell" aria-hidden="true">&#128276;&#65038;</span><span><strong>${e(notification.message)}</strong><small>${e(formatHistoryDate(notification.createdAt))}</small></span></button>`).join("")}</div>${state.kanban.unreadCount ? `<button class="notification-read-all" type="button" data-action="read-all-notifications">Marcar todas como lidas</button>` : ""}`
+      : `<div class="notification-state"><span class="notification-empty-bell" aria-hidden="true">&#128276;&#65038;</span><strong>Nenhuma notificação</strong><span>Quando alguém marcar você em um cartão, o aviso aparecerá aqui.</span></div>`;
+}
+
+async function loadKanbanNotifications({ silent = false } = {}) {
+  if (!state.auth.user || state.kanban.notificationsLoading) return;
+  state.kanban.notificationsLoading = true;
+  if (state.kanban.notificationsOpen) renderNotificationPopover();
+  try {
+    const payload = await apiRequest("/api/kanban/notifications");
+    state.kanban.notifications = Array.isArray(payload.notifications) ? payload.notifications : [];
+    state.kanban.unreadCount = Number(payload.unreadCount) || 0;
+    updateNotificationBell();
+  } catch (error) {
+    if (!silent) showToast(error.message);
+  } finally {
+    state.kanban.notificationsLoading = false;
+    if (state.kanban.notificationsOpen) renderNotificationPopover();
+  }
+}
+
+async function toggleNotificationPopover() {
+  if (state.kanban.notificationsOpen) {
+    closeNotificationPopover();
+    return;
+  }
+  state.kanban.notificationsOpen = true;
+  elements.notificationPopover.classList.remove("is-hidden");
+  elements.notificationButton.setAttribute("aria-expanded", "true");
+  renderNotificationPopover();
+  await loadKanbanNotifications({ silent: true });
+}
+
+function closeNotificationPopover() {
+  state.kanban.notificationsOpen = false;
+  elements.notificationPopover.classList.add("is-hidden");
+  elements.notificationButton.setAttribute("aria-expanded", "false");
+}
+
+async function openKanbanNotification(notificationId, cardId) {
+  try {
+    await apiRequest(`/api/kanban/notifications/${encodeURIComponent(notificationId)}`, { method: "PATCH" });
+    state.kanban.notifications = state.kanban.notifications.map((item) => item.id === notificationId ? { ...item, readAt: Math.floor(Date.now() / 1_000) } : item);
+    state.kanban.unreadCount = state.kanban.notifications.filter((item) => !item.readAt).length;
+    updateNotificationBell();
+  } catch {
+    // O cartão ainda pode ser aberto mesmo se o aviso já tiver sido removido.
+  }
+  await showKanban({ focusCardId: cardId });
+}
+
+async function markAllNotificationsRead() {
+  if (!state.kanban.unreadCount) return;
+  try {
+    await apiRequest("/api/kanban/notifications/read", { method: "POST" });
+    const readAt = Math.floor(Date.now() / 1_000);
+    state.kanban.notifications = state.kanban.notifications.map((item) => ({ ...item, readAt: item.readAt || readAt }));
+    state.kanban.unreadCount = 0;
+    updateNotificationBell();
+    renderNotificationPopover();
+  } catch (error) {
+    showToast(error.message);
+  }
+}
+
+function startNotificationPolling() {
+  stopNotificationPolling();
+  notificationPollTimer = setInterval(() => {
+    if (document.visibilityState === "visible") void loadKanbanNotifications({ silent: true });
+  }, 30_000);
+}
+
+function stopNotificationPolling() {
+  if (notificationPollTimer) clearInterval(notificationPollTimer);
+  notificationPollTimer = null;
 }
 
 function renderReport() {
@@ -2161,6 +2550,7 @@ function justifyCotaLine(text) {
 function startFlow(flow, kind = "") {
   state.admin.open = false;
   state.history.open = false;
+  state.kanban.open = false;
   state.flow = flow;
   if (flow === "correspondence" && CORRESPONDENCE_TYPES[kind]) {
     if (state.correspondence.kind !== kind) {
@@ -2183,6 +2573,7 @@ function goHome() {
   state.flow = null;
   state.admin.open = false;
   state.history.open = false;
+  state.kanban.open = false;
   state.step = 0;
   state.validationFields = [];
   state.generation.running = false;
@@ -4370,6 +4761,16 @@ async function handleAction(action, target) {
   if (action === "reject-admin-user") return confirmAdminUserRejection(target.dataset.id);
   if (action === "delete-admin-user") return confirmAdminUserDeletion(target.dataset.id);
   if (action === "show-history") return showDocumentHistory();
+  if (action === "show-kanban") return showKanban();
+  if (action === "refresh-kanban") return loadKanban();
+  if (action === "add-kanban-card") return openKanbanCardDialog();
+  if (action === "edit-kanban-card") return openKanbanCardDialog(target.dataset.id);
+  if (action === "delete-kanban-card") return confirmKanbanCardDeletion(target.dataset.id);
+  if (action === "close-kanban-card") return closeKanbanCardDialog();
+  if (action === "toggle-notifications") return toggleNotificationPopover();
+  if (action === "close-notifications") return closeNotificationPopover();
+  if (action === "open-kanban-notification") return openKanbanNotification(target.dataset.id, target.dataset.cardId);
+  if (action === "read-all-notifications") return markAllNotificationsRead();
   if (action === "refresh-history") return loadDocumentHistory();
   if (action === "download-history") return triggerHistoryDownload(target.dataset.id);
   if (action === "preview-history-pdf") return previewHistoryPdf(target.dataset.id);
@@ -4459,6 +4860,9 @@ async function handleAction(action, target) {
 }
 
 document.addEventListener("click", (event) => {
+  if (state.kanban.notificationsOpen && !event.target.closest(".notification-center")) {
+    closeNotificationPopover();
+  }
   const richTextControl = event.target.closest("[data-rich-command]");
   if (richTextControl) {
     event.preventDefault();
@@ -4578,6 +4982,10 @@ document.addEventListener("input", (event) => {
 document.addEventListener("change", (event) => {
   const target = event.target;
   clearValidationHighlight(target);
+  if (target.dataset.kanbanStatus !== undefined) {
+    moveKanbanCard(target.dataset.id, target.value);
+    return;
+  }
   if (target.dataset.richBlock !== undefined) {
     applyRichTextBlock(target);
     return;
@@ -4623,6 +5031,12 @@ document.addEventListener("change", (event) => {
 });
 
 document.addEventListener("dragover", (event) => {
+  const kanbanColumn = event.target.closest("[data-kanban-column]");
+  if (kanbanColumn && draggedKanbanCardId) {
+    event.preventDefault();
+    kanbanColumn.classList.add("is-drag-over");
+    return;
+  }
   const dropZone = event.target.closest("[data-drop]");
   if (!dropZone) return;
   event.preventDefault();
@@ -4630,16 +5044,44 @@ document.addEventListener("dragover", (event) => {
 });
 
 document.addEventListener("dragleave", (event) => {
+  const kanbanColumn = event.target.closest("[data-kanban-column]");
+  if (kanbanColumn) kanbanColumn.classList.remove("is-drag-over");
   const dropZone = event.target.closest("[data-drop]");
   if (dropZone) dropZone.classList.remove("is-dragging");
 });
 
 document.addEventListener("drop", (event) => {
+  const kanbanColumn = event.target.closest("[data-kanban-column]");
+  if (kanbanColumn && draggedKanbanCardId) {
+    event.preventDefault();
+    kanbanColumn.classList.remove("is-drag-over");
+    const cardId = draggedKanbanCardId;
+    draggedKanbanCardId = "";
+    moveKanbanCard(cardId, kanbanColumn.dataset.kanbanColumn);
+    return;
+  }
   const dropZone = event.target.closest("[data-drop]");
   if (!dropZone) return;
   event.preventDefault();
   dropZone.classList.remove("is-dragging");
   handleFiles(["correspondence-photos", "notification-photos", "warning-photos"].includes(dropZone.dataset.drop) ? dropZone.dataset.drop : "report-photos", event.dataTransfer.files);
+});
+
+document.addEventListener("dragstart", (event) => {
+  const card = event.target.closest("[data-kanban-card-id]");
+  if (!card) return;
+  draggedKanbanCardId = card.dataset.kanbanCardId;
+  card.classList.add("is-dragging");
+  if (event.dataTransfer) {
+    event.dataTransfer.effectAllowed = "move";
+    event.dataTransfer.setData("text/plain", draggedKanbanCardId);
+  }
+});
+
+document.addEventListener("dragend", (event) => {
+  event.target.closest("[data-kanban-card-id]")?.classList.remove("is-dragging");
+  document.querySelectorAll("[data-kanban-column].is-drag-over").forEach((column) => column.classList.remove("is-drag-over"));
+  draggedKanbanCardId = "";
 });
 
 elements.modelSelect.addEventListener("change", () => {
@@ -4684,16 +5126,32 @@ elements.renameForm.addEventListener("submit", async (event) => {
   await submitHistoryRename();
 });
 
+elements.kanbanCardForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  await saveKanbanCard();
+});
+
+elements.kanbanCardDialog.addEventListener("click", (event) => {
+  if (event.target === elements.kanbanCardDialog) closeKanbanCardDialog();
+});
+
 elements.renameDialog.addEventListener("click", (event) => {
   if (event.target === elements.renameDialog) closeHistoryRename();
 });
 
 window.addEventListener("beforeunload", () => {
+  stopNotificationPolling();
   state.report.photos.forEach((photo) => URL.revokeObjectURL(photo.url));
   state.notification.photos.forEach((photo) => URL.revokeObjectURL(photo.url));
   state.warning.photos.forEach((photo) => URL.revokeObjectURL(photo.url));
   if (state.lastDownload?.url) URL.revokeObjectURL(state.lastDownload.url);
   state.history.pdfCache.forEach((cached) => cached.url && URL.revokeObjectURL(cached.url));
+});
+
+document.addEventListener("visibilitychange", () => {
+  if (document.visibilityState === "visible" && state.auth.user) {
+    void loadKanbanNotifications({ silent: true });
+  }
 });
 
 bootstrapAuth();
