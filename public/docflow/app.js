@@ -327,7 +327,9 @@ function createCorrespondenceState(saved = {}) {
     salutationOption: "",
     subject: "",
     baseText: "",
+    baseHtml: "",
     finalText: "",
+    finalHtml: "",
     signatories: [],
     photos: [],
     complete: false,
@@ -1743,6 +1745,147 @@ function renderNotificationReview() {
   <div class="notice"><span aria-hidden="true">✓</span><span><strong>Modelo conferido.</strong> O arquivo será criado com o cabeçalho oficial da Prefeitura de Bertioga e a formatação do documento fornecido.</span></div>`;
 }
 
+const RICH_TEXT_ALLOWED_TAGS = new Set([
+  "P", "DIV", "BR", "STRONG", "B", "EM", "I", "U", "H2", "H3",
+  "UL", "OL", "LI", "TABLE", "THEAD", "TBODY", "TR", "TD", "TH",
+]);
+const RICH_TEXT_BLOCKED_TAGS = new Set(["SCRIPT", "STYLE", "IFRAME", "OBJECT", "EMBED", "LINK", "META"]);
+let richTextSelection = null;
+
+function plainTextToRichHtml(text) {
+  return String(text || "")
+    .replace(/\r\n?/g, "\n")
+    .split(/\n\s*\n/)
+    .filter((paragraph) => paragraph.trim())
+    .map((paragraph) => `<p>${e(paragraph.trim()).replace(/\n/g, "<br>")}</p>`)
+    .join("");
+}
+
+function sanitizeRichTextHtml(value) {
+  const parser = new DOMParser();
+  const parsed = parser.parseFromString(`<body>${String(value || "")}</body>`, "text/html");
+  const cleanNode = (node) => {
+    if (node.nodeType === Node.TEXT_NODE) return e(node.nodeValue || "");
+    if (node.nodeType !== Node.ELEMENT_NODE) return "";
+    if (RICH_TEXT_BLOCKED_TAGS.has(node.tagName)) return "";
+    const children = Array.from(node.childNodes).map(cleanNode).join("");
+    if (!RICH_TEXT_ALLOWED_TAGS.has(node.tagName)) return children;
+    const tagMap = { B: "strong", I: "em", DIV: "p" };
+    const tag = tagMap[node.tagName] || node.tagName.toLowerCase();
+    if (tag === "br") return "<br>";
+    const alignment = String(node.style?.textAlign || node.getAttribute("align") || "").toLowerCase();
+    const alignmentAttribute = ["left", "center", "right", "justify"].includes(alignment)
+      ? ` style="text-align:${alignment}"`
+      : "";
+    return `<${tag}${alignmentAttribute}>${children}</${tag}>`;
+  };
+  return Array.from(parsed.body.childNodes).map(cleanNode).join("");
+}
+
+function richTextHtml(html, text) {
+  return html ? sanitizeRichTextHtml(html) : plainTextToRichHtml(text);
+}
+
+function renderRichTextEditor({ key, html, text, label, placeholder, help }) {
+  const safeKey = e(key);
+  return `<div class="field rich-text-field">
+    <span id="${safeKey}-label">${e(label)}</span>
+    <div class="rich-editor-shell">
+      <div class="rich-editor-toolbar" role="toolbar" aria-label="Formatação do conteúdo">
+        <div class="rich-toolbar-group">
+          <button class="rich-toolbar-button" type="button" data-rich-command="undo" title="Desfazer" aria-label="Desfazer">↶</button>
+          <button class="rich-toolbar-button" type="button" data-rich-command="redo" title="Refazer" aria-label="Refazer">↷</button>
+        </div>
+        <div class="rich-toolbar-separator" aria-hidden="true"></div>
+        <label class="rich-style-select"><span class="sr-only">Estilo do texto</span><select data-rich-block aria-label="Estilo do texto">
+          <option value="p">Normal</option>
+          <option value="h2">Título</option>
+          <option value="h3">Subtítulo</option>
+        </select></label>
+        <div class="rich-toolbar-separator" aria-hidden="true"></div>
+        <div class="rich-toolbar-group">
+          <button class="rich-toolbar-button rich-toolbar-letter" type="button" data-rich-command="bold" title="Negrito" aria-label="Negrito"><strong>B</strong></button>
+          <button class="rich-toolbar-button rich-toolbar-letter" type="button" data-rich-command="italic" title="Itálico" aria-label="Itálico"><em>I</em></button>
+          <button class="rich-toolbar-button rich-toolbar-letter" type="button" data-rich-command="underline" title="Sublinhado" aria-label="Sublinhado"><u>U</u></button>
+        </div>
+        <div class="rich-toolbar-separator" aria-hidden="true"></div>
+        <div class="rich-toolbar-group">
+          <button class="rich-toolbar-button" type="button" data-rich-command="justifyLeft" title="Alinhar à esquerda" aria-label="Alinhar à esquerda"><span class="rich-align-icon is-left" aria-hidden="true"><i></i><i></i><i></i><i></i></span></button>
+          <button class="rich-toolbar-button" type="button" data-rich-command="justifyCenter" title="Centralizar" aria-label="Centralizar"><span class="rich-align-icon is-center" aria-hidden="true"><i></i><i></i><i></i><i></i></span></button>
+          <button class="rich-toolbar-button" type="button" data-rich-command="justifyRight" title="Alinhar à direita" aria-label="Alinhar à direita"><span class="rich-align-icon is-right" aria-hidden="true"><i></i><i></i><i></i><i></i></span></button>
+          <button class="rich-toolbar-button" type="button" data-rich-command="justifyFull" title="Justificar" aria-label="Justificar"><span class="rich-align-icon is-justify" aria-hidden="true"><i></i><i></i><i></i><i></i></span></button>
+        </div>
+        <div class="rich-toolbar-separator" aria-hidden="true"></div>
+        <div class="rich-toolbar-group">
+          <button class="rich-toolbar-button rich-list-icon" type="button" data-rich-command="insertUnorderedList" title="Lista com marcadores" aria-label="Lista com marcadores"><span aria-hidden="true">•</span><span aria-hidden="true">≡</span></button>
+          <button class="rich-toolbar-button rich-list-icon" type="button" data-rich-command="insertOrderedList" title="Lista numerada" aria-label="Lista numerada"><span aria-hidden="true">1.</span><span aria-hidden="true">≡</span></button>
+        </div>
+        <div class="rich-toolbar-separator" aria-hidden="true"></div>
+        <div class="rich-toolbar-group">
+          <button class="rich-toolbar-button rich-table-icon" type="button" data-rich-command="insert-table" title="Inserir tabela 2 × 2" aria-label="Inserir tabela 2 por 2">▦</button>
+          <button class="rich-toolbar-button rich-clear-icon" type="button" data-rich-command="removeFormat" title="Limpar formatação" aria-label="Limpar formatação">T<sub>x</sub></button>
+        </div>
+      </div>
+      <div class="rich-editor" contenteditable="true" role="textbox" aria-multiline="true" aria-labelledby="${safeKey}-label" data-rich-editor="${safeKey}" data-placeholder="${e(placeholder)}" data-maxlength="${MAX_CORRESPONDENCE_TEXT}" spellcheck="true">${richTextHtml(html, text)}</div>
+    </div>
+    <span class="text-counter"><span>${e(help)}</span><span data-rich-counter-for="${safeKey}">${String(text || "").length}/${MAX_CORRESPONDENCE_TEXT}</span></span>
+  </div>`;
+}
+
+function richEditorFromControl(control) {
+  return control.closest(".rich-editor-shell")?.querySelector("[data-rich-editor]") || null;
+}
+
+function plainTextFromRichEditor(editor) {
+  return String(editor?.innerText || "")
+    .replace(/\u00a0/g, " ")
+    .replace(/\r\n?/g, "\n")
+    .replace(/\n{3,}/g, "\n\n")
+    .trim();
+}
+
+function updateRichEditorState(editor) {
+  if (!editor?.dataset.richEditor) return;
+  const field = editor.dataset.richEditor.endsWith(".base") ? "base" : "final";
+  const text = plainTextFromRichEditor(editor);
+  state.correspondence[`${field}Text`] = text;
+  state.correspondence[`${field}Html`] = sanitizeRichTextHtml(editor.innerHTML);
+  const counter = document.querySelector(`[data-rich-counter-for="${editor.dataset.richEditor}"]`);
+  if (counter) counter.textContent = `${text.length}/${MAX_CORRESPONDENCE_TEXT}`;
+  clearValidationHighlight(editor);
+  scheduleSave();
+}
+
+function restoreRichTextSelection(editor) {
+  if (!richTextSelection || richTextSelection.editor !== editor) return;
+  const selection = window.getSelection();
+  selection.removeAllRanges();
+  selection.addRange(richTextSelection.range);
+}
+
+function runRichTextCommand(control) {
+  const editor = richEditorFromControl(control);
+  if (!editor) return;
+  editor.focus({ preventScroll: true });
+  restoreRichTextSelection(editor);
+  const command = control.dataset.richCommand;
+  if (command === "insert-table") {
+    document.execCommand("insertHTML", false, "<table><tbody><tr><td><br></td><td><br></td></tr><tr><td><br></td><td><br></td></tr></tbody></table><p><br></p>");
+  } else {
+    document.execCommand(command, false, null);
+  }
+  updateRichEditorState(editor);
+}
+
+function applyRichTextBlock(control) {
+  const editor = richEditorFromControl(control);
+  if (!editor) return;
+  editor.focus({ preventScroll: true });
+  restoreRichTextSelection(editor);
+  document.execCommand("formatBlock", false, control.value || "p");
+  updateRichEditorState(editor);
+}
+
 function isOfficialCorrespondenceFlow(flow = state.flow) {
   return flow === "correspondence" && ["memorando", "oficio"].includes(state.correspondence.kind);
 }
@@ -1796,8 +1939,8 @@ function renderOfficialCorrespondenceContent() {
   const typeLower = type.label.toLowerCase();
   return `${pageHeading("Etapa 2", `Escreva ${type.article} ${typeLower}`, "Informe o texto e as pessoas que assinarão o documento.")}
   <section class="panel">
-    ${panelHeader(`Texto d${type.article === "a" ? "a" : "o"} ${typeLower}`, "Separe os parágrafos com uma linha em branco; o Word manterá Arial 12, alinhamento justificado e espaçamento de 1,5 linha.")}
-    <label class="field"><span>Conteúdo *</span><textarea data-bind="correspondence.baseText" maxlength="${MAX_CORRESPONDENCE_TEXT}" placeholder="Escreva o texto integral d${type.article === "a" ? "a" : "o"} ${typeLower}…">${e(c.baseText)}</textarea><span class="text-counter"><span>Use parágrafos para organizar as informações</span><span>${c.baseText.length}/${MAX_CORRESPONDENCE_TEXT}</span></span></label>
+    ${panelHeader(`Texto d${type.article === "a" ? "a" : "o"} ${typeLower}`, "Formate o conteúdo como desejar; o Word manterá os estilos, alinhamentos, listas e tabelas aplicados aqui.")}
+    ${renderRichTextEditor({ key: "correspondence.base", html: c.baseHtml, text: c.baseText, label: "Conteúdo *", placeholder: `Escreva o texto integral d${type.article === "a" ? "a" : "o"} ${typeLower}…`, help: "Use a barra para formatar e organizar as informações" })}
   </section>
   <section class="panel">
     ${panelHeader("Assinaturas", "Adicione uma ou mais pessoas. Os nomes ficarão em negrito e os cargos em itálico, organizados em até duas colunas.", `<button class="button button-secondary" type="button" data-action="open-signatures">Configurar assinaturas</button>`)}
@@ -1833,7 +1976,7 @@ function renderOfficialCorrespondenceReview() {
   return `${pageHeading("Etapa 3", `Revise ${type.article} ${typeLower}`, "Confira os dados e ajuste o texto final antes de baixar o Word.")}
   <section class="panel">
     ${panelHeader("Texto final", `Somente o conteúdo deste campo será usado como corpo d${type.article === "a" ? "a" : "o"} ${typeLower}.`, `<button class="button button-secondary" type="button" data-action="improve-correspondence">✦ Revisar com IA</button>`)}
-    <label class="field"><span>Redação final *</span><textarea data-bind="correspondence.finalText" maxlength="${MAX_CORRESPONDENCE_TEXT}">${e(c.finalText)}</textarea><span class="text-counter"><span>Revise nomes, datas, valores e números</span><span>${c.finalText.length}/${MAX_CORRESPONDENCE_TEXT}</span></span></label>
+    ${renderRichTextEditor({ key: "correspondence.final", html: c.finalHtml, text: c.finalText, label: "Redação final *", placeholder: "Revise o texto final…", help: "Revise nomes, datas, valores e números" })}
   </section>
   <div class="summary-grid">
     ${summaryCard(type.label, c.number, `${c.place}, ${formatDateLong(c.date)}`)}
@@ -1887,7 +2030,7 @@ function renderCorrespondenceContent() {
   return `${pageHeading("Etapa 2", `Escreva ${type.article} ${type.label.toLowerCase()}`, "Registre somente os fatos, solicitações e orientações que devem constar no documento.")}
   <section class="panel">
     ${panelHeader("Conteúdo", "Você poderá editar o texto e solicitar uma revisão opcional da IA na próxima etapa.")}
-    <label class="field"><span>Corpo do documento *</span><textarea data-bind="correspondence.baseText" maxlength="${MAX_CORRESPONDENCE_TEXT}" placeholder="Escreva o conteúdo do documento…">${e(c.baseText)}</textarea><span class="text-counter"><span>Use parágrafos para organizar as informações</span><span>${c.baseText.length}/${MAX_CORRESPONDENCE_TEXT}</span></span></label>
+    ${renderRichTextEditor({ key: "correspondence.base", html: c.baseHtml, text: c.baseText, label: "Corpo do documento *", placeholder: "Escreva o conteúdo do documento…", help: "Use a barra para formatar e organizar as informações" })}
   </section>
   <section class="panel">
     ${panelHeader("Assinaturas", "Adicione uma ou mais pessoas. Os nomes ficarão em negrito e os cargos em itálico.", `<button class="button button-secondary" type="button" data-action="open-signatures">Configurar assinaturas</button>`)}
@@ -1902,7 +2045,7 @@ function renderCorrespondenceReview() {
   return `${pageHeading("Etapa 3", `Revise ${type.article} ${type.label.toLowerCase()}`, "Edite livremente, solicite uma revisão opcional da IA ou gere o Word com o texto atual.")}
   <section class="panel">
     ${panelHeader("Texto final", "Somente o conteúdo deste campo será incluído como corpo do documento.", `<button class="button button-secondary" type="button" data-action="improve-correspondence">✦ Revisar com IA</button>`)}
-    <label class="field"><span>Redação final *</span><textarea data-bind="correspondence.finalText" maxlength="${MAX_CORRESPONDENCE_TEXT}">${e(c.finalText)}</textarea><span class="text-counter"><span>Revise nomes, datas e informações sensíveis</span><span>${c.finalText.length}/${MAX_CORRESPONDENCE_TEXT}</span></span></label>
+    ${renderRichTextEditor({ key: "correspondence.final", html: c.finalHtml, text: c.finalText, label: "Redação final *", placeholder: "Revise o texto final…", help: "Revise nomes, datas e informações sensíveis" })}
   </section>
   <div class="summary-grid">
     ${summaryCard("Documento", type.label, c.number || "Sem número")}
@@ -2064,6 +2207,9 @@ async function nextStep() {
     }
     if (state.flow === "correspondence" && state.step === 1 && !state.correspondence.finalText.trim()) {
       state.correspondence.finalText = state.correspondence.baseText.trim();
+      state.correspondence.finalHtml = state.correspondence.baseHtml
+        ? sanitizeRichTextHtml(state.correspondence.baseHtml)
+        : "";
     }
     if (isNoticeFlow() && state.step === 1 && !noticeState().finalText.trim()) {
       noticeState().finalText = noticeState().baseText.trim();
@@ -2230,7 +2376,7 @@ function validateCurrentStep() {
           title: "Complete o conteúdo",
           text: "Informe o texto e selecione pelo menos uma pessoa com nome e cargo para assinar.",
           fields: [
-            !c.baseText.trim() && '[data-bind="correspondence.baseText"]',
+            !c.baseText.trim() && '[data-rich-editor="correspondence.base"]',
             (!c.signatories.length || invalidSignatory) && '[data-signature-target="correspondence"]',
           ],
         });
@@ -2249,7 +2395,7 @@ function validateCurrentStep() {
         showFieldValidationMessage({
           title: "Texto final vazio",
           text: `Mantenha algum conteúdo antes de gerar ${type.article} ${typeLower}.`,
-          fields: ['[data-bind="correspondence.finalText"]'],
+          fields: ['[data-rich-editor="correspondence.final"]'],
         });
         return false;
       }
@@ -2273,7 +2419,7 @@ function validateCurrentStep() {
         title: "Complete o conteúdo",
         text: "Informe o corpo do documento e selecione pelo menos uma pessoa com nome e cargo para assinar.",
         fields: [
-          !c.baseText.trim() && '[data-bind="correspondence.baseText"]',
+          !c.baseText.trim() && '[data-rich-editor="correspondence.base"]',
           (!c.signatories.length || invalidSignatory) && '[data-signature-target="correspondence"]',
         ],
       });
@@ -2283,7 +2429,7 @@ function validateCurrentStep() {
       showFieldValidationMessage({
         title: "Texto final vazio",
         text: "Mantenha algum conteúdo antes de gerar o documento.",
-        fields: ['[data-bind="correspondence.finalText"]'],
+        fields: ['[data-rich-editor="correspondence.final"]'],
       });
       return false;
     }
@@ -2920,6 +3066,7 @@ async function improveCorrespondence() {
       throw new Error("A revisão ficou maior que o limite do documento. O texto anterior foi mantido.");
     }
     c.finalText = reviewed.trim();
+    c.finalHtml = "";
     state.generation.running = false;
     render();
     showToast("Texto revisado. Confira cada informação antes de gerar o Word.");
@@ -3474,6 +3621,132 @@ function paragraphsFromText(text, options = {}) {
     }));
 }
 
+function richTextAlignment(node, fallback) {
+  const { AlignmentType } = window.docx;
+  const value = String(node?.style?.textAlign || node?.getAttribute?.("align") || "").toLowerCase();
+  return {
+    left: AlignmentType.LEFT,
+    center: AlignmentType.CENTER,
+    right: AlignmentType.RIGHT,
+    justify: AlignmentType.JUSTIFIED,
+  }[value] || fallback;
+}
+
+function richTextRuns(nodes, inherited = {}, { official = false } = {}) {
+  const { TextRun } = window.docx;
+  const runs = [];
+  Array.from(nodes || []).forEach((node) => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      const text = String(node.nodeValue || "").replace(/\s+/g, " ");
+      if (!text) return;
+      runs.push(new TextRun({
+        text,
+        font: "Arial",
+        size: inherited.size || (official ? 24 : 22),
+        bold: Boolean(inherited.bold),
+        italics: Boolean(inherited.italics),
+        ...(inherited.underline ? { underline: {} } : {}),
+        color: "000000",
+      }));
+      return;
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) return;
+    if (node.tagName === "BR") {
+      runs.push(new TextRun({ text: "", break: 1, font: "Arial", size: inherited.size || (official ? 24 : 22) }));
+      return;
+    }
+    if (["UL", "OL", "TABLE"].includes(node.tagName)) return;
+    richTextRuns(node.childNodes, {
+      ...inherited,
+      bold: inherited.bold || ["STRONG", "B", "H2", "H3", "TH"].includes(node.tagName),
+      italics: inherited.italics || ["EM", "I"].includes(node.tagName),
+      underline: inherited.underline || node.tagName === "U",
+    }, { official }).forEach((run) => runs.push(run));
+  });
+  return runs;
+}
+
+function richTextParagraph(node, { official = false, listPrefix = "", listLast = false } = {}) {
+  const { Paragraph, TextRun, AlignmentType } = window.docx;
+  const isHeading = ["H2", "H3"].includes(node?.tagName);
+  const size = node?.tagName === "H2" ? 28 : node?.tagName === "H3" ? 26 : (official ? 24 : 22);
+  const contentNodes = node?.nodeType === Node.TEXT_NODE
+    ? [node]
+    : Array.from(node?.childNodes || []).filter((child) => !["UL", "OL"].includes(child.tagName));
+  const children = richTextRuns(contentNodes, { bold: isHeading, size }, { official });
+  if (listPrefix) children.unshift(new TextRun({ text: listPrefix, font: "Arial", size, bold: false, color: "000000" }));
+  if (!children.length) children.push(new TextRun({ text: "", font: "Arial", size }));
+  const defaultAlignment = isHeading ? AlignmentType.LEFT : AlignmentType.JUSTIFIED;
+  return new Paragraph({
+    alignment: richTextAlignment(node, defaultAlignment),
+    ...(official && !isHeading && !listPrefix ? { indent: { firstLine: 1134 } } : {}),
+    ...(listPrefix ? { indent: { left: 540, hanging: 320 } } : {}),
+    keepNext: isHeading,
+    spacing: {
+      before: isHeading ? 180 : 0,
+      after: listPrefix && !listLast ? 60 : (official ? 360 : 300),
+      line: official ? 360 : 300,
+    },
+    children,
+  });
+}
+
+function richTextTable(node, { official = false } = {}) {
+  const { Table, TableRow, TableCell, Paragraph, TextRun, WidthType, BorderStyle, VerticalAlign } = window.docx;
+  const htmlRows = Array.from(node.rows || []);
+  const columnCount = Math.max(1, ...htmlRows.map((row) => row.cells.length));
+  const border = { style: BorderStyle.SINGLE, size: 5, color: "9EA9A3" };
+  const borders = { top: border, bottom: border, left: border, right: border, insideHorizontal: border, insideVertical: border };
+  const rows = htmlRows.map((row) => new TableRow({
+    cantSplit: true,
+    children: Array.from(row.cells).map((cell) => {
+      const cellRuns = richTextRuns(cell.childNodes, { bold: cell.tagName === "TH" }, { official });
+      return new TableCell({
+        width: { size: 100 / columnCount, type: WidthType.PERCENTAGE },
+        verticalAlign: VerticalAlign.CENTER,
+        margins: { top: 90, bottom: 90, left: 100, right: 100 },
+        children: [new Paragraph({
+          alignment: richTextAlignment(cell, window.docx.AlignmentType.LEFT),
+          spacing: { after: 0, line: official ? 300 : 276 },
+          children: cellRuns.length ? cellRuns : [new TextRun({ text: "", font: "Arial", size: official ? 24 : 22 })],
+        })],
+      });
+    }),
+  }));
+  return new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, borders, rows });
+}
+
+function richCorrespondenceDocumentBlocks(html, fallbackText, { official = false } = {}) {
+  if (!html) return official ? officialCorrespondenceBodyParagraphs(fallbackText) : paragraphsFromText(fallbackText);
+  const parser = new DOMParser();
+  const parsed = parser.parseFromString(`<body>${sanitizeRichTextHtml(html)}</body>`, "text/html");
+  const blocks = [];
+  Array.from(parsed.body.childNodes).forEach((node) => {
+    if (node.nodeType === Node.TEXT_NODE) {
+      if (node.nodeValue?.trim()) blocks.push(richTextParagraph(node, { official }));
+      return;
+    }
+    if (node.nodeType !== Node.ELEMENT_NODE) return;
+    if (node.tagName === "TABLE") {
+      if (node.rows.length) blocks.push(richTextTable(node, { official }));
+      return;
+    }
+    if (["UL", "OL"].includes(node.tagName)) {
+      const items = Array.from(node.children).filter((child) => child.tagName === "LI");
+      items.forEach((item, index) => blocks.push(richTextParagraph(item, {
+        official,
+        listPrefix: node.tagName === "OL" ? `${index + 1}. ` : "• ",
+        listLast: index === items.length - 1,
+      })));
+      return;
+    }
+    blocks.push(richTextParagraph(node, { official }));
+  });
+  return blocks.length
+    ? blocks
+    : (official ? officialCorrespondenceBodyParagraphs(fallbackText) : paragraphsFromText(fallbackText));
+}
+
 async function buildReportDocument(onProgress) {
   const {
     Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, WidthType,
@@ -3864,7 +4137,7 @@ function officialCorrespondenceBodyParagraphs(text) {
     .map((paragraph) => new Paragraph({
       alignment: AlignmentType.JUSTIFIED,
       indent: { firstLine: 1134 },
-      spacing: { before: 100, after: 100, line: 360 },
+      spacing: { before: 0, after: 360, line: 360 },
       children: [officialCorrespondenceRun(paragraph.replace(/\s*\n\s*/g, " ").trim())],
     }));
 }
@@ -3955,8 +4228,8 @@ async function buildOfficialCorrespondenceDocument(onProgress) {
   ];
 
   onProgress(45, "Formatando o texto em Arial 12 e espaçamento de 1,5 linha…");
-  children.push(...officialCorrespondenceBodyParagraphs(c.finalText));
-  for (let index = 0; index < 5; index += 1) children.push(officialCorrespondenceBlankParagraph());
+  children.push(...richCorrespondenceDocumentBlocks(c.finalHtml, c.finalText, { official: true }));
+  children.push(officialCorrespondenceBlankParagraph());
   children.push(correspondenceSignatureTable(c.signatories, { official: true }));
 
   for (let index = 0; index < c.photos.length; index += 1) {
@@ -4033,7 +4306,7 @@ async function buildCorrespondenceDocument(onProgress) {
   }));
 
   onProgress(55, "Formatando o conteúdo…");
-  children.push(...paragraphsFromText(c.finalText));
+  children.push(...richCorrespondenceDocumentBlocks(c.finalHtml, c.finalText));
   children.push(new Paragraph({ spacing: { before: 420, after: 0 }, children: [] }));
   children.push(correspondenceSignatureTable(c.signatories));
 
@@ -4186,6 +4459,12 @@ async function handleAction(action, target) {
 }
 
 document.addEventListener("click", (event) => {
+  const richTextControl = event.target.closest("[data-rich-command]");
+  if (richTextControl) {
+    event.preventDefault();
+    runRichTextCommand(richTextControl);
+    return;
+  }
   const authTarget = event.target.closest("[data-auth-view]");
   if (authTarget) {
     event.preventDefault();
@@ -4196,6 +4475,63 @@ document.addEventListener("click", (event) => {
   if (!target) return;
   event.preventDefault();
   handleAction(target.dataset.action, target);
+});
+
+document.addEventListener("pointerdown", (event) => {
+  if (event.target.closest("[data-rich-command]")) event.preventDefault();
+});
+
+document.addEventListener("selectionchange", () => {
+  const selection = window.getSelection();
+  if (!selection?.rangeCount) return;
+  const anchor = selection.anchorNode?.nodeType === Node.ELEMENT_NODE
+    ? selection.anchorNode
+    : selection.anchorNode?.parentElement;
+  const editor = anchor?.closest?.("[data-rich-editor]");
+  if (editor) richTextSelection = { editor, range: selection.getRangeAt(0).cloneRange() };
+});
+
+document.addEventListener("beforeinput", (event) => {
+  const editor = event.target.closest?.("[data-rich-editor]");
+  if (!editor || !event.inputType?.startsWith("insert") || event.inputType === "insertFromPaste") return;
+  const selectionLength = window.getSelection()?.toString().length || 0;
+  const addedLength = String(event.data || "").length;
+  if (plainTextFromRichEditor(editor).length - selectionLength + addedLength > MAX_CORRESPONDENCE_TEXT) {
+    event.preventDefault();
+    showToast(`O conteúdo pode ter no máximo ${MAX_CORRESPONDENCE_TEXT} caracteres.`);
+  }
+});
+
+document.addEventListener("paste", (event) => {
+  const editor = event.target.closest?.("[data-rich-editor]");
+  if (!editor) return;
+  event.preventDefault();
+  const clipboard = event.clipboardData;
+  const selectedLength = window.getSelection()?.toString().length || 0;
+  const remaining = Math.max(0, MAX_CORRESPONDENCE_TEXT - plainTextFromRichEditor(editor).length + selectedLength);
+  const clipboardHtml = clipboard?.getData("text/html") || "";
+  const clipboardText = clipboard?.getData("text/plain") || "";
+  const safeHtml = clipboardHtml ? sanitizeRichTextHtml(clipboardHtml) : "";
+  const pastedText = clipboardText || (() => {
+    const holder = document.createElement("div");
+    holder.innerHTML = safeHtml;
+    return holder.innerText;
+  })();
+  if (pastedText.length > remaining || !safeHtml) {
+    document.execCommand("insertText", false, pastedText.slice(0, remaining));
+    if (pastedText.length > remaining) showToast(`O conteúdo foi limitado a ${MAX_CORRESPONDENCE_TEXT} caracteres.`);
+  } else {
+    document.execCommand("insertHTML", false, safeHtml);
+  }
+  updateRichEditorState(editor);
+});
+
+document.addEventListener("focusout", (event) => {
+  const editor = event.target.closest?.("[data-rich-editor]");
+  if (!editor) return;
+  const safeHtml = sanitizeRichTextHtml(editor.innerHTML);
+  if (safeHtml !== editor.innerHTML) editor.innerHTML = safeHtml;
+  updateRichEditorState(editor);
 });
 
 document.addEventListener("keydown", (event) => {
@@ -4209,6 +4545,10 @@ document.addEventListener("keydown", (event) => {
 document.addEventListener("input", (event) => {
   const target = event.target;
   clearValidationHighlight(target);
+  if (target.dataset.richEditor) {
+    updateRichEditorState(target);
+    return;
+  }
   if (target.dataset.bind) {
     setPath(target.dataset.bind, getBoundValue(target));
     updateCounter(target);
@@ -4238,6 +4578,10 @@ document.addEventListener("input", (event) => {
 document.addEventListener("change", (event) => {
   const target = event.target;
   clearValidationHighlight(target);
+  if (target.dataset.richBlock !== undefined) {
+    applyRichTextBlock(target);
+    return;
+  }
   if (target.dataset.correspondenceRecipientSelect !== undefined) {
     const selectedValue = target.value;
     state.correspondence.recipientSecretariat = selectedValue;

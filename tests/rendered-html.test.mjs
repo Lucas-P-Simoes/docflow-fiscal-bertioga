@@ -96,13 +96,49 @@ test("highlights missing document fields and clears the error after correction",
   assert.match(app, /requestAnimationFrame\(applyValidationHighlights\)/);
   assert.match(app, /document\.addEventListener\("input",[\s\S]*?clearValidationHighlight\(target\)/);
   assert.match(app, /document\.addEventListener\("change",[\s\S]*?clearValidationHighlight\(target\)/);
-  assert.match(app, /\!r\.title\.trim\(\) && '\[data-bind="report\.title"\]'/);
-  assert.match(app, /\!c\.signatories\.length \|\| invalidSignatory/);
+  assert.match(app, /!r\.title\.trim\(\) && '\[data-bind="report\.title"\]'/);
+  assert.match(app, /!c\.signatories\.length \|\| invalidSignatory/);
   assert.match(app, /\[data-signature-target="cota"\]/);
   assert.match(styles, /input\.is-validation-error/);
   assert.match(styles, /border-color:\s*#c23a32/);
   assert.match(styles, /\.upload-box\.is-validation-error/);
   assert.match(styles, /\.field:has\(\.is-validation-error\)/);
+});
+
+
+test("provides a safe rich-text editor for correspondence content and keeps formatting in Word", async () => {
+  const [app, styles] = await Promise.all([
+    readFile(new URL("public/docflow/app.js", siteRoot), "utf8"),
+    readFile(new URL("public/docflow/styles.css", siteRoot), "utf8"),
+  ]);
+
+  assert.match(app, /function renderRichTextEditor/);
+  assert.match(app, /contenteditable="true"/);
+  assert.match(app, /data-rich-command="undo"/);
+  assert.match(app, /data-rich-command="redo"/);
+  assert.match(app, /data-rich-command="bold"/);
+  assert.match(app, /data-rich-command="italic"/);
+  assert.match(app, /data-rich-command="underline"/);
+  assert.match(app, /data-rich-command="justifyFull"/);
+  assert.match(app, /data-rich-command="insertUnorderedList"/);
+  assert.match(app, /data-rich-command="insertOrderedList"/);
+  assert.match(app, /data-rich-command="insert-table"/);
+  assert.match(app, /data-rich-command="removeFormat"/);
+  assert.match(app, /function sanitizeRichTextHtml/);
+  assert.match(app, /RICH_TEXT_BLOCKED_TAGS/);
+  assert.match(app, /state\.correspondence\.finalHtml = state\.correspondence\.baseHtml/);
+  assert.match(app, /c\.finalHtml = ""/);
+  assert.match(app, /function richCorrespondenceDocumentBlocks/);
+  assert.match(app, /richCorrespondenceDocumentBlocks\(c\.finalHtml, c\.finalText, \{ official: true \}\)/);
+  assert.match(app, /underline: \{\}/);
+  assert.match(app, /listPrefix: node\.tagName === "OL"/);
+  assert.match(app, /richTextTable\(node, \{ official \}\)/);
+  assert.match(app, /spacing: \{ before: 0, after: 360, line: 360 \}/);
+  assert.match(app, /\[data-rich-editor="correspondence\.base"\]/);
+  assert.match(app, /\[data-rich-editor="correspondence\.final"\]/);
+  assert.match(styles, /\.rich-editor-toolbar/);
+  assert.match(styles, /\.rich-editor-shell:has\(\.rich-editor\.is-validation-error\)/);
+  assert.match(styles, /\.rich-editor table/);
 });
 
 
@@ -300,7 +336,7 @@ test("builds memoranda and oficios from the same supplied Bertioga model", async
   assert.match(app, /data-bind="correspondence\.number"/);
   assert.match(app, /data-bind="correspondence\.recipient"/);
   assert.match(app, /data-bind="correspondence\.salutation"/);
-  assert.match(app, /data-bind="correspondence\.baseText"/);
+  assert.match(app, /data-rich-editor="correspondence\.base"/);
   assert.match(app, /data-signature-target="correspondence"/);
   assert.match(app, /signatories:\s*\[\]/);
   assert.match(app, /state\.correspondence\.signatories\.push/);
@@ -315,7 +351,7 @@ test("builds memoranda and oficios from the same supplied Bertioga model", async
   assert.match(app, /async function buildOfficialCorrespondenceDocument/);
   assert.match(app, /\$\{type\.label\} nº \$\{c\.number\.trim\(\)\}/);
   assert.match(app, /font:\s*"Arial",\s*size:\s*24/);
-  assert.match(app, /spacing:\s*\{\s*before:\s*100,\s*after:\s*100,\s*line:\s*360\s*\}/);
+  assert.match(app, /spacing:\s*\{\s*before:\s*0,\s*after:\s*360,\s*line:\s*360\s*\}/);
   assert.match(app, /memorandum_content:\s*\{[\s\S]*?type:\s*PatchType\.DOCUMENT/);
   assert.match(app, /imageRunFor\(photo\.file, 500, 570/);
   assert.match(app, /Imagem \$\{String\(index \+ 1\)\.padStart\(2, "0"\)\} - \$\{photo\.caption\.trim\(\)\}/);
