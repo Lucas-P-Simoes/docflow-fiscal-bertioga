@@ -1529,6 +1529,30 @@ select:focus {
   box-shadow: 0 0 0 3px rgba(31, 107, 80, 0.1);
 }
 
+input.is-validation-error,
+textarea.is-validation-error,
+select.is-validation-error,
+.upload-box.is-validation-error,
+input.is-validation-error:hover,
+textarea.is-validation-error:hover,
+select.is-validation-error:hover,
+input.is-validation-error:focus,
+textarea.is-validation-error:focus,
+select.is-validation-error:focus {
+  border-color: #c23a32;
+  outline: 0;
+  box-shadow: 0 0 0 3px rgba(194, 58, 50, 0.14);
+}
+
+.upload-box.is-validation-error {
+  border-style: solid;
+  background: #fff8f7;
+}
+
+.field:has(.is-validation-error) > span:first-child {
+  color: #a92f29;
+}
+
 input::placeholder,
 textarea::placeholder {
   color: #9ba5a0;

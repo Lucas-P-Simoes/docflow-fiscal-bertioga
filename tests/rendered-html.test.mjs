@@ -81,6 +81,31 @@ test("ships the standard letterhead template and fills it in place", async () =>
 });
 
 
+test("highlights missing document fields and clears the error after correction", async () => {
+  const [app, styles] = await Promise.all([
+    readFile(new URL("public/docflow/app.js", siteRoot), "utf8"),
+    readFile(new URL("public/docflow/styles.css", siteRoot), "utf8"),
+  ]);
+
+  assert.match(app, /function showFieldValidationMessage/);
+  assert.match(app, /classList\.add\("is-validation-error"\)/);
+  assert.match(app, /setAttribute\("aria-invalid", "true"\)/);
+  assert.match(app, /function clearValidationHighlight\(target\)/);
+  assert.match(app, /validationFields:\s*\[\]/);
+  assert.match(app, /function applyValidationHighlights/);
+  assert.match(app, /requestAnimationFrame\(applyValidationHighlights\)/);
+  assert.match(app, /document\.addEventListener\("input",[\s\S]*?clearValidationHighlight\(target\)/);
+  assert.match(app, /document\.addEventListener\("change",[\s\S]*?clearValidationHighlight\(target\)/);
+  assert.match(app, /\!r\.title\.trim\(\) && '\[data-bind="report\.title"\]'/);
+  assert.match(app, /\!c\.signatories\.length \|\| invalidSignatory/);
+  assert.match(app, /\[data-signature-target="cota"\]/);
+  assert.match(styles, /input\.is-validation-error/);
+  assert.match(styles, /border-color:\s*#c23a32/);
+  assert.match(styles, /\.upload-box\.is-validation-error/);
+  assert.match(styles, /\.field:has\(\.is-validation-error\)/);
+});
+
+
 test("keeps the editable and deployable DocFlow assets synchronized", async () => {
   const [
     sourceApp,

@@ -254,6 +254,7 @@ const state = {
   history: createHistoryState(),
   admin: createAdminState(),
   messageCallbacks: new Map(),
+  validationFields: [],
 };
 
 let toastTimer = null;
@@ -1025,6 +1026,7 @@ function render() {
             ? renderOfficialCorrespondence()
             : renderCorrespondence();
     configureActionBar();
+    if (state.validationFields.length) requestAnimationFrame(applyValidationHighlights);
   }
 }
 
@@ -2027,6 +2029,7 @@ function startFlow(flow, kind = "") {
   }
   if (isNoticeFlow(flow)) noticeState(flow).complete = false;
   state.step = 0;
+  state.validationFields = [];
   state.generation = { running: false, progress: 0, message: "" };
   currentData().complete = false;
   render();
@@ -2038,6 +2041,7 @@ function goHome() {
   state.admin.open = false;
   state.history.open = false;
   state.step = 0;
+  state.validationFields = [];
   state.generation.running = false;
   render();
   focusMain();
@@ -2081,31 +2085,116 @@ function previousStep() {
     return;
   }
   state.step -= 1;
+  state.validationFields = [];
   render();
   focusMain();
 }
 
+function clearValidationHighlights() {
+  state.validationFields = [];
+  document.querySelectorAll(".is-validation-error").forEach((field) => {
+    field.classList.remove("is-validation-error");
+    field.removeAttribute("aria-invalid");
+  });
+}
+
+function clearValidationHighlight(target) {
+  const field = target?.closest?.(".is-validation-error") || (target?.matches?.(".is-validation-error") ? target : null);
+  if (!field) return;
+  field.classList.remove("is-validation-error");
+  field.removeAttribute("aria-invalid");
+  state.validationFields = state.validationFields.filter((selector) =>
+    !target?.matches?.(selector) && !target?.closest?.(selector),
+  );
+}
+
+function validationElements(fields = []) {
+  const found = [];
+  fields.forEach((field) => {
+    if (!field) return;
+    if (typeof field === "string") {
+      document.querySelectorAll(field).forEach((element) => found.push(element));
+    } else {
+      found.push(field);
+    }
+  });
+  return [...new Set(found)];
+}
+
+function showFieldValidationMessage({ title, text, fields }) {
+  state.validationFields = fields.filter((field) => typeof field === "string");
+  const invalidFields = validationElements(fields);
+  invalidFields.forEach((field) => {
+    field.classList.add("is-validation-error");
+    field.setAttribute("aria-invalid", "true");
+  });
+  const firstField = invalidFields[0];
+  showMessage({
+    title,
+    text,
+    actions: [{
+      label: "Entendi",
+      primary: true,
+      onClick: () => requestAnimationFrame(() => {
+        firstField?.scrollIntoView?.({ behavior: "smooth", block: "center" });
+        firstField?.focus?.({ preventScroll: true });
+      }),
+    }],
+  });
+}
+
+function applyValidationHighlights() {
+  validationElements(state.validationFields).forEach((field) => {
+    field.classList.add("is-validation-error");
+    field.setAttribute("aria-invalid", "true");
+  });
+}
+
 function validateCurrentStep() {
+  clearValidationHighlights();
   if (state.flow === "report") {
     const r = state.report;
     if (state.step === 0) {
       if (!r.title.trim() || !r.date || !r.introduction.trim()) {
-        showMessage({ title: "Complete os dados principais", text: "Informe o título, a data e a introdução antes de continuar." });
+        showFieldValidationMessage({
+          title: "Complete os dados principais",
+          text: "Informe o título, a data e a introdução antes de continuar.",
+          fields: [
+            !r.title.trim() && '[data-bind="report.title"]',
+            !r.date && '[data-bind="report.date"]',
+            !r.introduction.trim() && '[data-bind="report.introduction"]',
+          ],
+        });
         return false;
       }
     }
     if (state.step === 1 && !r.photos.length) {
-      showMessage({ title: "Adicione as fotografias", text: "Selecione pelo menos uma imagem para montar o relatório." });
+      showFieldValidationMessage({
+        title: "Adicione as fotografias",
+        text: "Selecione pelo menos uma imagem para montar o relatório.",
+        fields: ['[data-drop="report-photos"]'],
+      });
       return false;
     }
     if (state.step === 2) {
-      const invalidTopic = r.topics.find((topic) => !topic.title.trim() || !topic.text.trim());
-      if (invalidTopic) {
-        showMessage({ title: "Complete os tópicos", text: "Todo tópico adicionado precisa ter título e texto, ou deve ser removido." });
+      const invalidTopicFields = r.topics.flatMap((topic) => [
+        !topic.title.trim() && `[data-topic-field="title"][data-id="${topic.id}"]`,
+        !topic.text.trim() && `[data-topic-field="text"][data-id="${topic.id}"]`,
+      ]).filter(Boolean);
+      if (invalidTopicFields.length) {
+        showFieldValidationMessage({
+          title: "Complete os tópicos",
+          text: "Todo tópico adicionado precisa ter título e texto, ou deve ser removido.",
+          fields: invalidTopicFields,
+        });
         return false;
       }
       if (!r.responsibles.length) {
-        showMessage({ title: "Selecione um responsável", text: "Escolha pelo menos uma pessoa para a área de assinaturas." });
+        showFieldValidationMessage({
+          title: "Selecione um responsável",
+          text: "Escolha pelo menos uma pessoa para a área de assinaturas.",
+          fields: ['[data-signature-target="report"]'],
+        });
         return false;
       }
     }
@@ -2118,35 +2207,84 @@ function validateCurrentStep() {
       const type = correspondenceType();
       const typeLower = type.label.toLowerCase();
       if (state.step === 0 && (!c.place.trim() || !c.date || !c.number.trim() || !c.recipient.trim() || !c.salutation.trim())) {
-        showMessage({ title: "Complete a identificação", text: `Informe cidade, data, número d${type.article === "a" ? "a" : "o"} ${typeLower}, destinatário e saudação antes de continuar.` });
+        showFieldValidationMessage({
+          title: "Complete a identificação",
+          text: `Informe cidade, data, número d${type.article === "a" ? "a" : "o"} ${typeLower}, destinatário e saudação antes de continuar.`,
+          fields: [
+            !c.place.trim() && '[data-bind="correspondence.place"]',
+            !c.date && '[data-bind="correspondence.date"]',
+            !c.number.trim() && '[data-bind="correspondence.number"]',
+            !c.recipient.trim() && (c.recipientSecretariat === OTHER_RECIPIENT_VALUE
+              ? '[data-bind="correspondence.recipient"]'
+              : "[data-correspondence-recipient-select]"),
+            !c.salutation.trim() && (c.salutationOption === OTHER_SALUTATION_VALUE
+              ? '[data-bind="correspondence.salutation"]'
+              : "[data-correspondence-salutation-select]"),
+          ],
+        });
         return false;
       }
       const invalidSignatory = c.signatories.find((item) => !item.name.trim() || !item.role.trim());
       if (state.step === 1 && (!c.baseText.trim() || !c.signatories.length || invalidSignatory)) {
-        showMessage({ title: "Complete o conteúdo", text: "Informe o texto e selecione pelo menos uma pessoa com nome e cargo para assinar." });
+        showFieldValidationMessage({
+          title: "Complete o conteúdo",
+          text: "Informe o texto e selecione pelo menos uma pessoa com nome e cargo para assinar.",
+          fields: [
+            !c.baseText.trim() && '[data-bind="correspondence.baseText"]',
+            (!c.signatories.length || invalidSignatory) && '[data-signature-target="correspondence"]',
+          ],
+        });
         return false;
       }
-      if (state.step === 1 && c.photos.some((photo) => !photo.caption.trim())) {
-        showMessage({ title: "Complete as legendas", text: `Toda foto anexada a${type.article} ${typeLower} precisa ter uma legenda, ou deve ser removida.` });
+      const photosWithoutCaption = c.photos.filter((photo) => !photo.caption.trim());
+      if (state.step === 1 && photosWithoutCaption.length) {
+        showFieldValidationMessage({
+          title: "Complete as legendas",
+          text: `Toda foto anexada a${type.article} ${typeLower} precisa ter uma legenda, ou deve ser removida.`,
+          fields: photosWithoutCaption.map((photo) => `[data-correspondence-photo-caption="${photo.id}"]`),
+        });
         return false;
       }
       if (state.step === 2 && !c.finalText.trim()) {
-        showMessage({ title: "Texto final vazio", text: `Mantenha algum conteúdo antes de gerar ${type.article} ${typeLower}.` });
+        showFieldValidationMessage({
+          title: "Texto final vazio",
+          text: `Mantenha algum conteúdo antes de gerar ${type.article} ${typeLower}.`,
+          fields: ['[data-bind="correspondence.finalText"]'],
+        });
         return false;
       }
       return true;
     }
     if (state.step === 0 && (!c.date || !c.recipient.trim() || !c.subject.trim())) {
-      showMessage({ title: "Complete os dados do documento", text: "Informe a data, o destinatário e o assunto antes de continuar." });
+      showFieldValidationMessage({
+        title: "Complete os dados do documento",
+        text: "Informe a data, o destinatário e o assunto antes de continuar.",
+        fields: [
+          !c.date && '[data-bind="correspondence.date"]',
+          !c.recipient.trim() && '[data-bind="correspondence.recipient"]',
+          !c.subject.trim() && '[data-bind="correspondence.subject"]',
+        ],
+      });
       return false;
     }
     const invalidSignatory = c.signatories.find((item) => !item.name.trim() || !item.role.trim());
     if (state.step === 1 && (!c.baseText.trim() || !c.signatories.length || invalidSignatory)) {
-      showMessage({ title: "Complete o conteúdo", text: "Informe o corpo do documento e selecione pelo menos uma pessoa com nome e cargo para assinar." });
+      showFieldValidationMessage({
+        title: "Complete o conteúdo",
+        text: "Informe o corpo do documento e selecione pelo menos uma pessoa com nome e cargo para assinar.",
+        fields: [
+          !c.baseText.trim() && '[data-bind="correspondence.baseText"]',
+          (!c.signatories.length || invalidSignatory) && '[data-signature-target="correspondence"]',
+        ],
+      });
       return false;
     }
     if (state.step === 2 && !c.finalText.trim()) {
-      showMessage({ title: "Texto final vazio", text: "Mantenha algum conteúdo antes de gerar o documento." });
+      showFieldValidationMessage({
+        title: "Texto final vazio",
+        text: "Mantenha algum conteúdo antes de gerar o documento.",
+        fields: ['[data-bind="correspondence.finalText"]'],
+      });
       return false;
     }
     return true;
@@ -2156,27 +2294,56 @@ function validateCurrentStep() {
     const n = noticeState();
     const notice = noticeCopy();
     if (state.step === 0 && (!n.city.trim() || !n.date || !n.number.trim() || !n.process.trim() || !n.work.trim() || !n.contractor.trim())) {
-      showMessage({ title: "Complete a identificação", text: `Informe cidade, data, número da ${notice.lower}, processo, obra e contratada antes de continuar.` });
+      showFieldValidationMessage({
+        title: "Complete a identificação",
+        text: `Informe cidade, data, número da ${notice.lower}, processo, obra e contratada antes de continuar.`,
+        fields: [
+          !n.city.trim() && `[data-bind="${notice.key}.city"]`,
+          !n.date && `[data-bind="${notice.key}.date"]`,
+          !n.number.trim() && `[data-bind="${notice.key}.number"]`,
+          !n.process.trim() && `[data-bind="${notice.key}.process"]`,
+          !n.work.trim() && `[data-bind="${notice.key}.work"]`,
+          !n.contractor.trim() && `[data-bind="${notice.key}.contractor"]`,
+        ],
+      });
       return false;
     }
     if (state.step === 1) {
       if (!n.baseText.trim()) {
-        showMessage({ title: "Informe o texto", text: `Escreva o conteúdo da ${notice.lower} antes de continuar.` });
+        showFieldValidationMessage({
+          title: "Informe o texto",
+          text: `Escreva o conteúdo da ${notice.lower} antes de continuar.`,
+          fields: [`[data-bind="${notice.key}.baseText"]`],
+        });
         return false;
       }
-      const invalidSigner = n.signatories.find((item) => !item.name.trim() || !item.role.trim());
-      if (!n.signatories.length || invalidSigner) {
-        showMessage({ title: "Complete as assinaturas", text: "Informe o nome e o respectivo cargo de cada pessoa que vai assinar." });
+      const invalidSigners = n.signatories.filter((item) => !item.name.trim() || !item.role.trim());
+      if (!n.signatories.length || invalidSigners.length) {
+        showFieldValidationMessage({
+          title: "Complete as assinaturas",
+          text: "Informe o nome e o respectivo cargo de cada pessoa que vai assinar.",
+          fields: invalidSigners.length
+            ? invalidSigners.map((item) => `[data-signature-target="notice"][data-id="${item.id}"]`)
+            : ['[data-signature-target="notice"]'],
+        });
         return false;
       }
-      const photoWithoutCaption = n.photos.find((photo) => !photo.caption.trim());
-      if (photoWithoutCaption) {
-        showMessage({ title: "Complete as legendas", text: "Toda foto anexada precisa ter uma legenda, ou deve ser removida." });
+      const photosWithoutCaption = n.photos.filter((photo) => !photo.caption.trim());
+      if (photosWithoutCaption.length) {
+        showFieldValidationMessage({
+          title: "Complete as legendas",
+          text: "Toda foto anexada precisa ter uma legenda, ou deve ser removida.",
+          fields: photosWithoutCaption.map((photo) => `[data-notification-photo-caption="${photo.id}"]`),
+        });
         return false;
       }
     }
     if (state.step === 2 && !n.finalText.trim()) {
-      showMessage({ title: "Texto final vazio", text: `Mantenha algum conteúdo antes de gerar a ${notice.lower}.` });
+      showFieldValidationMessage({
+        title: "Texto final vazio",
+        text: `Mantenha algum conteúdo antes de gerar a ${notice.lower}.`,
+        fields: [`[data-bind="${notice.key}.finalText"]`],
+      });
       return false;
     }
     return true;
@@ -2185,27 +2352,47 @@ function validateCurrentStep() {
   const c = state.cota;
   if (state.step === 0) {
     if (!c.baseText.trim()) {
-      showMessage({ title: "Escreva o texto-base", text: "Informe a ideia que deverá constar na folha de cota." });
+      showFieldValidationMessage({
+        title: "Escreva o texto-base",
+        text: "Informe a ideia que deverá constar na folha de cota.",
+        fields: ['[data-bind="cota.baseText"]'],
+      });
       return false;
     }
     if (c.year && !/^\d{4}$/.test(c.year)) {
-      showMessage({ title: "Ano inválido", text: "Informe o ano com quatro dígitos, por exemplo 2026." });
+      showFieldValidationMessage({
+        title: "Ano inválido",
+        text: "Informe o ano com quatro dígitos, por exemplo 2026.",
+        fields: ['[data-bind="cota.year"]'],
+      });
       return false;
     }
   }
   if (state.step === 1) {
     const metrics = cotaMetrics(c.finalText);
     if (!c.finalText.trim()) {
-      showMessage({ title: "Texto final vazio", text: "Mantenha algum conteúdo antes de gerar o documento." });
+      showFieldValidationMessage({
+        title: "Texto final vazio",
+        text: "Mantenha algum conteúdo antes de gerar o documento.",
+        fields: ['[data-bind="cota.finalText"]'],
+      });
       return false;
     }
     if (metrics.characters > MAX_COTA_TEXT || metrics.lines > MAX_COTA_LINES) {
-      showMessage({ title: "Texto acima da capacidade", text: `Reduza o conteúdo para no máximo ${MAX_COTA_TEXT} caracteres e ${MAX_COTA_LINES} linhas estimadas.` });
+      showFieldValidationMessage({
+        title: "Texto acima da capacidade",
+        text: `Reduza o conteúdo para no máximo ${MAX_COTA_TEXT} caracteres e ${MAX_COTA_LINES} linhas estimadas.`,
+        fields: ['[data-bind="cota.finalText"]'],
+      });
       return false;
     }
   }
   if (state.step === 2 && (!c.signer.trim() || !c.signerRole.trim())) {
-    showMessage({ title: "Selecione a assinatura", text: "Escolha a pessoa que assinará a folha de cota antes de gerar o Word." });
+    showFieldValidationMessage({
+      title: "Selecione a assinatura",
+      text: "Escolha a pessoa que assinará a folha de cota antes de gerar o Word.",
+      fields: ['[data-signature-target="cota"]'],
+    });
     return false;
   }
   return true;
@@ -4021,6 +4208,7 @@ document.addEventListener("keydown", (event) => {
 
 document.addEventListener("input", (event) => {
   const target = event.target;
+  clearValidationHighlight(target);
   if (target.dataset.bind) {
     setPath(target.dataset.bind, getBoundValue(target));
     updateCounter(target);
@@ -4049,6 +4237,7 @@ document.addEventListener("input", (event) => {
 
 document.addEventListener("change", (event) => {
   const target = event.target;
+  clearValidationHighlight(target);
   if (target.dataset.correspondenceRecipientSelect !== undefined) {
     const selectedValue = target.value;
     state.correspondence.recipientSecretariat = selectedValue;
