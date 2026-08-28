@@ -327,9 +327,7 @@ function createCorrespondenceState(saved = {}) {
     subject: "",
     baseText: "",
     finalText: "",
-    signer: "",
-    signerRole: "",
-    signerProfileId: "",
+    signatories: [],
     photos: [],
     complete: false,
   };
@@ -484,6 +482,21 @@ function signaturePreview(profile, emptyText = "Nenhuma assinatura selecionada")
   return `<div class="signature-preview"><strong>${e(profile.name)}</strong><em>${e(profile.role)}</em></div>`;
 }
 
+function renderCorrespondenceSignatureSelector() {
+  const c = state.correspondence;
+  return `<label class="field signature-select-field">
+      <span>Adicionar pessoa</span>
+      <select data-signature-target="correspondence" ${state.signatures.loading ? "disabled" : ""}>${signatureSelectOptions("", "Selecione uma pessoa")}</select>
+    </label>
+    <div class="selected-signature-list">
+      ${c.signatories.length ? c.signatories.map((signature, index) => `<article class="selected-signature-card">
+        <span class="signatory-index">${String(index + 1).padStart(2, "0")}</span>
+        <div class="signature-profile-copy"><strong>${e(signature.name)}</strong><em>${e(signature.role)}</em></div>
+        <button class="icon-button" type="button" data-action="remove-correspondence-signature" data-index="${index}" aria-label="Remover assinatura de ${e(signature.name)}" title="Remover">×</button>
+      </article>`).join("") : `<div class="signature-profile-state"><strong>Nenhuma assinatura selecionada</strong><span>Use o dropdown acima para adicionar uma ou mais pessoas.</span></div>`}
+    </div>`;
+}
+
 async function loadSignatureProfiles() {
   if (!state.auth.user || state.signatures.loading) return;
   state.signatures.loading = true;
@@ -577,9 +590,11 @@ function applySignatureProfile(target, profile) {
     state.cota.signer = profile.name;
     state.cota.signerRole = profile.role;
   } else if (target.type === "correspondence") {
-    state.correspondence.signerProfileId = profile.id;
-    state.correspondence.signer = profile.name;
-    state.correspondence.signerRole = profile.role;
+    if (state.correspondence.signatories.some((item) => item.profileId === profile.id)) {
+      showToast("Essa assinatura já foi adicionada ao documento.");
+      return;
+    }
+    state.correspondence.signatories.push({ profileId: profile.id, name: profile.name, role: profile.role });
   } else if (target.type === "notice") {
     const signatory = noticeState().signatories.find((item) => item.id === target.signatoryId);
     if (signatory) {
@@ -598,10 +613,9 @@ function updateSignatureReferences(profile) {
     state.cota.signer = profile.name;
     state.cota.signerRole = profile.role;
   }
-  if (state.correspondence.signerProfileId === profile.id) {
-    state.correspondence.signer = profile.name;
-    state.correspondence.signerRole = profile.role;
-  }
+  state.correspondence.signatories = state.correspondence.signatories.map((item) =>
+    item.profileId === profile.id ? { profileId: profile.id, name: profile.name, role: profile.role } : item,
+  );
   [state.notification, state.warning].forEach((notice) => {
     notice.signatories.forEach((signatory) => {
       if (signatory.profileId === profile.id) {
@@ -683,7 +697,9 @@ async function deleteSignatureProfile(profile, targetAfterDelete = null) {
       item.profileId === profile.id ? { ...item, profileId: "" } : item,
     );
     if (state.cota.signerProfileId === profile.id) state.cota.signerProfileId = "";
-    if (state.correspondence.signerProfileId === profile.id) state.correspondence.signerProfileId = "";
+    state.correspondence.signatories = state.correspondence.signatories.map((item) =>
+      item.profileId === profile.id ? { ...item, profileId: "" } : item,
+    );
     [state.notification, state.warning].forEach((notice) => {
       notice.signatories.forEach((signatory) => {
         if (signatory.profileId === profile.id) signatory.profileId = "";
@@ -712,7 +728,7 @@ function handleSignatureSelection(select) {
       : { type: "notice", signatoryId: select.dataset.id };
   if (select.value === OTHER_SIGNATURE_VALUE) {
     if (target.type === "cota") select.value = state.cota.signerProfileId;
-    else if (target.type === "correspondence") select.value = state.correspondence.signerProfileId;
+    else if (target.type === "correspondence") select.value = "";
     else if (target.type === "notice") {
       select.value = noticeState().signatories.find((item) => item.id === target.signatoryId)?.profileId || "";
     } else select.value = "";
@@ -1776,15 +1792,14 @@ function renderOfficialCorrespondenceContent() {
   const c = state.correspondence;
   const type = correspondenceType();
   const typeLower = type.label.toLowerCase();
-  return `${pageHeading("Etapa 2", `Escreva ${type.article} ${typeLower}`, "Informe o texto e a pessoa que assinará o documento.")}
+  return `${pageHeading("Etapa 2", `Escreva ${type.article} ${typeLower}`, "Informe o texto e as pessoas que assinarão o documento.")}
   <section class="panel">
     ${panelHeader(`Texto d${type.article === "a" ? "a" : "o"} ${typeLower}`, "Separe os parágrafos com uma linha em branco; o Word manterá Arial 12, alinhamento justificado e espaçamento de 1,5 linha.")}
     <label class="field"><span>Conteúdo *</span><textarea data-bind="correspondence.baseText" maxlength="${MAX_CORRESPONDENCE_TEXT}" placeholder="Escreva o texto integral d${type.article === "a" ? "a" : "o"} ${typeLower}…">${e(c.baseText)}</textarea><span class="text-counter"><span>Use parágrafos para organizar as informações</span><span>${c.baseText.length}/${MAX_CORRESPONDENCE_TEXT}</span></span></label>
   </section>
   <section class="panel">
-    ${panelHeader("Assinatura", "O nome será colocado em negrito e o cargo logo abaixo, em itálico e sem negrito.", `<button class="button button-secondary" type="button" data-action="open-signatures">Configurar assinaturas</button>`)}
-    <label class="field signature-select-field"><span>Pessoa que vai assinar *</span><select data-signature-target="correspondence" ${state.signatures.loading ? "disabled" : ""}>${signatureSelectOptions(c.signerProfileId, "Selecione uma pessoa")}</select></label>
-    ${signaturePreview({ name: c.signer, role: c.signerRole }, "Selecione uma assinatura no dropdown")}
+    ${panelHeader("Assinaturas", "Adicione uma ou mais pessoas. Os nomes ficarão em negrito e os cargos em itálico, organizados em até duas colunas.", `<button class="button button-secondary" type="button" data-action="open-signatures">Configurar assinaturas</button>`)}
+    ${renderCorrespondenceSignatureSelector()}
   </section>
   <section class="panel">
     ${panelHeader("Fotos e legendas", "Opcional. Cada foto será colocada em uma página própria, com numeração automática e a legenda abaixo.")}
@@ -1824,7 +1839,7 @@ function renderOfficialCorrespondenceReview() {
     ${summaryCard("Anexos", `${c.photos.length} foto(s)`, c.photos.length ? "Todas com legenda" : "Sem fotografias")}
   </div>
   <section class="panel review-panel">
-    <div class="review-block"><h3>Assinatura</h3>${signaturePreview({ name: c.signer, role: c.signerRole })}</div>
+    <div class="review-block"><h3>Assinaturas</h3><div class="review-signatures">${c.signatories.map((signature) => signaturePreview(signature)).join("")}</div></div>
   </section>
   <div class="notice"><span aria-hidden="true">✓</span><span><strong>Modelo conferido.</strong> O arquivo será criado com o cabeçalho oficial, a paginação e a mesma formatação usada no memorando.</span></div>`;
 }
@@ -1873,9 +1888,8 @@ function renderCorrespondenceContent() {
     <label class="field"><span>Corpo do documento *</span><textarea data-bind="correspondence.baseText" maxlength="${MAX_CORRESPONDENCE_TEXT}" placeholder="Escreva o conteúdo do documento…">${e(c.baseText)}</textarea><span class="text-counter"><span>Use parágrafos para organizar as informações</span><span>${c.baseText.length}/${MAX_CORRESPONDENCE_TEXT}</span></span></label>
   </section>
   <section class="panel">
-    ${panelHeader("Assinatura", "O nome será colocado em negrito e o cargo em itálico, sem negrito.", `<button class="button button-secondary" type="button" data-action="open-signatures">Configurar assinaturas</button>`)}
-    <label class="field signature-select-field"><span>Pessoa que vai assinar *</span><select data-signature-target="correspondence" ${state.signatures.loading ? "disabled" : ""}>${signatureSelectOptions(c.signerProfileId, "Selecione uma pessoa")}</select></label>
-    ${signaturePreview({ name: c.signer, role: c.signerRole }, "Selecione uma assinatura no dropdown")}
+    ${panelHeader("Assinaturas", "Adicione uma ou mais pessoas. Os nomes ficarão em negrito e os cargos em itálico.", `<button class="button button-secondary" type="button" data-action="open-signatures">Configurar assinaturas</button>`)}
+    ${renderCorrespondenceSignatureSelector()}
   </section>
   <div class="notice is-warning"><span aria-hidden="true">!</span><span>A IA será orientada a revisar a linguagem sem inventar fatos, datas, leis, prazos ou penalidades. Confira o texto antes de gerar o Word.</span></div>`;
 }
@@ -1893,6 +1907,9 @@ function renderCorrespondenceReview() {
     ${summaryCard("Destinatário", c.recipient, c.recipientRole || "Sem complemento")}
     ${summaryCard("Emissão", formatDate(c.date), c.place || "Local não informado")}
   </div>
+  <section class="panel review-panel">
+    <div class="review-block"><h3>Assinaturas</h3><div class="review-signatures">${c.signatories.map((signature) => signaturePreview(signature)).join("")}</div></div>
+  </section>
   ${!isApiReady() ? `<div class="notice is-warning"><span aria-hidden="true">✦</span><span>Configure sua chave da OpenAI para usar a revisão automática, ou continue com a edição manual.</span></div>` : `<div class="notice"><span aria-hidden="true">✓</span><span>IA configurada com <strong>${e(modelDisplayName(getSelectedModel()))}</strong>. O texto só será enviado quando você clicar no botão.</span></div>`}`;
 }
 
@@ -2104,8 +2121,9 @@ function validateCurrentStep() {
         showMessage({ title: "Complete a identificação", text: `Informe cidade, data, número d${type.article === "a" ? "a" : "o"} ${typeLower}, destinatário e saudação antes de continuar.` });
         return false;
       }
-      if (state.step === 1 && (!c.baseText.trim() || !c.signer.trim() || !c.signerRole.trim())) {
-        showMessage({ title: "Complete o conteúdo", text: "Informe o texto, o nome e o cargo da pessoa que vai assinar." });
+      const invalidSignatory = c.signatories.find((item) => !item.name.trim() || !item.role.trim());
+      if (state.step === 1 && (!c.baseText.trim() || !c.signatories.length || invalidSignatory)) {
+        showMessage({ title: "Complete o conteúdo", text: "Informe o texto e selecione pelo menos uma pessoa com nome e cargo para assinar." });
         return false;
       }
       if (state.step === 1 && c.photos.some((photo) => !photo.caption.trim())) {
@@ -2122,8 +2140,9 @@ function validateCurrentStep() {
       showMessage({ title: "Complete os dados do documento", text: "Informe a data, o destinatário e o assunto antes de continuar." });
       return false;
     }
-    if (state.step === 1 && (!c.baseText.trim() || !c.signer.trim())) {
-      showMessage({ title: "Complete o conteúdo", text: "Informe o corpo do documento e o nome do signatário antes de continuar." });
+    const invalidSignatory = c.signatories.find((item) => !item.name.trim() || !item.role.trim());
+    if (state.step === 1 && (!c.baseText.trim() || !c.signatories.length || invalidSignatory)) {
+      showMessage({ title: "Complete o conteúdo", text: "Informe o corpo do documento e selecione pelo menos uma pessoa com nome e cargo para assinar." });
       return false;
     }
     if (state.step === 2 && !c.finalText.trim()) {
@@ -3663,6 +3682,53 @@ function officialCorrespondenceBodyParagraphs(text) {
     }));
 }
 
+function correspondenceSignatureTable(signatories, { official = false } = {}) {
+  const {
+    Paragraph, TextRun, Table, TableRow, TableCell, WidthType, VerticalAlign, AlignmentType,
+  } = window.docx;
+  const rows = [];
+  for (let index = 0; index < signatories.length; index += 2) {
+    const pair = signatories.slice(index, index + 2);
+    const cells = pair.map((signatory) => {
+      const isSingle = pair.length === 1;
+      const children = [];
+      if (!official) {
+        children.push(new Paragraph({
+          alignment: AlignmentType.CENTER,
+          spacing: { before: 0, after: 70 },
+          children: [new TextRun({ text: "________________________________", color: "68756F", size: 20 })],
+        }));
+      }
+      children.push(
+        new Paragraph({
+          alignment: AlignmentType.CENTER,
+          spacing: { after: official ? 0 : 20, line: 240 },
+          children: [official
+            ? officialCorrespondenceRun(signatory.name.trim(), true)
+            : new TextRun({ text: signatory.name.trim(), bold: true, size: 21 })],
+        }),
+        new Paragraph({
+          alignment: AlignmentType.CENTER,
+          spacing: { after: 0, line: 240 },
+          children: [official
+            ? officialCorrespondenceRun(signatory.role.trim(), false, true)
+            : new TextRun({ text: signatory.role.trim(), bold: false, italics: true, size: 20, color: "405049" })],
+        }),
+      );
+      return new TableCell({
+        width: { size: isSingle ? 100 : 50, type: WidthType.PERCENTAGE },
+        ...(isSingle ? { columnSpan: 2 } : {}),
+        borders: noBorders(),
+        verticalAlign: VerticalAlign.CENTER,
+        margins: { top: 120, bottom: 240, left: 120, right: 120 },
+        children,
+      });
+    });
+    rows.push(new TableRow({ cantSplit: true, children: cells }));
+  }
+  return new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, borders: noBorders(), rows });
+}
+
 async function buildOfficialCorrespondenceDocument(onProgress) {
   const { Paragraph, AlignmentType, PageBreak, patchDocument, PatchType } = window.docx;
   const c = state.correspondence;
@@ -3704,18 +3770,7 @@ async function buildOfficialCorrespondenceDocument(onProgress) {
   onProgress(45, "Formatando o texto em Arial 12 e espaçamento de 1,5 linha…");
   children.push(...officialCorrespondenceBodyParagraphs(c.finalText));
   for (let index = 0; index < 5; index += 1) children.push(officialCorrespondenceBlankParagraph());
-  children.push(
-    new Paragraph({
-      alignment: AlignmentType.CENTER,
-      indent: { left: -357, right: -318 },
-      children: [officialCorrespondenceRun(c.signer.trim(), true)],
-    }),
-    new Paragraph({
-      alignment: AlignmentType.CENTER,
-      indent: { left: -357, right: -318 },
-      children: [officialCorrespondenceRun(c.signerRole.trim(), false, true)],
-    }),
-  );
+  children.push(correspondenceSignatureTable(c.signatories, { official: true }));
 
   for (let index = 0; index < c.photos.length; index += 1) {
     const photo = c.photos[index];
@@ -3792,13 +3847,8 @@ async function buildCorrespondenceDocument(onProgress) {
 
   onProgress(55, "Formatando o conteúdo…");
   children.push(...paragraphsFromText(c.finalText));
-  children.push(
-    new Paragraph({ spacing: { before: 420, after: 70 }, alignment: AlignmentType.CENTER, children: [new TextRun({ text: "________________________________________", color: "68756F", size: 20 })] }),
-    new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 20 }, children: [new TextRun({ text: c.signer.trim(), bold: true, size: 21 })] }),
-  );
-  if (c.signerRole.trim()) {
-    children.push(new Paragraph({ alignment: AlignmentType.CENTER, children: [new TextRun({ text: c.signerRole.trim(), bold: false, italics: true, size: 20, color: "405049" })] }));
-  }
+  children.push(new Paragraph({ spacing: { before: 420, after: 0 }, children: [] }));
+  children.push(correspondenceSignatureTable(c.signatories));
 
   onProgress(82, "Aplicando cabeçalho e paginação…");
   const header = await headerFor({ organization: c.organization, department: c.department, logo: null });
@@ -3894,6 +3944,11 @@ async function handleAction(action, target) {
   if (action === "delete-signature-profile") return confirmSignatureProfileDelete(target.dataset.id);
   if (action === "remove-report-signature") {
     state.report.responsibles.splice(Number(target.dataset.index), 1);
+    render();
+    return;
+  }
+  if (action === "remove-correspondence-signature") {
+    state.correspondence.signatories.splice(Number(target.dataset.index), 1);
     render();
     return;
   }

@@ -277,6 +277,13 @@ test("builds memoranda and oficios from the same supplied Bertioga model", async
   assert.match(app, /data-bind="correspondence\.salutation"/);
   assert.match(app, /data-bind="correspondence\.baseText"/);
   assert.match(app, /data-signature-target="correspondence"/);
+  assert.match(app, /signatories:\s*\[\]/);
+  assert.match(app, /state\.correspondence\.signatories\.push/);
+  assert.match(app, /data-action="remove-correspondence-signature"/);
+  assert.match(app, /function correspondenceSignatureTable/);
+  assert.match(app, /signatories\.slice\(index, index \+ 2\)/);
+  assert.match(app, /columnSpan:\s*2/);
+  assert.match(app, /correspondenceSignatureTable\(c\.signatories, \{ official: true \}\)/);
   assert.match(app, /data-file="correspondence-photos"/);
   assert.match(app, /data-correspondence-photo-caption/);
   assert.match(app, /data-action="remove-correspondence-photo"/);
@@ -429,7 +436,8 @@ test("saves reusable signatures per account and formats name and role correctly"
   assert.match(app, /new TextRun\(\{ text: signature\.name, bold: true/);
   assert.match(app, /text: signature\.role, bold: false, italics: true/);
   assert.match(app, /text: signatory\.role\.trim\(\), font: "Arial", size: 24, bold: false, italics: true/);
-  assert.match(app, /officialCorrespondenceRun\(c\.signerRole\.trim\(\), false, true\)/);
+  assert.match(app, /officialCorrespondenceRun\(signatory\.role\.trim\(\), false, true\)/);
+  assert.match(app, /new TextRun\(\{ text: signatory\.role\.trim\(\), bold: false, italics: true/);
   assert.match(styles, /\.signature-profile-list/);
   assert.match(styles, /\.signature-preview em/);
   assert.match(worker, /url\.pathname === "\/api\/signatures"/);
