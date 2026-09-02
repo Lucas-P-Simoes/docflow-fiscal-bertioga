@@ -651,8 +651,8 @@ test("lets each account rename, delete, preview, and download its history as PDF
 });
 
 
-test("adds a shared Kanban with account assignees and bell notifications", async () => {
-  const [app, page, styles, worker, kanbanWorker, kanbanDb, schema, migration] = await Promise.all([
+test("adds private Kanban boards with member permissions, activity history, and notifications", async () => {
+  const [app, page, styles, worker, kanbanWorker, kanbanDb, schema, initialMigration, boardMigration] = await Promise.all([
     readFile(new URL("public/docflow/app.js", siteRoot), "utf8"),
     readFile(new URL("public/docflow/index.html", siteRoot), "utf8"),
     readFile(new URL("public/docflow/styles.css", siteRoot), "utf8"),
@@ -661,6 +661,7 @@ test("adds a shared Kanban with account assignees and bell notifications", async
     readFile(new URL("db/kanban.ts", siteRoot), "utf8"),
     readFile(new URL("db/schema.ts", siteRoot), "utf8"),
     readFile(new URL("drizzle/0004_loud_brood.sql", siteRoot), "utf8"),
+    readFile(new URL("drizzle/0005_free_sasquatch.sql", siteRoot), "utf8"),
   ]);
 
   assert.match(page, /id="kanbanButton"/);
@@ -670,33 +671,59 @@ test("adds a shared Kanban with account assignees and bell notifications", async
   assert.match(page, /id="notificationBadge"/);
   assert.match(page, /id="kanbanCardDialog"/);
   assert.match(page, /id="kanbanAssigneeList"/);
+  assert.match(page, /id="kanbanBoardDialog"/);
+  assert.match(page, /id="kanbanBoardMemberList"/);
+  assert.match(page, /Somente as pessoas selecionadas poderão visualizar o quadro e editar seus cartões/);
   assert.match(app, /const KANBAN_COLUMNS = \[/);
   assert.match(app, /id: "todo"/);
   assert.match(app, /id: "doing"/);
   assert.match(app, /id: "done"/);
-  assert.match(app, /apiRequest\("\/api\/kanban"\)/);
+  assert.match(app, /apiRequest\(`\/api\/kanban\$\{query\}`\)/);
+  assert.match(app, /data-action="select-kanban-board"/);
+  assert.match(app, /data-action="edit-kanban-board"/);
+  assert.match(app, /Histórico do quadro/);
+  assert.match(app, /data-kanban-board-member/);
   assert.match(app, /\/api\/kanban\/cards\/\$\{encodeURIComponent\(cardId\)\}/);
   assert.match(app, /data-kanban-column/);
   assert.match(app, /data-kanban-status/);
   assert.match(app, /data-kanban-assignee/);
   assert.match(app, /setInterval\([\s\S]*?30_000/);
   assert.match(styles, /\.kanban-board/);
+  assert.match(styles, /\.kanban-board-sidebar/);
+  assert.match(styles, /\.kanban-activity-panel/);
   assert.match(styles, /\.notification-button/);
   assert.match(styles, /\.notification-badge/);
 
   assert.match(worker, /url\.pathname === "\/api\/kanban"/);
+  assert.match(worker, /url\.pathname === "\/api\/kanban\/boards"/);
+  assert.match(worker, /handleKanbanBoardMutation/);
   assert.match(worker, /handleKanbanNotificationMutation/);
   assert.match(kanbanWorker, /authenticateRequest\(request, env\)/);
   assert.match(kanbanWorker, /listApprovedKanbanPeople/);
+  assert.match(kanbanWorker, /getKanbanCardAccess/);
+  assert.match(kanbanWorker, /Somente o criador pode gerenciar este quadro/);
+  assert.match(kanbanWorker, /Você não tem permissão para editar este cartão/);
+  assert.match(kanbanWorker, /Selecione somente participantes deste quadro/);
   assert.match(kanbanWorker, /Selecione somente pessoas com acesso aprovado/);
   assert.match(kanbanDb, /WHERE status = 'approved'/);
+  assert.match(kanbanDb, /listAccessibleKanbanBoards/);
+  assert.match(kanbanDb, /listKanbanActivity/);
+  assert.match(kanbanDb, /activityStatement/);
   assert.match(kanbanDb, /const newlyAssigned = values\.assigneeIds\.filter/);
   assert.match(kanbanDb, /marcou você no cartão/);
+  assert.match(schema, /kanbanBoards/);
+  assert.match(schema, /kanbanBoardMembers/);
   assert.match(schema, /kanbanCards/);
+  assert.match(schema, /kanbanActivity/);
   assert.match(schema, /kanbanCardAssignees/);
   assert.match(schema, /kanbanNotifications/);
-  assert.match(migration, /CREATE TABLE `kanban_cards`/);
-  assert.match(migration, /CREATE TABLE `kanban_card_assignees`/);
-  assert.match(migration, /CREATE TABLE `kanban_notifications`/);
-  assert.match(migration, /PRAGMA optimize/);
+  assert.match(initialMigration, /CREATE TABLE `kanban_cards`/);
+  assert.match(initialMigration, /CREATE TABLE `kanban_card_assignees`/);
+  assert.match(initialMigration, /CREATE TABLE `kanban_notifications`/);
+  assert.match(initialMigration, /PRAGMA optimize/);
+  assert.match(boardMigration, /CREATE TABLE `kanban_boards`/);
+  assert.match(boardMigration, /CREATE TABLE `kanban_board_members`/);
+  assert.match(boardMigration, /CREATE TABLE `kanban_activity`/);
+  assert.match(boardMigration, /ALTER TABLE `kanban_cards` ADD `board_id`/);
+  assert.match(boardMigration, /Quadro existente/);
 });

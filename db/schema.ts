@@ -97,10 +97,45 @@ export const signatureProfiles = sqliteTable(
   ],
 );
 
+export const kanbanBoards = sqliteTable(
+  "kanban_boards",
+  {
+    id: text("id").primaryKey(),
+    name: text("name").notNull(),
+    description: text("description").notNull().default(""),
+    createdBy: text("created_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: integer("created_at").notNull(),
+    updatedAt: integer("updated_at").notNull(),
+  },
+  (table) => [
+    index("idx_kanban_boards_creator_updated").on(table.createdBy, table.updatedAt),
+  ],
+);
+
+export const kanbanBoardMembers = sqliteTable(
+  "kanban_board_members",
+  {
+    boardId: text("board_id")
+      .notNull()
+      .references(() => kanbanBoards.id, { onDelete: "cascade" }),
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    addedBy: text("added_by").references(() => users.id, { onDelete: "set null" }),
+    canEdit: integer("can_edit", { mode: "boolean" }).notNull().default(true),
+    createdAt: integer("created_at").notNull(),
+  },
+  (table) => [
+    primaryKey({ columns: [table.boardId, table.userId] }),
+    index("idx_kanban_board_members_user_board").on(table.userId, table.boardId),
+  ],
+);
+
 export const kanbanCards = sqliteTable(
   "kanban_cards",
   {
     id: text("id").primaryKey(),
+    boardId: text("board_id").references(() => kanbanBoards.id, { onDelete: "cascade" }),
     title: text("title").notNull(),
     description: text("description").notNull().default(""),
     status: text("status", { enum: ["todo", "doing", "done"] }).notNull().default("todo"),
@@ -110,8 +145,28 @@ export const kanbanCards = sqliteTable(
     updatedAt: integer("updated_at").notNull(),
   },
   (table) => [
+    index("idx_kanban_cards_board_status_position").on(table.boardId, table.status, table.position),
     index("idx_kanban_cards_status_position").on(table.status, table.position),
     index("idx_kanban_cards_updated_at").on(table.updatedAt),
+  ],
+);
+
+export const kanbanActivity = sqliteTable(
+  "kanban_activity",
+  {
+    id: text("id").primaryKey(),
+    boardId: text("board_id")
+      .notNull()
+      .references(() => kanbanBoards.id, { onDelete: "cascade" }),
+    cardId: text("card_id").references(() => kanbanCards.id, { onDelete: "set null" }),
+    actorUserId: text("actor_user_id").references(() => users.id, { onDelete: "set null" }),
+    action: text("action").notNull(),
+    summary: text("summary").notNull(),
+    createdAt: integer("created_at").notNull(),
+  },
+  (table) => [
+    index("idx_kanban_activity_board_created").on(table.boardId, table.createdAt),
+    index("idx_kanban_activity_card_created").on(table.cardId, table.createdAt),
   ],
 );
 

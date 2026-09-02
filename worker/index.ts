@@ -20,6 +20,8 @@ import { handleDocumentDownload, handleDocumentMutation, handleDocuments } from 
 import { handleSignatureMutation, handleSignatures } from "./signatures";
 import {
   handleKanban,
+  handleKanbanBoardMutation,
+  handleKanbanBoards,
   handleKanbanCardMutation,
   handleKanbanCards,
   handleKanbanNotificationMutation,
@@ -226,6 +228,9 @@ const worker = {
       if (url.pathname === "/api/kanban/cards") {
         return await handleKanbanCards(request, env);
       }
+      if (url.pathname === "/api/kanban/boards") {
+        return await handleKanbanBoards(request, env);
+      }
       if (url.pathname === "/api/kanban/notifications") {
         return await handleKanbanNotifications(request, env);
       }
@@ -239,6 +244,10 @@ const worker = {
       const kanbanCardMutation = url.pathname.match(/^\/api\/kanban\/cards\/([0-9a-f-]{36})$/i);
       if (kanbanCardMutation) {
         return await handleKanbanCardMutation(request, env, kanbanCardMutation[1]);
+      }
+      const kanbanBoardMutation = url.pathname.match(/^\/api\/kanban\/boards\/([0-9a-f-]{36})$/i);
+      if (kanbanBoardMutation) {
+        return await handleKanbanBoardMutation(request, env, kanbanBoardMutation[1]);
       }
       if (url.pathname === "/api/documents") {
         return await handleDocuments(request, env);

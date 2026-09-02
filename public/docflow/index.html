@@ -278,15 +278,48 @@
       </div>
     </dialog>
 
+    <dialog id="kanbanBoardDialog" class="dialog kanban-card-dialog">
+      <form id="kanbanBoardForm" class="dialog-card" method="dialog">
+        <div class="dialog-topline">
+          <span class="dialog-icon" aria-hidden="true">▦</span>
+          <button class="icon-button" type="button" data-action="close-kanban-board" aria-label="Fechar">×</button>
+        </div>
+        <span class="eyebrow eyebrow-dark">Acesso do quadro</span>
+        <h2 id="kanbanBoardFormTitle">Novo quadro</h2>
+        <p class="dialog-lead">Somente as pessoas selecionadas poderão visualizar o quadro e editar seus cartões. O criador controla os participantes.</p>
+        <input id="kanbanBoardId" type="hidden" />
+        <label class="field">
+          <span>Nome do quadro *</span>
+          <input id="kanbanBoardName" type="text" maxlength="100" autocomplete="off" placeholder="Ex.: Fiscalização — setembro" required />
+        </label>
+        <label class="field">
+          <span>Descrição</span>
+          <textarea id="kanbanBoardDescription" maxlength="600" placeholder="Objetivo, contrato ou equipe responsável…"></textarea>
+        </label>
+        <fieldset class="kanban-assignee-fieldset">
+          <legend>Quem pode visualizar e editar</legend>
+          <div id="kanbanBoardMemberList" class="kanban-assignee-list"></div>
+        </fieldset>
+        <div id="kanbanBoardFeedback" class="inline-feedback is-hidden" role="status"></div>
+        <div class="kanban-board-dialog-actions">
+          <button id="deleteKanbanBoardButton" class="button button-quiet button-danger is-hidden" type="button" data-action="delete-kanban-board">Excluir quadro</button>
+          <div class="dialog-actions">
+            <button class="button button-secondary" type="button" data-action="close-kanban-board">Cancelar</button>
+            <button id="saveKanbanBoardButton" class="button button-primary" type="submit">Criar quadro</button>
+          </div>
+        </div>
+      </form>
+    </dialog>
+
     <dialog id="kanbanCardDialog" class="dialog kanban-card-dialog">
       <form id="kanbanCardForm" class="dialog-card" method="dialog">
         <div class="dialog-topline">
           <span class="dialog-icon" aria-hidden="true">▥</span>
           <button class="icon-button" type="button" data-action="close-kanban-card" aria-label="Fechar">×</button>
         </div>
-        <span class="eyebrow eyebrow-dark">Quadro compartilhado</span>
+        <span class="eyebrow eyebrow-dark">Atividade do quadro</span>
         <h2 id="kanbanCardFormTitle">Novo cartão</h2>
-        <p class="dialog-lead">Descreva a atividade e marque as pessoas responsáveis. Cada nova pessoa marcada receberá uma notificação no sininho.</p>
+        <p class="dialog-lead">Descreva a atividade e marque responsáveis entre os participantes deste quadro. Cada nova pessoa marcada receberá uma notificação no sininho.</p>
         <input id="kanbanCardId" type="hidden" />
         <label class="field">
           <span>Título do cartão *</span>

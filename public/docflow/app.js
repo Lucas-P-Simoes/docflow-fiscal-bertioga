@@ -212,6 +212,16 @@ const elements = {
   renameInput: document.querySelector("#renameInput"),
   renameFeedback: document.querySelector("#renameFeedback"),
   renameSubmitButton: document.querySelector("#renameSubmitButton"),
+  kanbanBoardDialog: document.querySelector("#kanbanBoardDialog"),
+  kanbanBoardForm: document.querySelector("#kanbanBoardForm"),
+  kanbanBoardFormTitle: document.querySelector("#kanbanBoardFormTitle"),
+  kanbanBoardId: document.querySelector("#kanbanBoardId"),
+  kanbanBoardName: document.querySelector("#kanbanBoardName"),
+  kanbanBoardDescription: document.querySelector("#kanbanBoardDescription"),
+  kanbanBoardMemberList: document.querySelector("#kanbanBoardMemberList"),
+  kanbanBoardFeedback: document.querySelector("#kanbanBoardFeedback"),
+  saveKanbanBoardButton: document.querySelector("#saveKanbanBoardButton"),
+  deleteKanbanBoardButton: document.querySelector("#deleteKanbanBoardButton"),
   kanbanCardDialog: document.querySelector("#kanbanCardDialog"),
   kanbanCardForm: document.querySelector("#kanbanCardForm"),
   kanbanCardFormTitle: document.querySelector("#kanbanCardFormTitle"),
@@ -257,8 +267,12 @@ function createKanbanState() {
     open: false,
     loading: false,
     loaded: false,
+    boards: [],
+    activeBoardId: "",
+    board: null,
     cards: [],
     people: [],
+    activity: [],
     error: "",
     busy: new Map(),
     editingCardId: "",
@@ -1516,31 +1530,87 @@ const KANBAN_COLUMNS = [
 function renderKanban() {
   const kanban = state.kanban;
   const loading = kanban.loading && !kanban.loaded;
-  const content = loading
-    ? `<div class="kanban-loading"><span class="history-spinner" aria-hidden="true"></span><strong>Carregando o quadro…</strong></div>`
-    : `<div class="kanban-board" aria-label="Quadro Kanban">
-        ${KANBAN_COLUMNS.map((column) => renderKanbanColumn(column)).join("")}
-      </div>`;
   const error = kanban.error
     ? `<div class="notice is-warning"><span aria-hidden="true">!</span><span>${e(kanban.error)}</span></div>`
     : "";
+  if (loading) {
+    return `<section class="document-section kanban-section"><div class="kanban-loading"><span class="history-spinner" aria-hidden="true"></span><strong>Carregando seus quadros…</strong></div></section>`;
+  }
+
+  const board = kanban.board;
+  const main = board
+    ? `<div class="kanban-main-panel">
+        <div class="kanban-heading">
+          <div>
+            <span class="eyebrow eyebrow-dark">${board.isOwner ? "Quadro criado por você" : "Quadro compartilhado com você"}</span>
+            <h2>${e(board.name)}</h2>
+            <p>${board.description ? e(board.description) : "Organize as atividades, mova os cartões e acompanhe cada alteração com transparência."}</p>
+          </div>
+          <div class="kanban-heading-actions">
+            <button class="button button-secondary" type="button" data-action="refresh-kanban" ${kanban.loading ? "disabled" : ""}>Atualizar</button>
+            ${board.isOwner ? `<button class="button button-secondary" type="button" data-action="edit-kanban-board">Gerenciar acesso</button>` : ""}
+            <button class="button button-primary" type="button" data-action="add-kanban-card" ${kanban.loading || !board.canEdit ? "disabled" : ""}>+ Novo cartão</button>
+          </div>
+        </div>
+        <div class="kanban-member-strip" aria-label="Participantes do quadro">
+          <div class="kanban-member-avatars">${board.members.slice(0, 6).map((person) => `<span title="${e(person.name)} — ${e(person.email)}">${e(personInitials(person.name))}</span>`).join("")}${board.members.length > 6 ? `<span>+${board.members.length - 6}</span>` : ""}</div>
+          <span>${board.members.length} participante${board.members.length === 1 ? "" : "s"} com acesso</span>
+          <strong>Somente membros deste quadro podem visualizar e editar</strong>
+        </div>
+        <div class="kanban-summary" aria-label="Resumo do quadro">
+          <article><span>Total</span><strong>${kanban.cards.length}</strong></article>
+          ${KANBAN_COLUMNS.map((column) => `<article><span>${e(column.label)}</span><strong>${kanban.cards.filter((card) => card.status === column.id).length}</strong></article>`).join("")}
+        </div>
+        ${error}
+        <div class="kanban-board-with-activity">
+          <div class="kanban-board" aria-label="Quadro Kanban">
+            ${KANBAN_COLUMNS.map((column) => renderKanbanColumn(column)).join("")}
+          </div>
+          ${renderKanbanActivity()}
+        </div>
+      </div>`
+    : `<div class="kanban-main-panel kanban-empty-board">
+        ${error}
+        <span class="kanban-empty-icon" aria-hidden="true">▦</span>
+        <span class="eyebrow eyebrow-dark">Seu espaço de trabalho</span>
+        <h2>Crie seu primeiro quadro</h2>
+        <p>Defina um nome e escolha exatamente quem poderá visualizar e editar os cartões.</p>
+        <button class="button button-primary" type="button" data-action="add-kanban-board">+ Novo quadro</button>
+      </div>`;
 
   return `<section class="document-section kanban-section">
-    <div class="kanban-heading">
-      <div><span class="eyebrow eyebrow-dark">Trabalho em equipe</span><h2>Quadro Kanban</h2><p>Organize as atividades, mova os cartões entre as etapas e marque as pessoas responsáveis.</p></div>
-      <div class="kanban-heading-actions">
-        <button class="button button-secondary" type="button" data-action="home">← Voltar</button>
-        <button class="button button-secondary" type="button" data-action="refresh-kanban" ${kanban.loading ? "disabled" : ""}>Atualizar</button>
-        <button class="button button-primary" type="button" data-action="add-kanban-card" ${kanban.loading ? "disabled" : ""}>+ Novo cartão</button>
-      </div>
+    <div class="kanban-workspace">
+      ${renderKanbanBoardSidebar()}
+      ${main}
     </div>
-    <div class="kanban-summary" aria-label="Resumo do quadro">
-      <article><span>Total</span><strong>${kanban.cards.length}</strong></article>
-      ${KANBAN_COLUMNS.map((column) => `<article><span>${e(column.label)}</span><strong>${kanban.cards.filter((card) => card.status === column.id).length}</strong></article>`).join("")}
-    </div>
-    ${error}
-    ${content}
   </section>`;
+}
+
+function renderKanbanBoardSidebar() {
+  const kanban = state.kanban;
+  return `<aside class="kanban-board-sidebar">
+    <button class="kanban-sidebar-back" type="button" data-action="home">← Voltar ao início</button>
+    <div class="kanban-sidebar-heading"><div><span class="eyebrow eyebrow-dark">Kanban</span><h3>Meus quadros</h3></div><button type="button" data-action="add-kanban-board" aria-label="Criar novo quadro">+</button></div>
+    <nav class="kanban-board-list" aria-label="Quadros disponíveis">
+      ${kanban.boards.length
+        ? kanban.boards.map((board) => `<button class="kanban-board-link${board.id === kanban.activeBoardId ? " is-active" : ""}" type="button" data-action="select-kanban-board" data-id="${e(board.id)}" aria-current="${board.id === kanban.activeBoardId ? "page" : "false"}"><span class="kanban-board-link-icon" aria-hidden="true">▥</span><span><strong>${e(board.name)}</strong><small>${board.isOwner ? "Criado por você" : `Compartilhado por ${e(board.createdBy?.name || "outro usuário")}`}</small></span><em>${board.cardCount}</em></button>`).join("")
+        : `<div class="kanban-sidebar-empty">Nenhum quadro disponível.</div>`}
+    </nav>
+    <div class="kanban-sidebar-security"><span aria-hidden="true">◆</span><p><strong>Acesso privado</strong>Os quadros aparecem apenas para as pessoas selecionadas.</p></div>
+  </aside>`;
+}
+
+function renderKanbanActivity() {
+  const items = state.kanban.activity;
+  return `<aside class="kanban-activity-panel" aria-label="Histórico de alterações do quadro">
+    <div class="kanban-activity-heading"><span class="kanban-activity-icon" aria-hidden="true">↻</span><div><span class="eyebrow eyebrow-dark">Transparência</span><h3>Histórico do quadro</h3></div></div>
+    <p class="kanban-activity-lead">Alterações e movimentações registradas por usuário.</p>
+    <div class="kanban-activity-list">
+      ${items.length
+        ? items.map((item) => `<article class="kanban-activity-item"><span class="kanban-activity-avatar" aria-hidden="true">${e(personInitials(item.actor?.name || "Sistema"))}</span><div><p><strong>${e(item.actor?.name || "Sistema")}</strong> ${e(item.summary)}</p><time datetime="${new Date(item.createdAt * 1000).toISOString()}">${e(formatHistoryDate(item.createdAt))}</time></div></article>`).join("")
+        : `<div class="kanban-activity-empty"><span aria-hidden="true">↻</span><strong>Nenhuma alteração registrada</strong><p>As ações deste quadro aparecerão aqui.</p></div>`}
+    </div>
+  </aside>`;
 }
 
 function renderKanbanColumn(column) {
@@ -1558,11 +1628,12 @@ function renderKanbanColumn(column) {
 
 function renderKanbanCard(card) {
   const busy = state.kanban.busy.get(card.id) || "";
-  const disabled = busy ? "disabled" : "";
+  const canEdit = Boolean(state.kanban.board?.canEdit);
+  const disabled = busy || !canEdit ? "disabled" : "";
   const assignees = card.assignees.length
     ? `<div class="kanban-card-assignees" aria-label="Responsáveis">${card.assignees.map((person) => `<span class="kanban-person-chip" title="${e(person.name)} — ${e(person.email)}"><span aria-hidden="true">${e(personInitials(person.name))}</span>${e(person.name)}</span>`).join("")}</div>`
     : `<span class="kanban-unassigned">Sem responsável</span>`;
-  return `<article class="kanban-card${busy ? " is-busy" : ""}" draggable="${busy ? "false" : "true"}" data-kanban-card-id="${e(card.id)}" tabindex="0">
+  return `<article class="kanban-card${busy ? " is-busy" : ""}" draggable="${busy || !canEdit ? "false" : "true"}" data-kanban-card-id="${e(card.id)}" tabindex="0">
     <div class="kanban-card-topline"><span>${e(kanbanStatusLabel(card.status))}</span><small>${e(formatHistoryDate(card.updatedAt))}</small></div>
     <h4>${e(card.title)}</h4>
     ${card.description ? `<p>${e(card.description).replace(/\n/g, "<br>")}</p>` : ""}
@@ -1592,9 +1663,14 @@ async function loadKanban({ silent = false } = {}) {
   state.kanban.error = "";
   if (state.kanban.open) render();
   try {
-    const payload = await apiRequest("/api/kanban");
+    const query = state.kanban.activeBoardId ? `?boardId=${encodeURIComponent(state.kanban.activeBoardId)}` : "";
+    const payload = await apiRequest(`/api/kanban${query}`);
+    state.kanban.boards = Array.isArray(payload.boards) ? payload.boards : [];
+    state.kanban.board = payload.board || null;
+    state.kanban.activeBoardId = payload.board?.id || "";
     state.kanban.cards = Array.isArray(payload.cards) ? payload.cards : [];
     state.kanban.people = Array.isArray(payload.people) ? payload.people : [];
+    state.kanban.activity = Array.isArray(payload.activity) ? payload.activity : [];
     state.kanban.loaded = true;
   } catch (error) {
     state.kanban.error = error.message;
@@ -1605,15 +1681,16 @@ async function loadKanban({ silent = false } = {}) {
   }
 }
 
-async function showKanban({ focusCardId = "" } = {}) {
+async function showKanban({ focusCardId = "", boardId = "" } = {}) {
   state.flow = null;
   state.admin.open = false;
   state.history.open = false;
   state.kanban.open = true;
+  if (boardId) state.kanban.activeBoardId = boardId;
   closeNotificationPopover();
   render();
   focusMain();
-  if (!state.kanban.loaded) await loadKanban();
+  if (!state.kanban.loaded || boardId) await loadKanban();
   if (focusCardId) {
     requestAnimationFrame(() => {
       const card = document.querySelector(`[data-kanban-card-id="${focusCardId}"]`);
@@ -1624,8 +1701,119 @@ async function showKanban({ focusCardId = "" } = {}) {
   }
 }
 
+async function selectKanbanBoard(boardId) {
+  if (!boardId || boardId === state.kanban.activeBoardId || state.kanban.loading) return;
+  state.kanban.activeBoardId = boardId;
+  state.kanban.cards = [];
+  state.kanban.activity = [];
+  await loadKanban();
+}
+
+async function openKanbanBoardDialog(boardId = "") {
+  if (!state.kanban.loaded) await loadKanban();
+  const board = boardId ? state.kanban.boards.find((item) => item.id === boardId) : null;
+  const fullBoard = boardId === state.kanban.board?.id ? state.kanban.board : null;
+  if (boardId && (!board || !board.isOwner || !fullBoard)) {
+    showToast("Somente o criador pode gerenciar este quadro.");
+    return;
+  }
+  elements.kanbanBoardId.value = board?.id || "";
+  elements.kanbanBoardName.value = board?.name || "";
+  elements.kanbanBoardDescription.value = board?.description || "";
+  elements.kanbanBoardFormTitle.textContent = board ? "Gerenciar quadro" : "Novo quadro";
+  elements.saveKanbanBoardButton.textContent = board ? "Salvar alterações" : "Criar quadro";
+  elements.saveKanbanBoardButton.disabled = false;
+  elements.deleteKanbanBoardButton.classList.toggle("is-hidden", !board);
+  setKanbanBoardFeedback();
+  const selectedIds = new Set(fullBoard?.members.map((person) => person.id) || [state.auth.user.id]);
+  elements.kanbanBoardMemberList.innerHTML = state.kanban.people.length
+    ? state.kanban.people.map((person) => {
+        const isCreator = person.id === state.auth.user.id;
+        return `<label class="kanban-assignee-option${isCreator ? " is-locked" : ""}"><input type="checkbox" data-kanban-board-member value="${e(person.id)}" ${selectedIds.has(person.id) || isCreator ? "checked" : ""} ${isCreator ? "disabled" : ""} /><span class="kanban-assignee-avatar" aria-hidden="true">${e(personInitials(person.name))}</span><span><strong>${e(person.name)}</strong><small>${isCreator ? "Criador — acesso permanente" : e(person.email)}</small></span></label>`;
+      }).join("")
+    : `<div class="kanban-assignee-empty">Nenhuma pessoa com acesso aprovado foi encontrada.</div>`;
+  openDialog(elements.kanbanBoardDialog);
+  setTimeout(() => elements.kanbanBoardName.focus(), 40);
+}
+
+function closeKanbanBoardDialog() {
+  if (elements.saveKanbanBoardButton.disabled) return;
+  elements.kanbanBoardForm.reset();
+  setKanbanBoardFeedback();
+  closeDialog(elements.kanbanBoardDialog);
+}
+
+function setKanbanBoardFeedback(message = "") {
+  elements.kanbanBoardFeedback.textContent = message;
+  elements.kanbanBoardFeedback.className = `inline-feedback${message ? " is-error" : " is-hidden"}`;
+  elements.kanbanBoardName.classList.toggle("is-validation-error", Boolean(message && !elements.kanbanBoardName.value.trim()));
+}
+
+async function saveKanbanBoard() {
+  const boardId = elements.kanbanBoardId.value;
+  const name = elements.kanbanBoardName.value.trim();
+  if (!name) {
+    setKanbanBoardFeedback("Informe o nome do quadro.");
+    elements.kanbanBoardName.focus();
+    return;
+  }
+  const memberIds = Array.from(elements.kanbanBoardMemberList.querySelectorAll("[data-kanban-board-member]:checked")).map((input) => input.value);
+  if (!memberIds.includes(state.auth.user.id)) memberIds.push(state.auth.user.id);
+  elements.saveKanbanBoardButton.disabled = true;
+  elements.saveKanbanBoardButton.textContent = boardId ? "Salvando…" : "Criando…";
+  setKanbanBoardFeedback();
+  try {
+    const payload = await apiRequest(boardId ? `/api/kanban/boards/${encodeURIComponent(boardId)}` : "/api/kanban/boards", {
+      method: boardId ? "PATCH" : "POST",
+      body: { name, description: elements.kanbanBoardDescription.value.trim(), memberIds },
+    });
+    elements.saveKanbanBoardButton.disabled = false;
+    closeDialog(elements.kanbanBoardDialog);
+    state.kanban.activeBoardId = payload.board.id;
+    await loadKanban({ silent: true });
+    showToast(boardId ? "Quadro e acessos atualizados." : "Quadro privado criado.");
+  } catch (error) {
+    elements.saveKanbanBoardButton.disabled = false;
+    elements.saveKanbanBoardButton.textContent = boardId ? "Salvar alterações" : "Criar quadro";
+    setKanbanBoardFeedback(error.message);
+  }
+}
+
+function confirmKanbanBoardDeletion() {
+  const board = state.kanban.board;
+  if (!board?.isOwner) return;
+  closeKanbanBoardDialog();
+  showMessage({
+    title: "Excluir este quadro?",
+    text: `O quadro “${board.name}”, todos os cartões e o histórico serão removidos para todos os participantes.`,
+    kind: "error",
+    actions: [
+      { label: "Cancelar" },
+      { label: "Excluir quadro", danger: true, onClick: deleteActiveKanbanBoard },
+    ],
+  });
+}
+
+async function deleteActiveKanbanBoard() {
+  const boardId = state.kanban.activeBoardId;
+  if (!boardId) return;
+  try {
+    await apiRequest(`/api/kanban/boards/${encodeURIComponent(boardId)}`, { method: "DELETE" });
+    state.kanban.activeBoardId = "";
+    await loadKanban({ silent: true });
+    showToast("Quadro excluído.");
+  } catch (error) {
+    state.kanban.error = error.message;
+    render();
+  }
+}
+
 async function openKanbanCardDialog(cardId = "") {
   if (!state.kanban.loaded) await loadKanban();
+  if (!state.kanban.board?.canEdit) {
+    showToast("Selecione um quadro que você possa editar.");
+    return;
+  }
   const card = cardId ? state.kanban.cards.find((item) => item.id === cardId) : null;
   state.kanban.editingCardId = card?.id || "";
   elements.kanbanCardId.value = card?.id || "";
@@ -1637,9 +1825,10 @@ async function openKanbanCardDialog(cardId = "") {
   elements.saveKanbanCardButton.disabled = false;
   setKanbanCardFeedback();
   const selectedIds = new Set(card?.assignees.map((person) => person.id) || []);
-  elements.kanbanAssigneeList.innerHTML = state.kanban.people.length
-    ? state.kanban.people.map((person) => `<label class="kanban-assignee-option"><input type="checkbox" data-kanban-assignee value="${e(person.id)}" ${selectedIds.has(person.id) ? "checked" : ""} /><span class="kanban-assignee-avatar" aria-hidden="true">${e(personInitials(person.name))}</span><span><strong>${e(person.name)}</strong><small>${e(person.email)}</small></span></label>`).join("")
-    : `<div class="kanban-assignee-empty">Nenhuma pessoa com acesso aprovado foi encontrada.</div>`;
+  const members = state.kanban.board.members || [];
+  elements.kanbanAssigneeList.innerHTML = members.length
+    ? members.map((person) => `<label class="kanban-assignee-option"><input type="checkbox" data-kanban-assignee value="${e(person.id)}" ${selectedIds.has(person.id) ? "checked" : ""} /><span class="kanban-assignee-avatar" aria-hidden="true">${e(personInitials(person.name))}</span><span><strong>${e(person.name)}</strong><small>${e(person.email)}</small></span></label>`).join("")
+    : `<div class="kanban-assignee-empty">Este quadro ainda não possui participantes.</div>`;
   openDialog(elements.kanbanCardDialog);
   setTimeout(() => elements.kanbanCardTitle.focus(), 40);
 }
@@ -1667,6 +1856,7 @@ async function saveKanbanCard() {
     return;
   }
   const body = {
+    boardId: state.kanban.activeBoardId,
     title,
     description: elements.kanbanCardDescription.value.trim(),
     status: elements.kanbanCardStatus.value,
@@ -1676,17 +1866,14 @@ async function saveKanbanCard() {
   elements.saveKanbanCardButton.textContent = cardId ? "Salvando…" : "Criando…";
   setKanbanCardFeedback();
   try {
-    const payload = await apiRequest(cardId ? `/api/kanban/cards/${encodeURIComponent(cardId)}` : "/api/kanban/cards", {
+    await apiRequest(cardId ? `/api/kanban/cards/${encodeURIComponent(cardId)}` : "/api/kanban/cards", {
       method: cardId ? "PATCH" : "POST",
       body,
     });
-    state.kanban.cards = cardId
-      ? state.kanban.cards.map((card) => card.id === cardId ? payload.card : card)
-      : [payload.card, ...state.kanban.cards];
     state.kanban.editingCardId = "";
     elements.saveKanbanCardButton.disabled = false;
     closeDialog(elements.kanbanCardDialog);
-    render();
+    await loadKanban({ silent: true });
     showToast(cardId ? "Cartão atualizado." : "Cartão criado.");
     await loadKanbanNotifications({ silent: true });
   } catch (error) {
@@ -1712,6 +1899,7 @@ async function moveKanbanCard(cardId, status) {
       },
     });
     state.kanban.cards = state.kanban.cards.map((item) => item.id === cardId ? payload.card : item);
+    await loadKanban({ silent: true });
     showToast(`Cartão movido para ${kanbanStatusLabel(status)}.`);
   } catch (error) {
     state.kanban.error = error.message;
@@ -1741,7 +1929,7 @@ async function deleteKanbanCard(cardId) {
   if (state.kanban.open) render();
   try {
     await apiRequest(`/api/kanban/cards/${encodeURIComponent(cardId)}`, { method: "DELETE" });
-    state.kanban.cards = state.kanban.cards.filter((card) => card.id !== cardId);
+    await loadKanban({ silent: true });
     showToast("Cartão excluído.");
   } catch (error) {
     state.kanban.error = error.message;
@@ -1766,7 +1954,7 @@ function renderNotificationPopover() {
   elements.notificationList.innerHTML = state.kanban.notificationsLoading && !notifications.length
     ? `<div class="notification-state"><span class="history-spinner" aria-hidden="true"></span><strong>Carregando…</strong></div>`
     : notifications.length
-      ? `<div class="notification-items">${notifications.map((notification) => `<button class="notification-item${notification.readAt ? "" : " is-unread"}" type="button" data-action="open-kanban-notification" data-id="${e(notification.id)}" data-card-id="${e(notification.cardId)}"><span class="notification-item-bell" aria-hidden="true">&#128276;&#65038;</span><span><strong>${e(notification.message)}</strong><small>${e(formatHistoryDate(notification.createdAt))}</small></span></button>`).join("")}</div>${state.kanban.unreadCount ? `<button class="notification-read-all" type="button" data-action="read-all-notifications">Marcar todas como lidas</button>` : ""}`
+      ? `<div class="notification-items">${notifications.map((notification) => `<button class="notification-item${notification.readAt ? "" : " is-unread"}" type="button" data-action="open-kanban-notification" data-id="${e(notification.id)}" data-board-id="${e(notification.boardId)}" data-card-id="${e(notification.cardId)}"><span class="notification-item-bell" aria-hidden="true">&#128276;&#65038;</span><span><strong>${e(notification.message)}</strong><small>${e(formatHistoryDate(notification.createdAt))}</small></span></button>`).join("")}</div>${state.kanban.unreadCount ? `<button class="notification-read-all" type="button" data-action="read-all-notifications">Marcar todas como lidas</button>` : ""}`
       : `<div class="notification-state"><span class="notification-empty-bell" aria-hidden="true">&#128276;&#65038;</span><strong>Nenhuma notificação</strong><span>Quando alguém marcar você em um cartão, o aviso aparecerá aqui.</span></div>`;
 }
 
@@ -1805,7 +1993,7 @@ function closeNotificationPopover() {
   elements.notificationButton.setAttribute("aria-expanded", "false");
 }
 
-async function openKanbanNotification(notificationId, cardId) {
+async function openKanbanNotification(notificationId, boardId, cardId) {
   try {
     await apiRequest(`/api/kanban/notifications/${encodeURIComponent(notificationId)}`, { method: "PATCH" });
     state.kanban.notifications = state.kanban.notifications.map((item) => item.id === notificationId ? { ...item, readAt: Math.floor(Date.now() / 1_000) } : item);
@@ -1814,7 +2002,7 @@ async function openKanbanNotification(notificationId, cardId) {
   } catch {
     // O cartão ainda pode ser aberto mesmo se o aviso já tiver sido removido.
   }
-  await showKanban({ focusCardId: cardId });
+  await showKanban({ boardId, focusCardId: cardId });
 }
 
 async function markAllNotificationsRead() {
@@ -4999,13 +5187,18 @@ async function handleAction(action, target) {
   if (action === "show-history") return showDocumentHistory();
   if (action === "show-kanban") return showKanban();
   if (action === "refresh-kanban") return loadKanban();
+  if (action === "add-kanban-board") return openKanbanBoardDialog();
+  if (action === "edit-kanban-board") return openKanbanBoardDialog(state.kanban.activeBoardId);
+  if (action === "select-kanban-board") return selectKanbanBoard(target.dataset.id);
+  if (action === "close-kanban-board") return closeKanbanBoardDialog();
+  if (action === "delete-kanban-board") return confirmKanbanBoardDeletion();
   if (action === "add-kanban-card") return openKanbanCardDialog();
   if (action === "edit-kanban-card") return openKanbanCardDialog(target.dataset.id);
   if (action === "delete-kanban-card") return confirmKanbanCardDeletion(target.dataset.id);
   if (action === "close-kanban-card") return closeKanbanCardDialog();
   if (action === "toggle-notifications") return toggleNotificationPopover();
   if (action === "close-notifications") return closeNotificationPopover();
-  if (action === "open-kanban-notification") return openKanbanNotification(target.dataset.id, target.dataset.cardId);
+  if (action === "open-kanban-notification") return openKanbanNotification(target.dataset.id, target.dataset.boardId, target.dataset.cardId);
   if (action === "read-all-notifications") return markAllNotificationsRead();
   if (action === "refresh-history") return loadDocumentHistory();
   if (action === "download-history") return triggerHistoryDownload(target.dataset.id);
@@ -5300,7 +5493,10 @@ document.addEventListener("drop", (event) => {
 
 document.addEventListener("dragstart", (event) => {
   const card = event.target.closest("[data-kanban-card-id]");
-  if (!card) return;
+  if (!card || !state.kanban.board?.canEdit) {
+    event.preventDefault();
+    return;
+  }
   draggedKanbanCardId = card.dataset.kanbanCardId;
   card.classList.add("is-dragging");
   if (event.dataTransfer) {
@@ -5356,6 +5552,15 @@ elements.renameForm.addEventListener("submit", async (event) => {
 elements.kanbanCardForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   await saveKanbanCard();
+});
+
+elements.kanbanBoardForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  await saveKanbanBoard();
+});
+
+elements.kanbanBoardDialog.addEventListener("click", (event) => {
+  if (event.target === elements.kanbanBoardDialog) closeKanbanBoardDialog();
 });
 
 elements.kanbanCardDialog.addEventListener("click", (event) => {

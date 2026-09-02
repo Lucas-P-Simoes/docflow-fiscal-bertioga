@@ -6,8 +6,26 @@ export type KanbanPerson = {
   email: string;
 };
 
+export type KanbanBoardSummary = {
+  id: string;
+  name: string;
+  description: string;
+  createdBy: KanbanPerson | null;
+  memberCount: number;
+  cardCount: number;
+  isOwner: boolean;
+  canEdit: boolean;
+  createdAt: number;
+  updatedAt: number;
+};
+
+export type KanbanBoard = KanbanBoardSummary & {
+  members: KanbanPerson[];
+};
+
 export type KanbanCard = {
   id: string;
+  boardId: string;
   title: string;
   description: string;
   status: KanbanStatus;
@@ -18,16 +36,51 @@ export type KanbanCard = {
   updatedAt: number;
 };
 
+export type KanbanActivity = {
+  id: string;
+  cardId: string | null;
+  action: string;
+  summary: string;
+  actor: KanbanPerson | null;
+  createdAt: number;
+};
+
 export type KanbanNotification = {
   id: string;
+  boardId: string;
   cardId: string;
   message: string;
   readAt: number | null;
   createdAt: number;
 };
 
+type PersonRow = {
+  id: string;
+  name: string;
+  email: string;
+};
+
+type BoardRow = {
+  id: string;
+  name: string;
+  description: string;
+  created_by: string | null;
+  creator_name: string | null;
+  creator_email: string | null;
+  member_count: number;
+  card_count: number;
+  member_can_edit: number;
+  created_at: number;
+  updated_at: number;
+};
+
+type BoardMemberRow = PersonRow & {
+  can_edit: number;
+};
+
 type CardRow = {
   id: string;
+  board_id: string;
   title: string;
   description: string;
   status: KanbanStatus;
@@ -39,26 +92,62 @@ type CardRow = {
   updated_at: number;
 };
 
-type PersonRow = {
-  id: string;
-  name: string;
-  email: string;
-};
-
 type AssigneeRow = PersonRow & {
   card_id: string;
 };
 
+type ActivityRow = {
+  id: string;
+  card_id: string | null;
+  action: string;
+  summary: string;
+  actor_user_id: string | null;
+  actor_name: string | null;
+  actor_email: string | null;
+  created_at: number;
+};
+
 type NotificationRow = {
   id: string;
+  board_id: string;
   card_id: string;
   message: string;
   read_at: number | null;
   created_at: number;
 };
 
+export type KanbanCardAccess = {
+  boardId: string;
+  canEdit: boolean;
+  isOwner: boolean;
+};
+
 function person(row: PersonRow): KanbanPerson {
   return { id: row.id, name: row.name, email: row.email };
+}
+
+function nullablePerson(
+  id: string | null,
+  name: string | null,
+  email: string | null,
+): KanbanPerson | null {
+  return id && name && email ? { id, name, email } : null;
+}
+
+function boardSummary(row: BoardRow, userId: string): KanbanBoardSummary {
+  const isOwner = row.created_by === userId;
+  return {
+    id: row.id,
+    name: row.name,
+    description: row.description,
+    createdBy: nullablePerson(row.created_by, row.creator_name, row.creator_email),
+    memberCount: Number(row.member_count || 0),
+    cardCount: Number(row.card_count || 0),
+    isOwner,
+    canEdit: isOwner || Boolean(row.member_can_edit),
+    createdAt: row.created_at,
+    updatedAt: row.updated_at,
+  };
 }
 
 export async function listApprovedKanbanPeople(db: D1Database): Promise<KanbanPerson[]> {
@@ -73,20 +162,210 @@ export async function listApprovedKanbanPeople(db: D1Database): Promise<KanbanPe
   return result.results.map(person);
 }
 
-export async function listKanbanCards(db: D1Database): Promise<KanbanCard[]> {
+export async function listAccessibleKanbanBoards(
+  db: D1Database,
+  userId: string,
+): Promise<KanbanBoardSummary[]> {
+  const result = await db
+    .prepare(
+      `SELECT
+         b.id, b.name, b.description, b.created_by,
+         creator.name AS creator_name, creator.email AS creator_email,
+         (SELECT COUNT(*) FROM kanban_board_members AS members WHERE members.board_id = b.id) AS member_count,
+         (SELECT COUNT(*) FROM kanban_cards AS cards WHERE cards.board_id = b.id) AS card_count,
+         COALESCE((SELECT can_edit FROM kanban_board_members WHERE board_id = b.id AND user_id = ?), 0) AS member_can_edit,
+         b.created_at, b.updated_at
+       FROM kanban_boards AS b
+       LEFT JOIN users AS creator ON creator.id = b.created_by
+       WHERE b.created_by = ?
+          OR EXISTS (
+            SELECT 1 FROM kanban_board_members AS access
+            WHERE access.board_id = b.id AND access.user_id = ?
+          )
+       ORDER BY b.updated_at DESC, b.name COLLATE NOCASE`,
+    )
+    .bind(userId, userId, userId)
+    .all<BoardRow>();
+  return result.results.map((row) => boardSummary(row, userId));
+}
+
+export async function getKanbanBoard(
+  db: D1Database,
+  boardId: string,
+  userId: string,
+): Promise<KanbanBoard | null> {
+  const row = await db
+    .prepare(
+      `SELECT
+         b.id, b.name, b.description, b.created_by,
+         creator.name AS creator_name, creator.email AS creator_email,
+         (SELECT COUNT(*) FROM kanban_board_members AS members WHERE members.board_id = b.id) AS member_count,
+         (SELECT COUNT(*) FROM kanban_cards AS cards WHERE cards.board_id = b.id) AS card_count,
+         COALESCE((SELECT can_edit FROM kanban_board_members WHERE board_id = b.id AND user_id = ?), 0) AS member_can_edit,
+         b.created_at, b.updated_at
+       FROM kanban_boards AS b
+       LEFT JOIN users AS creator ON creator.id = b.created_by
+       WHERE b.id = ?
+         AND (b.created_by = ? OR EXISTS (
+           SELECT 1 FROM kanban_board_members AS access
+           WHERE access.board_id = b.id AND access.user_id = ?
+         ))
+       LIMIT 1`,
+    )
+    .bind(userId, boardId, userId, userId)
+    .first<BoardRow>();
+  if (!row) return null;
+
+  const memberResult = await db
+    .prepare(
+      `SELECT u.id, u.name, u.email, members.can_edit
+       FROM kanban_board_members AS members
+       INNER JOIN users AS u ON u.id = members.user_id
+       WHERE members.board_id = ?
+       ORDER BY u.name COLLATE NOCASE, u.email COLLATE NOCASE`,
+    )
+    .bind(boardId)
+    .all<BoardMemberRow>();
+
+  return {
+    ...boardSummary(row, userId),
+    members: memberResult.results.map(person),
+  };
+}
+
+export async function createKanbanBoard(
+  db: D1Database,
+  values: {
+    id: string;
+    name: string;
+    description: string;
+    memberIds: string[];
+    actor: KanbanPerson;
+    now: number;
+  },
+): Promise<KanbanBoard> {
+  const memberIds = [...new Set([values.actor.id, ...values.memberIds])];
+  const statements: D1PreparedStatement[] = [
+    db
+      .prepare(
+        `INSERT INTO kanban_boards (id, name, description, created_by, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?)`,
+      )
+      .bind(values.id, values.name, values.description, values.actor.id, values.now, values.now),
+  ];
+  for (const userId of memberIds) {
+    statements.push(
+      db
+        .prepare(
+          `INSERT INTO kanban_board_members (board_id, user_id, added_by, can_edit, created_at)
+           VALUES (?, ?, ?, 1, ?)`,
+        )
+        .bind(values.id, userId, values.actor.id, values.now),
+    );
+  }
+  statements.push(activityStatement(db, {
+    boardId: values.id,
+    actorUserId: values.actor.id,
+    action: "board_created",
+    summary: `criou o quadro “${values.name}”`,
+    now: values.now,
+  }));
+  await db.batch(statements);
+  const board = await getKanbanBoard(db, values.id, values.actor.id);
+  if (!board) throw new Error("O quadro criado não pôde ser recuperado.");
+  return board;
+}
+
+export async function updateKanbanBoard(
+  db: D1Database,
+  values: {
+    id: string;
+    name: string;
+    description: string;
+    memberIds: string[];
+    actor: KanbanPerson;
+    now: number;
+  },
+): Promise<KanbanBoard | null> {
+  const existing = await getKanbanBoard(db, values.id, values.actor.id);
+  if (!existing || !existing.isOwner) return null;
+  const memberIds = [...new Set([values.actor.id, ...values.memberIds])];
+  const previousIds = new Set(existing.members.map((item) => item.id));
+  const nextIds = new Set(memberIds);
+  const allPeople = await listApprovedKanbanPeople(db);
+  const peopleById = new Map(allPeople.map((item) => [item.id, item.name]));
+  const added = memberIds.filter((id) => !previousIds.has(id)).map((id) => peopleById.get(id)).filter(Boolean);
+  const removed = existing.members.filter((item) => !nextIds.has(item.id)).map((item) => item.name);
+  const summaryParts: string[] = [];
+  if (existing.name !== values.name || existing.description !== values.description) {
+    summaryParts.push("atualizou as informações do quadro");
+  }
+  if (added.length) summaryParts.push(`adicionou ${added.join(", ")}`);
+  if (removed.length) summaryParts.push(`removeu ${removed.join(", ")}`);
+  if (!summaryParts.length) summaryParts.push("revisou as configurações do quadro");
+
+  const statements: D1PreparedStatement[] = [
+    db
+      .prepare("UPDATE kanban_boards SET name = ?, description = ?, updated_at = ? WHERE id = ?")
+      .bind(values.name, values.description, values.now, values.id),
+    db.prepare("DELETE FROM kanban_board_members WHERE board_id = ?").bind(values.id),
+    db
+      .prepare(
+        `DELETE FROM kanban_card_assignees
+         WHERE card_id IN (SELECT id FROM kanban_cards WHERE board_id = ?)
+           AND user_id NOT IN (${memberIds.map(() => "?").join(", ")})`,
+      )
+      .bind(values.id, ...memberIds),
+  ];
+  for (const userId of memberIds) {
+    statements.push(
+      db
+        .prepare(
+          `INSERT INTO kanban_board_members (board_id, user_id, added_by, can_edit, created_at)
+           VALUES (?, ?, ?, 1, ?)`,
+        )
+        .bind(values.id, userId, values.actor.id, values.now),
+    );
+  }
+  statements.push(activityStatement(db, {
+    boardId: values.id,
+    actorUserId: values.actor.id,
+    action: "board_updated",
+    summary: summaryParts.join("; "),
+    now: values.now,
+  }));
+  await db.batch(statements);
+  return getKanbanBoard(db, values.id, values.actor.id);
+}
+
+export async function deleteKanbanBoard(
+  db: D1Database,
+  boardId: string,
+  userId: string,
+): Promise<boolean> {
+  const result = await db
+    .prepare("DELETE FROM kanban_boards WHERE id = ? AND created_by = ?")
+    .bind(boardId, userId)
+    .run();
+  return result.meta.changes > 0;
+}
+
+export async function listKanbanCards(db: D1Database, boardId: string): Promise<KanbanCard[]> {
   const cardResult = await db
     .prepare(
       `SELECT
-         c.id, c.title, c.description, c.status, c.position,
+         c.id, c.board_id, c.title, c.description, c.status, c.position,
          c.created_by, creator.name AS creator_name, creator.email AS creator_email,
          c.created_at, c.updated_at
        FROM kanban_cards AS c
        LEFT JOIN users AS creator ON creator.id = c.created_by
+       WHERE c.board_id = ?
        ORDER BY
          CASE c.status WHEN 'todo' THEN 0 WHEN 'doing' THEN 1 ELSE 2 END,
          c.position DESC,
          c.created_at DESC`,
     )
+    .bind(boardId)
     .all<CardRow>();
 
   if (!cardResult.results.length) return [];
@@ -112,23 +391,76 @@ export async function listKanbanCards(db: D1Database): Promise<KanbanCard[]> {
 
   return cardResult.results.map((row) => ({
     id: row.id,
+    boardId: row.board_id,
     title: row.title,
     description: row.description,
     status: row.status,
     position: row.position,
-    createdBy: row.created_by && row.creator_name && row.creator_email
-      ? { id: row.created_by, name: row.creator_name, email: row.creator_email }
-      : null,
+    createdBy: nullablePerson(row.created_by, row.creator_name, row.creator_email),
     assignees: assigneesByCard.get(row.id) || [],
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   }));
 }
 
+export async function listKanbanActivity(
+  db: D1Database,
+  boardId: string,
+): Promise<KanbanActivity[]> {
+  const result = await db
+    .prepare(
+      `SELECT
+         activity.id, activity.card_id, activity.action, activity.summary,
+         activity.actor_user_id, actor.name AS actor_name, actor.email AS actor_email,
+         activity.created_at
+       FROM kanban_activity AS activity
+       LEFT JOIN users AS actor ON actor.id = activity.actor_user_id
+       WHERE activity.board_id = ?
+       ORDER BY activity.created_at DESC, activity.rowid DESC
+       LIMIT 100`,
+    )
+    .bind(boardId)
+    .all<ActivityRow>();
+  return result.results.map((row) => ({
+    id: row.id,
+    cardId: row.card_id,
+    action: row.action,
+    summary: row.summary,
+    actor: nullablePerson(row.actor_user_id, row.actor_name, row.actor_email),
+    createdAt: row.created_at,
+  }));
+}
+
+export async function getKanbanCardAccess(
+  db: D1Database,
+  cardId: string,
+  userId: string,
+): Promise<KanbanCardAccess | null> {
+  const row = await db
+    .prepare(
+      `SELECT
+         c.board_id,
+         CASE WHEN b.created_by = ? THEN 1 ELSE COALESCE(members.can_edit, 0) END AS can_edit,
+         CASE WHEN b.created_by = ? THEN 1 ELSE 0 END AS is_owner
+       FROM kanban_cards AS c
+       INNER JOIN kanban_boards AS b ON b.id = c.board_id
+       LEFT JOIN kanban_board_members AS members
+         ON members.board_id = b.id AND members.user_id = ?
+       WHERE c.id = ? AND (b.created_by = ? OR members.user_id IS NOT NULL)
+       LIMIT 1`,
+    )
+    .bind(userId, userId, userId, cardId, userId)
+    .first<{ board_id: string; can_edit: number; is_owner: number }>();
+  return row
+    ? { boardId: row.board_id, canEdit: Boolean(row.can_edit), isOwner: Boolean(row.is_owner) }
+    : null;
+}
+
 export async function createKanbanCard(
   db: D1Database,
   values: {
     id: string;
+    boardId: string;
     title: string;
     description: string;
     status: KanbanStatus;
@@ -141,11 +473,12 @@ export async function createKanbanCard(
     db
       .prepare(
         `INSERT INTO kanban_cards (
-           id, title, description, status, position, created_by, created_at, updated_at
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+           id, board_id, title, description, status, position, created_by, created_at, updated_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .bind(
         values.id,
+        values.boardId,
         values.title,
         values.description,
         values.status,
@@ -154,6 +487,15 @@ export async function createKanbanCard(
         values.now,
         values.now,
       ),
+    db.prepare("UPDATE kanban_boards SET updated_at = ? WHERE id = ?").bind(values.now, values.boardId),
+    activityStatement(db, {
+      boardId: values.boardId,
+      cardId: values.id,
+      actorUserId: values.actor.id,
+      action: "card_created",
+      summary: `criou o cartão “${values.title}”`,
+      now: values.now,
+    }),
   ];
 
   for (const userId of values.assigneeIds) {
@@ -164,19 +506,21 @@ export async function createKanbanCard(
            VALUES (?, ?, ?, ?)`,
         )
         .bind(values.id, userId, values.actor.id, values.now),
-      notificationStatement(db, {
+    );
+    if (userId !== values.actor.id) {
+      statements.push(notificationStatement(db, {
         userId,
         cardId: values.id,
         actorUserId: values.actor.id,
         actorName: values.actor.name,
         cardTitle: values.title,
         now: values.now,
-      }),
-    );
+      }));
+    }
   }
 
   await db.batch(statements);
-  const card = (await listKanbanCards(db)).find((item) => item.id === values.id);
+  const card = (await listKanbanCards(db, values.boardId)).find((item) => item.id === values.id);
   if (!card) throw new Error("O cartão criado não pôde ser recuperado.");
   return card;
 }
@@ -185,6 +529,7 @@ export async function updateKanbanCard(
   db: D1Database,
   values: {
     id: string;
+    boardId: string;
     title: string;
     description: string;
     status: KanbanStatus;
@@ -194,9 +539,9 @@ export async function updateKanbanCard(
   },
 ): Promise<KanbanCard | null> {
   const existing = await db
-    .prepare("SELECT id, status, position FROM kanban_cards WHERE id = ? LIMIT 1")
-    .bind(values.id)
-    .first<{ id: string; status: KanbanStatus; position: number }>();
+    .prepare("SELECT id, title, description, status, position FROM kanban_cards WHERE id = ? AND board_id = ? LIMIT 1")
+    .bind(values.id, values.boardId)
+    .first<{ id: string; title: string; description: string; status: KanbanStatus; position: number }>();
   if (!existing) return null;
 
   const currentAssignees = await db
@@ -204,15 +549,19 @@ export async function updateKanbanCard(
     .bind(values.id)
     .all<{ user_id: string }>();
   const currentIds = new Set(currentAssignees.results.map((row) => row.user_id));
+  const nextIds = new Set(values.assigneeIds);
   const newlyAssigned = values.assigneeIds.filter((userId) => !currentIds.has(userId));
-  const nextPosition = existing.status === values.status ? existing.position : values.now;
+  const assigneesChanged = currentIds.size !== nextIds.size || [...currentIds].some((id) => !nextIds.has(id));
+  const contentChanged = existing.title !== values.title || existing.description !== values.description || assigneesChanged;
+  const statusChanged = existing.status !== values.status;
+  const nextPosition = statusChanged ? values.now : existing.position;
 
   const statements: D1PreparedStatement[] = [
     db
       .prepare(
         `UPDATE kanban_cards
          SET title = ?, description = ?, status = ?, position = ?, updated_at = ?
-         WHERE id = ?`,
+         WHERE id = ? AND board_id = ?`,
       )
       .bind(
         values.title,
@@ -221,8 +570,10 @@ export async function updateKanbanCard(
         nextPosition,
         values.now,
         values.id,
+        values.boardId,
       ),
     db.prepare("DELETE FROM kanban_card_assignees WHERE card_id = ?").bind(values.id),
+    db.prepare("UPDATE kanban_boards SET updated_at = ? WHERE id = ?").bind(values.now, values.boardId),
   ];
 
   for (const userId of values.assigneeIds) {
@@ -236,56 +587,103 @@ export async function updateKanbanCard(
     );
   }
   for (const userId of newlyAssigned) {
-    statements.push(notificationStatement(db, {
-      userId,
+    if (userId !== values.actor.id) {
+      statements.push(notificationStatement(db, {
+        userId,
+        cardId: values.id,
+        actorUserId: values.actor.id,
+        actorName: values.actor.name,
+        cardTitle: values.title,
+        now: values.now,
+      }));
+    }
+  }
+  if (contentChanged) {
+    statements.push(activityStatement(db, {
+      boardId: values.boardId,
       cardId: values.id,
       actorUserId: values.actor.id,
-      actorName: values.actor.name,
-      cardTitle: values.title,
+      action: "card_updated",
+      summary: `atualizou o cartão “${values.title}”`,
+      now: values.now,
+    }));
+  }
+  if (statusChanged) {
+    statements.push(activityStatement(db, {
+      boardId: values.boardId,
+      cardId: values.id,
+      actorUserId: values.actor.id,
+      action: "card_moved",
+      summary: `moveu “${values.title}” de ${statusLabel(existing.status)} para ${statusLabel(values.status)}`,
       now: values.now,
     }));
   }
 
   await db.batch(statements);
-  return (await listKanbanCards(db)).find((item) => item.id === values.id) || null;
+  return (await listKanbanCards(db, values.boardId)).find((item) => item.id === values.id) || null;
 }
 
-export async function deleteKanbanCard(db: D1Database, cardId: string): Promise<boolean> {
-  const result = await db
-    .prepare("DELETE FROM kanban_cards WHERE id = ?")
-    .bind(cardId)
-    .run();
-  return result.meta.changes > 0;
+export async function deleteKanbanCard(
+  db: D1Database,
+  values: { cardId: string; boardId: string; actor: KanbanPerson; now: number },
+): Promise<boolean> {
+  const existing = await db
+    .prepare("SELECT title FROM kanban_cards WHERE id = ? AND board_id = ? LIMIT 1")
+    .bind(values.cardId, values.boardId)
+    .first<{ title: string }>();
+  if (!existing) return false;
+  await db.batch([
+    activityStatement(db, {
+      boardId: values.boardId,
+      cardId: values.cardId,
+      actorUserId: values.actor.id,
+      action: "card_deleted",
+      summary: `excluiu o cartão “${existing.title}”`,
+      now: values.now,
+    }),
+    db.prepare("DELETE FROM kanban_cards WHERE id = ? AND board_id = ?").bind(values.cardId, values.boardId),
+    db.prepare("UPDATE kanban_boards SET updated_at = ? WHERE id = ?").bind(values.now, values.boardId),
+  ]);
+  return true;
 }
 
 export async function listKanbanNotifications(
   db: D1Database,
   userId: string,
 ): Promise<{ notifications: KanbanNotification[]; unreadCount: number }> {
+  const accessSql = `(b.created_by = ? OR EXISTS (
+    SELECT 1 FROM kanban_board_members AS access
+    WHERE access.board_id = b.id AND access.user_id = ?
+  ))`;
   const [notifications, unread] = await Promise.all([
     db
       .prepare(
-        `SELECT id, card_id, message, read_at, created_at
-         FROM kanban_notifications
-         WHERE user_id = ?
-         ORDER BY created_at DESC
+        `SELECT n.id, c.board_id, n.card_id, n.message, n.read_at, n.created_at
+         FROM kanban_notifications AS n
+         INNER JOIN kanban_cards AS c ON c.id = n.card_id
+         INNER JOIN kanban_boards AS b ON b.id = c.board_id
+         WHERE n.user_id = ? AND ${accessSql}
+         ORDER BY n.created_at DESC
          LIMIT 40`,
       )
-      .bind(userId)
+      .bind(userId, userId, userId)
       .all<NotificationRow>(),
     db
       .prepare(
         `SELECT COUNT(*) AS count
-         FROM kanban_notifications
-         WHERE user_id = ? AND read_at IS NULL`,
+         FROM kanban_notifications AS n
+         INNER JOIN kanban_cards AS c ON c.id = n.card_id
+         INNER JOIN kanban_boards AS b ON b.id = c.board_id
+         WHERE n.user_id = ? AND n.read_at IS NULL AND ${accessSql}`,
       )
-      .bind(userId)
+      .bind(userId, userId, userId)
       .first<{ count: number }>(),
   ]);
 
   return {
     notifications: notifications.results.map((row) => ({
       id: row.id,
+      boardId: row.board_id,
       cardId: row.card_id,
       message: row.message,
       readAt: row.read_at,
@@ -325,6 +723,40 @@ export async function markAllKanbanNotificationsRead(
     )
     .bind(now, userId)
     .run();
+}
+
+function statusLabel(status: KanbanStatus): string {
+  if (status === "doing") return "Em andamento";
+  if (status === "done") return "Concluído";
+  return "A fazer";
+}
+
+function activityStatement(
+  db: D1Database,
+  values: {
+    boardId: string;
+    cardId?: string;
+    actorUserId: string;
+    action: string;
+    summary: string;
+    now: number;
+  },
+): D1PreparedStatement {
+  return db
+    .prepare(
+      `INSERT INTO kanban_activity (
+         id, board_id, card_id, actor_user_id, action, summary, created_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+    )
+    .bind(
+      crypto.randomUUID(),
+      values.boardId,
+      values.cardId || null,
+      values.actorUserId,
+      values.action,
+      values.summary,
+      values.now,
+    );
 }
 
 function notificationStatement(
