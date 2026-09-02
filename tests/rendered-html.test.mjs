@@ -96,7 +96,9 @@ test("highlights missing document fields and clears the error after correction",
   assert.match(app, /requestAnimationFrame\(applyValidationHighlights\)/);
   assert.match(app, /document\.addEventListener\("input",[\s\S]*?clearValidationHighlight\(target\)/);
   assert.match(app, /document\.addEventListener\("change",[\s\S]*?clearValidationHighlight\(target\)/);
-  assert.match(app, /!r\.title\.trim\(\) && '\[data-bind="report\.title"\]'/);
+  assert.match(app, /!r\.neighborhood\.trim\(\) && '\[data-bind="report\.neighborhood"\]'/);
+  assert.match(app, /!r\.map && '\[data-upload-kind="report-map"\]'/);
+  assert.match(app, /!reportStreets\(\)\.length && '\[data-bind="report\.streets"\]'/);
   assert.match(app, /!c\.signatories\.length \|\| invalidSignatory/);
   assert.match(app, /\[data-signature-target="cota"\]/);
   assert.match(styles, /input\.is-validation-error/);
@@ -148,6 +150,8 @@ test("keeps the editable and deployable DocFlow assets synchronized", async () =
     builtApp,
     sourceTemplate,
     builtTemplate,
+    sourceTechnicalOpinionTemplate,
+    builtTechnicalOpinionTemplate,
     sourceNotificationTemplate,
     builtNotificationTemplate,
     sourceMemorandumTemplate,
@@ -160,6 +164,10 @@ test("keeps the editable and deployable DocFlow assets synchronized", async () =
     readFile(new URL("public/docflow/templates/MODELO_FOLHA_COTA.docx", siteRoot)),
     readFile(
       new URL("dist/client/docflow/templates/MODELO_FOLHA_COTA.docx", siteRoot),
+    ),
+    readFile(new URL("public/docflow/templates/MODELO_PARECER_TECNICO.docx", siteRoot)),
+    readFile(
+      new URL("dist/client/docflow/templates/MODELO_PARECER_TECNICO.docx", siteRoot),
     ),
     readFile(new URL("public/docflow/templates/MODELO_NOTIFICACAO.docx", siteRoot)),
     readFile(
@@ -175,6 +183,7 @@ test("keeps the editable and deployable DocFlow assets synchronized", async () =
 
   assert.deepEqual(builtApp, sourceApp);
   assert.deepEqual(builtTemplate, sourceTemplate);
+  assert.deepEqual(builtTechnicalOpinionTemplate, sourceTechnicalOpinionTemplate);
   assert.deepEqual(builtNotificationTemplate, sourceNotificationTemplate);
   assert.deepEqual(builtMemorandumTemplate, sourceMemorandumTemplate);
   assert.deepEqual(builtLoginImage, sourceLoginImage);
@@ -302,14 +311,15 @@ test("keeps new registrations pending and limits user approval to the configured
 });
 
 
-test("labels the cota, memorandum, oficio, notification, and warning as ready", async () => {
+test("labels every available document, including the technical opinion, as ready", async () => {
   const [app, styles] = await Promise.all([
     readFile(new URL("public/docflow/app.js", siteRoot), "utf8"),
     readFile(new URL("public/docflow/styles.css", siteRoot), "utf8"),
   ]);
 
-  assert.equal((app.match(/card-status is-ready/g) || []).length, 5);
-  assert.equal((app.match(/card-status is-development/g) || []).length, 1);
+  assert.equal((app.match(/card-status is-ready/g) || []).length, 6);
+  assert.equal((app.match(/card-status is-development/g) || []).length, 0);
+  assert.match(app, /data-action="start-report">[\s\S]*?card-status is-ready">Pronto<\/span>[\s\S]*?<h3>Parecer técnico<\/h3>/);
   assert.match(app, /card-status is-ready">Pronto<\/span>[\s\S]*?<h3>Folha de cota<\/h3>/);
   assert.match(app, /data-kind="memorando">[\s\S]*?card-status is-ready">Pronto<\/span>[\s\S]*?<h3>Memorando<\/h3>/);
   assert.match(app, /data-kind="oficio">[\s\S]*?card-status is-ready">Pronto<\/span>[\s\S]*?<h3>Ofício<\/h3>/);
@@ -317,6 +327,33 @@ test("labels the cota, memorandum, oficio, notification, and warning as ready", 
   assert.match(app, /data-action="start-warning">[\s\S]*?card-status is-ready">Pronto<\/span>[\s\S]*?<h3>Advertência<\/h3>/);
   assert.match(styles, /\.card-status\s*\{/);
   assert.match(styles, /\.card-status\.is-ready\s*\{/);
+});
+
+
+test("builds technical opinions from the supplied model with map, streets, photos, and fixed sections", async () => {
+  const [app, template, documentWorker] = await Promise.all([
+    readFile(new URL("public/docflow/app.js", siteRoot), "utf8"),
+    readFile(new URL("public/docflow/templates/MODELO_PARECER_TECNICO.docx", siteRoot)),
+    readFile(new URL("worker/documents.ts", siteRoot), "utf8"),
+  ]);
+
+  assert.ok(template.byteLength > 2_000_000);
+  assert.match(app, /TECHNICAL_OPINION_TEMPLATE_URL\s*=\s*"templates\/MODELO_PARECER_TECNICO\.docx"/);
+  assert.match(app, /REPORT_STEPS\s*=\s*\["Identificação", "Mapa e vias", "Fotografias", "Parecer e assinaturas", "Revisão"\]/);
+  assert.match(app, /renderSingleImageUpload\("report-map"/);
+  assert.match(app, /data-file="report-photos"/);
+  assert.match(app, /data-bind="report\.streets"/);
+  assert.match(app, /data-bind="report\.findings"/);
+  assert.match(app, /data-bind="report\.impacts"/);
+  assert.match(app, /data-bind="report\.recommendations"/);
+  assert.match(app, /technicalHeading\("INTRODUÇÃO"\)/);
+  assert.match(app, /technicalHeading\("MAPA DAS VIAS VISTORIADAS"\)/);
+  assert.match(app, /technicalHeading\("CONSIDERAÇÕES FINAIS:"\)/);
+  assert.match(app, /technicalHeading\("ANEXO FOTOGRÁFICO"\)/);
+  assert.match(app, /technical_opinion_content:\s*\{[\s\S]*?type:\s*PatchType\.DOCUMENT/);
+  assert.match(app, /keepOriginalStyles:\s*true/);
+  assert.match(app, /await finishDownload\(blob, filename, "Parecer técnico"\)/);
+  assert.match(documentWorker, /"Parecer técnico"/);
 });
 
 
@@ -494,8 +531,8 @@ test("saves reusable signatures per account and formats name and role correctly"
   assert.match(app, /data-signature-target="report"/);
   assert.match(app, /data-signature-target="correspondence"/);
   assert.match(app, /data-signature-target="notice"/);
-  assert.match(app, /new TextRun\(\{ text: signature\.name, bold: true/);
-  assert.match(app, /text: signature\.role, bold: false, italics: true/);
+  assert.match(app, /technicalRun\(signature\.name, \{ bold: true \}\)/);
+  assert.match(app, /technicalRun\(signature\.role\)/);
   assert.match(app, /text: signatory\.role\.trim\(\), font: "Arial", size: 24, bold: false, italics: true/);
   assert.match(app, /officialCorrespondenceRun\(signatory\.role\.trim\(\), false, true\)/);
   assert.match(app, /new TextRun\(\{ text: signatory\.role\.trim\(\), bold: false, italics: true/);

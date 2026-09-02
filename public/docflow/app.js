@@ -9,7 +9,7 @@ if (LEGACY_DOCFLOW_PATHS.has(window.location.pathname)) {
   );
 }
 
-const REPORT_STEPS = ["Informações", "Fotografias", "Conteúdo e formato", "Revisão"];
+const REPORT_STEPS = ["Identificação", "Mapa e vias", "Fotografias", "Parecer e assinaturas", "Revisão"];
 const COTA_STEPS = ["Conteúdo", "Revisão", "Assinatura e download"];
 const OFFICIAL_CORRESPONDENCE_STEPS = ["Dados do documento", "Conteúdo", "Revisão e download"];
 const CORRESPONDENCE_STEPS = ["Dados do documento", "Conteúdo", "Revisão e download"];
@@ -111,6 +111,7 @@ const COTA_JUSTIFIED_WIDTH_PX = 304;
 const COTA_TEMPLATE_URL = "templates/MODELO_FOLHA_COTA.docx";
 const OFFICIAL_CORRESPONDENCE_TEMPLATE_URL = "templates/MODELO_MEMORANDO.docx";
 const NOTIFICATION_TEMPLATE_URL = "templates/MODELO_NOTIFICACAO.docx";
+const TECHNICAL_OPINION_TEMPLATE_URL = "templates/MODELO_PARECER_TECNICO.docx";
 const COTA_TEXT_STYLE = { font: "Arial", size: 24, language: { value: "pt-BR" } };
 const COTA_HEADER_FIELD_STYLE = { ...COTA_TEXT_STYLE, bold: true, italics: false };
 const MAX_CORRESPONDENCE_TEXT = 7000;
@@ -118,6 +119,12 @@ const ACCEPTED_IMAGES = ["image/jpeg", "image/png", "image/bmp", "image/gif", "i
 const OTHER_SIGNATURE_VALUE = "__other__";
 const OTHER_RECIPIENT_VALUE = "__other_recipient__";
 const OTHER_SALUTATION_VALUE = "__other_salutation__";
+const DEFAULT_TECHNICAL_RECOMMENDATIONS = [
+  "Reposição completa dos bloquetes ausentes com material compatível ao existente",
+  "Correção dos recalques, desníveis e afundamentos, com nivelamento adequado do pavimento",
+  "Reassentamento e paginação correta dos bloquetes nos trechos pendentes ou instáveis",
+  "Regularização final, correção dos pontos de empoçamento e limpeza dos trechos afetados",
+].join("\n");
 
 const PHOTO_PROMPT = `Você é um inspetor de pavimentação urbana. Examine somente o pavimento, a calçada, a sarjeta e os dispositivos de drenagem visíveis na fotografia.
 
@@ -296,6 +303,7 @@ let cotaTemplatePromise = null;
 let cotaMeasureContext = null;
 let officialCorrespondenceTemplatePromise = null;
 let notificationTemplatePromise = null;
+let technicalOpinionTemplatePromise = null;
 let pendingSignatureTarget = null;
 let notificationPollTimer = null;
 let draggedKanbanCardId = "";
@@ -312,19 +320,21 @@ function createSignatureConfigurationState() {
 
 function createReportState(saved = {}) {
   return {
-    organization: saved.organization || "",
-    department: saved.department || "",
-    logo: null,
+    city: saved.technicalOpinionCity || "Bertioga",
     date: todayInputValue(),
-    title: "Relatório Fotográfico",
-    introduction: "",
-    introImage: null,
+    neighborhood: "",
+    responsibleCompany: "SABESP",
+    intervention: "implantação ou manutenção de redes de abastecimento de água e esgoto",
+    map: null,
+    mapCaption: "Ruas vistoriadas destacadas no mapa.",
+    streets: "",
     photos: [],
     order: "name",
-    topics: [],
+    findings: "",
+    impacts: "",
+    recommendations: DEFAULT_TECHNICAL_RECOMMENDATIONS,
     responsibles: [],
-    onePerPage: Boolean(saved.onePerPage),
-    startPhotosNewPage: saved.startPhotosNewPage !== false,
+    onePerPage: saved.onePerPage !== false,
     complete: false,
   };
 }
@@ -408,10 +418,10 @@ function scheduleSave() {
   saveTimer = setTimeout(() => {
     try {
       const preferences = {
-        organization: state.report.organization || state.cota.organization || state.correspondence.organization,
-        department: state.report.department || state.cota.department || state.correspondence.department,
+        organization: state.cota.organization || state.correspondence.organization,
+        department: state.cota.department || state.correspondence.department,
+        technicalOpinionCity: state.report.city,
         onePerPage: state.report.onePerPage,
-        startPhotosNewPage: state.report.startPhotosNewPage,
         memorandumCity: state.correspondence.kind === "memorando" ? state.correspondence.place : (persisted.memorandumCity || "Bertioga"),
         notificationCity: state.notification.city,
         warningCity: state.warning.city,
@@ -1101,9 +1111,9 @@ function currentSteps() {
 
 function renderSidebar() {
   if (state.flow === "report") {
-    elements.flowEyebrow.textContent = "Relatório fotográfico";
-    elements.flowTitle.textContent = "Monte seu relatório";
-    elements.flowDescription.textContent = "Organize informações, fotos e assinaturas.";
+    elements.flowEyebrow.textContent = "Parecer técnico";
+    elements.flowTitle.textContent = "Prepare a vistoria";
+    elements.flowDescription.textContent = "Preencha o modelo, anexe o mapa e organize as evidências.";
   } else if (state.flow === "cota") {
     elements.flowEyebrow.textContent = "Folha de cota";
     elements.flowTitle.textContent = "Prepare o despacho";
@@ -1150,11 +1160,11 @@ function renderHome() {
   return `<section class="document-section">
     <div class="document-grid">
       <article class="document-card" tabindex="0" role="button" data-action="start-report">
-        <span class="card-status is-development">Em desenvolvimento</span>
+        <span class="card-status is-ready">Pronto</span>
         <span class="card-number" aria-hidden="true">01</span><span class="card-icon" aria-hidden="true">▧</span>
-        <h3>Relatório fotográfico</h3>
-        <p>Monte um relatório técnico com introdução, seções, fotografias, descrições e assinaturas.</p>
-        <span class="card-link">Começar relatório <span aria-hidden="true">→</span></span>
+        <h3>Parecer técnico</h3>
+        <p>Preencha a vistoria, informe as vias, anexe o mapa e as fotos e gere o Word no modelo oficial.</p>
+        <span class="card-link">Criar parecer <span aria-hidden="true">→</span></span>
       </article>
       <article class="document-card is-cota" tabindex="0" role="button" data-action="start-cota">
         <span class="card-status is-ready">Pronto</span>
@@ -1802,36 +1812,64 @@ function stopNotificationPolling() {
 }
 
 function renderReport() {
-  const renders = [renderReportInfo, renderReportPhotos, renderReportContent, renderReportReview];
+  const renders = [renderReportInfo, renderReportMap, renderReportPhotos, renderReportContent, renderReportReview];
   return renders[state.step]();
+}
+
+function reportStreets() {
+  return String(state.report.streets || "")
+    .replace(/\r\n?/g, "\n")
+    .split("\n")
+    .map((street) => street.trim())
+    .filter(Boolean);
+}
+
+function reportRecommendations() {
+  return String(state.report.recommendations || "")
+    .replace(/\r\n?/g, "\n")
+    .split("\n")
+    .map((item) => item.replace(/^[•\-–—\s]+/, "").replace(/[.;]+$/, "").trim())
+    .filter(Boolean);
+}
+
+function technicalOpinionTitle() {
+  const neighborhood = state.report.neighborhood.trim();
+  return neighborhood
+    ? `PARECER TÉCNICO DE VISTORIA – BAIRRO ${neighborhood.toLocaleUpperCase("pt-BR")}`
+    : "PARECER TÉCNICO DE VISTORIA";
+}
+
+function technicalOpinionIntroduction() {
+  const r = state.report;
+  const neighborhood = r.neighborhood.trim() || "[bairro]";
+  const company = r.responsibleCompany.trim() || "[empresa responsável]";
+  const intervention = r.intervention.trim() || "[serviço executado]";
+  return [
+    `O presente Parecer Técnico de Vistoria tem por objetivo registrar e mapear as vias do bairro ${neighborhood} que receberam intervenções da ${company} para ${intervention}, identificando os pontos que apresentam pendências de acabamento após a execução dos serviços.`,
+    `Durante a vistoria foram observadas não conformidades nos trechos inspecionados, conforme as constatações técnicas e as evidências fotográficas apresentadas neste documento.`,
+    "Este documento visa subsidiar as providências necessárias para a correção dos trechos apontados, com a devida recomposição do pavimento e restauração das condições adequadas de uso das vias públicas.",
+  ];
 }
 
 function renderReportInfo() {
   const r = state.report;
-  return `${pageHeading("Etapa 1", "Identifique o relatório", "Informe o cabeçalho e o contexto que aparecerão no documento final.")}
+  return `${pageHeading("Etapa 1", "Identifique o parecer", "Informe o local, a data e a intervenção que será analisada.")}
   <section class="panel">
-    ${panelHeader("Identificação do órgão", "Estes dados compõem o cabeçalho do arquivo Word.")}
-    <div class="field-grid">
-      <label class="field"><span>Órgão ou empresa</span><input type="text" data-bind="report.organization" value="${e(r.organization)}" placeholder="Ex.: Secretaria Municipal de Obras" /></label>
-      <label class="field"><span>Departamento ou setor</span><input type="text" data-bind="report.department" value="${e(r.department)}" placeholder="Ex.: Divisão de Fiscalização" /></label>
-    </div>
-    <div class="field stacked">
-      <span class="field-label">Logotipo (opcional)</span>
-      ${renderSingleImageUpload("report-logo", r.logo, "Adicionar logotipo", "PNG ou JPEG; será aplicado no cabeçalho")}
+    ${panelHeader("Dados da vistoria", "O título e a abertura do parecer serão montados automaticamente no padrão do modelo atual.")}
+    <div class="field-grid three">
+      <label class="field"><span>Cidade *</span><input type="text" data-bind="report.city" value="${e(r.city)}" placeholder="Ex.: Bertioga" /></label>
+      <label class="field"><span>Data da vistoria *</span><input type="date" data-bind="report.date" value="${e(r.date)}" /></label>
+      <label class="field"><span>Bairro *</span><input type="text" data-bind="report.neighborhood" value="${e(r.neighborhood)}" placeholder="Ex.: São Lourenço" /></label>
     </div>
   </section>
   <section class="panel">
-    ${panelHeader("Dados principais", "O título, a data e a introdução abrem o relatório.")}
+    ${panelHeader("Intervenção fiscalizada", "Esses dados alimentam a introdução sem atribuir fatos que não tenham sido informados.")}
     <div class="field-grid">
-      <label class="field"><span>Título do relatório *</span><input type="text" data-bind="report.title" value="${e(r.title)}" placeholder="Relatório Fotográfico" /></label>
-      <label class="field"><span>Data *</span><input type="date" data-bind="report.date" value="${e(r.date)}" /></label>
+      <label class="field"><span>Empresa responsável *</span><input type="text" data-bind="report.responsibleCompany" value="${e(r.responsibleCompany)}" placeholder="Ex.: SABESP" /></label>
+      <label class="field"><span>Serviço ou intervenção *</span><input type="text" data-bind="report.intervention" value="${e(r.intervention)}" placeholder="Ex.: implantação de rede de água e esgoto" /></label>
     </div>
-    <label class="field stacked"><span>Introdução *</span><textarea data-bind="report.introduction" maxlength="4000" placeholder="Descreva o objetivo, o local e o contexto da vistoria…">${e(r.introduction)}</textarea><span class="text-counter"><span>Contextualize sem antecipar conclusões</span><span>${r.introduction.length}/4000</span></span></label>
-    <div class="field stacked">
-      <span class="field-label">Imagem de abertura (opcional)</span>
-      ${renderSingleImageUpload("report-intro", r.introImage, "Adicionar imagem", "Ela aparecerá depois da introdução")}
-    </div>
-  </section>`;
+  </section>
+  <div class="notice"><span aria-hidden="true">✓</span><span><strong>Modelo oficial preservado.</strong> Cabeçalho, rodapé, margens, fonte, paginação e bloco de assinaturas virão do parecer técnico de referência.</span></div>`;
 }
 
 function renderSingleImageUpload(kind, file, title, help, id = "") {
@@ -1842,20 +1880,38 @@ function renderSingleImageUpload(kind, file, title, help, id = "") {
       <button class="icon-button" type="button" data-action="remove-file" data-kind="${e(kind)}" data-id="${e(id)}" aria-label="Remover imagem">×</button>
     </div>`;
   }
-  return `<label class="upload-box">
+  return `<label class="upload-box" data-upload-kind="${e(kind)}">
     <input type="file" accept="image/jpeg,image/png,image/bmp,image/gif,image/webp" data-file="${e(kind)}" data-id="${e(id)}" />
     <span class="upload-symbol" aria-hidden="true">+</span>
     <span class="upload-copy"><strong>${e(title)}</strong><span>${e(help)}</span></span>
   </label>`;
 }
 
+function renderReportMap() {
+  const r = state.report;
+  const streets = reportStreets();
+  return `${pageHeading("Etapa 2", "Mapeie as vias vistoriadas", "Anexe o mapa e informe uma via por linha, na ordem em que deverão aparecer no parecer.")}
+  <section class="panel">
+    ${panelHeader("Mapa das vias vistoriadas", "Use uma imagem legível, de preferência com as vias destacadas.")}
+    <div class="field stacked">
+      <span class="field-label">Imagem do mapa *</span>
+      ${renderSingleImageUpload("report-map", r.map, "Adicionar mapa", "JPEG, PNG, BMP, GIF ou WebP • até 20 MB")}
+    </div>
+    <label class="field stacked"><span>Legenda do mapa</span><input type="text" maxlength="300" data-bind="report.mapCaption" value="${e(r.mapCaption)}" placeholder="Ex.: Ruas vistoriadas destacadas em amarelo." /></label>
+  </section>
+  <section class="panel">
+    ${panelHeader("Relação de vias", "Cada linha será inserida como um item da lista no documento final.")}
+    <label class="field stacked"><span>Vias vistoriadas *</span><textarea data-bind="report.streets" maxlength="4000" placeholder="Rua Um&#10;Rua Dois&#10;Avenida Principal">${e(r.streets)}</textarea><span class="text-counter"><span>Uma via por linha</span><span>${streets.length} via(s)</span></span></label>
+  </section>`;
+}
+
 function renderReportPhotos() {
   const r = state.report;
   const missing = r.photos.filter((photo) => !photo.description.trim()).length;
-  return `${pageHeading("Etapa 2", "Organize as fotografias", "Adicione as imagens, ajuste a ordem e escreva ou gere as descrições técnicas.")}
+  return `${pageHeading("Etapa 3", "Organize as evidências", "Adicione as fotografias e informe o local e a condição observada em cada registro.")}
   <section class="panel">
     ${panelHeader("Adicionar fotografias", "Selecione várias imagens de uma vez ou arraste os arquivos para esta área.")}
-    <label class="upload-box" data-drop="photos">
+    <label class="upload-box" data-drop="report-photos">
       <input type="file" multiple accept="image/jpeg,image/png,image/bmp,image/gif,image/webp" data-file="report-photos" />
       <span class="upload-symbol" aria-hidden="true">+</span>
       <span class="upload-copy"><strong>Selecionar fotografias</strong><span>JPEG, PNG, BMP, GIF ou WebP • até 20 MB por arquivo</span></span>
@@ -1884,7 +1940,7 @@ function renderPhotoCard(photo, index) {
     <img src="${e(photo.url)}" alt="Fotografia ${index + 1}: ${e(photo.file.name)}" />
     <div class="photo-card-main">
       <div class="photo-card-heading"><span class="photo-index">${String(index + 1).padStart(2, "0")}</span><strong>${e(photo.file.name)}</strong><span class="analysis-state ${statusClass}">${e(statusText)}</span></div>
-      <textarea data-photo-description="${e(photo.id)}" maxlength="700" placeholder="Descreva a patologia, o local ou a informação relevante…">${e(photo.description)}</textarea>
+      <textarea data-photo-description="${e(photo.id)}" maxlength="700" placeholder="Ex.: Rua Um, altura do nº 100: recomposição irregular, com desnível e material de base exposto.">${e(photo.description)}</textarea>
     </div>
     <div class="photo-card-actions">
       <button class="icon-button" type="button" data-action="analyze-photo" data-id="${e(photo.id)}" aria-label="Descrever com IA" title="Descrever com IA">✦</button>
@@ -1895,10 +1951,12 @@ function renderPhotoCard(photo, index) {
 
 function renderReportContent() {
   const r = state.report;
-  return `${pageHeading("Etapa 3", "Complete o conteúdo", "Inclua seções adicionais, escolha os responsáveis e defina o formato das páginas.")}
+  return `${pageHeading("Etapa 4", "Conclua o parecer", "Registre apenas as constatações verificadas, os impactos observados e as providências recomendadas.")}
   <section class="panel">
-    ${panelHeader("Tópicos adicionais", "Use para metodologia, histórico, conclusão ou outra seção antes das fotografias.", `<button class="button button-secondary" type="button" data-action="add-topic">+ Adicionar tópico</button>`)}
-    ${r.topics.length ? `<div class="topic-list">${r.topics.map(renderTopic).join("")}</div>` : `<div class="empty-state"><div><strong>Nenhum tópico adicional</strong><span>Esta parte é opcional. A introdução pode ser seguida diretamente pelas fotografias.</span></div></div>`}
+    ${panelHeader("Considerações finais", "Os três campos abaixo seguem a ordem do parecer técnico atual.")}
+    <label class="field stacked"><span>Constatações técnicas *</span><textarea data-bind="report.findings" maxlength="5000" placeholder="Descreva as não conformidades verificadas, os materiais e os trechos afetados…">${e(r.findings)}</textarea><span class="text-counter"><span>Use somente fatos observados na vistoria</span><span>${r.findings.length}/5000</span></span></label>
+    <label class="field stacked"><span>Impactos e riscos *</span><textarea data-bind="report.impacts" maxlength="3500" placeholder="Informe os efeitos sobre segurança, tráfego, mobilidade, drenagem ou conservação do pavimento…">${e(r.impacts)}</textarea><span class="text-counter"><span>Não atribua causa ou responsabilidade sem evidência</span><span>${r.impacts.length}/3500</span></span></label>
+    <label class="field stacked"><span>Providências recomendadas *</span><textarea data-bind="report.recommendations" maxlength="3500">${e(r.recommendations)}</textarea><span class="text-counter"><span>Uma providência por linha</span><span>${reportRecommendations().length} item(ns)</span></span></label>
   </section>
   <section class="panel">
     ${panelHeader("Responsáveis pelas assinaturas", "Escolha uma assinatura salva. Para cadastrar uma nova, selecione Outro.", `<button class="button button-secondary" type="button" data-action="open-signatures">Configurar assinaturas</button>`)}
@@ -1915,43 +1973,34 @@ function renderReportContent() {
     </div>
   </section>
   <section class="panel">
-    ${panelHeader("Formato do documento", "Defina a densidade das fotografias e a separação das seções.")}
+    ${panelHeader("Formato do anexo fotográfico", "As fotografias serão inseridas depois das assinaturas, em páginas próprias.")}
     <div class="choice-grid">
-      <label class="choice-card"><input type="radio" name="photosPerPage" data-bind="report.onePerPage" value="false" ${!r.onePerPage ? "checked" : ""} /><span><strong>Duas fotos por página</strong><small>Formato compacto, adequado para a maioria dos relatórios.</small></span></label>
-      <label class="choice-card"><input type="radio" name="photosPerPage" data-bind="report.onePerPage" value="true" ${r.onePerPage ? "checked" : ""} /><span><strong>Uma foto por página</strong><small>Mais espaço para detalhes e legendas extensas.</small></span></label>
+      <label class="choice-card"><input type="radio" name="photosPerPage" data-bind="report.onePerPage" value="true" ${r.onePerPage ? "checked" : ""} /><span><strong>Uma foto por página</strong><small>Maior legibilidade e espaço para a legenda técnica.</small></span></label>
+      <label class="choice-card"><input type="radio" name="photosPerPage" data-bind="report.onePerPage" value="false" ${!r.onePerPage ? "checked" : ""} /><span><strong>Duas fotos por página</strong><small>Formato mais compacto para vistorias com muitas imagens.</small></span></label>
     </div>
-    <div class="switch-row"><div class="switch-copy"><strong>Iniciar fotografias em nova página</strong><small>Mantém a parte textual separada do registro fotográfico.</small></div><label class="switch"><input type="checkbox" data-bind="report.startPhotosNewPage" ${r.startPhotosNewPage ? "checked" : ""} /><span class="switch-track"></span></label></div>
   </section>`;
-}
-
-function renderTopic(topic, index) {
-  return `<article class="topic-card" data-topic-id="${e(topic.id)}">
-    <div class="topic-heading"><strong>Tópico ${index + 1}</strong><button class="icon-button" type="button" data-action="remove-topic" data-id="${e(topic.id)}" aria-label="Remover tópico">×</button></div>
-    <div class="field-grid">
-      <label class="field"><span>Título</span><input type="text" data-topic-field="title" data-id="${e(topic.id)}" value="${e(topic.title)}" placeholder="Ex.: Conclusão" /></label>
-      <label class="field"><span>Legenda da imagem</span><input type="text" data-topic-field="caption" data-id="${e(topic.id)}" value="${e(topic.caption)}" placeholder="Opcional" /></label>
-    </div>
-    <label class="field stacked"><span>Texto</span><textarea data-topic-field="text" data-id="${e(topic.id)}" maxlength="3500" placeholder="Escreva o conteúdo desta seção…">${e(topic.text)}</textarea></label>
-    <div class="topic-image-row"><div class="field"><span class="field-label">Imagem opcional</span>${renderSingleImageUpload("topic-image", topic.image, "Adicionar imagem", "Será inserida após o texto", topic.id)}</div><div class="notice"><span aria-hidden="true">i</span><span>A legenda é opcional e pode ser escrita manualmente no campo acima.</span></div></div>
-  </article>`;
 }
 
 function renderReportReview() {
   const r = state.report;
   const described = r.photos.filter((photo) => photo.description.trim()).length;
-  return `${pageHeading("Etapa 4", "Revise antes de gerar", "Confira os principais dados. O arquivo Word será baixado no dispositivo.")}
+  const streets = reportStreets();
+  const recommendations = reportRecommendations();
+  return `${pageHeading("Etapa 5", "Revise antes de gerar", "Confira os dados que serão aplicados ao modelo oficial. O Word será baixado no dispositivo.")}
   <div class="summary-grid">
-    ${summaryCard("Documento", r.title, formatDate(r.date))}
-    ${summaryCard("Fotografias", String(r.photos.length), `${described} com descrição`)}
-    ${summaryCard("Paginação", r.onePerPage ? "1 foto por página" : "2 fotos por página", `${Math.ceil(r.photos.length / (r.onePerPage ? 1 : 2))} página(s) estimada(s)`)}
+    ${summaryCard("Documento", "Parecer técnico", formatDate(r.date))}
+    ${summaryCard("Vias vistoriadas", String(streets.length), r.neighborhood)}
+    ${summaryCard("Evidências", `${r.photos.length} foto(s)`, `${described} com descrição`)}
   </div>
   <section class="panel">
-    <div class="review-block"><h3>Cabeçalho</h3><p>${e([r.organization, r.department].filter(Boolean).join(" — ") || "Sem identificação institucional")}</p></div>
-    <div class="review-block"><h3>Introdução</h3><p>${e(r.introduction)}</p></div>
-    <div class="review-block"><h3>Tópicos adicionais</h3><p>${r.topics.length ? r.topics.map((topic) => e(topic.title)).join(" • ") : "Nenhum"}</p></div>
+    <div class="review-block"><h3>Título</h3><p>${e(technicalOpinionTitle())}</p></div>
+    <div class="review-block"><h3>Introdução</h3><p>${e(technicalOpinionIntroduction()[0])}</p></div>
+    <div class="review-block"><h3>Vias</h3><p>${streets.map(e).join(" • ")}</p></div>
+    <div class="review-block"><h3>Constatações</h3><p>${e(r.findings)}</p></div>
+    <div class="review-block"><h3>Providências</h3><p>${recommendations.map(e).join(" • ")}</p></div>
     <div class="review-block"><h3>Responsáveis</h3><div class="review-signatures">${r.responsibles.map((signature) => signaturePreview(signature)).join("")}</div></div>
   </section>
-  <div class="notice"><span aria-hidden="true">✓</span><span><strong>O documento será criado localmente.</strong> A geração do Word não envia seus arquivos a nenhum servidor.</span></div>`;
+  <div class="notice"><span aria-hidden="true">✓</span><span><strong>Geração local.</strong> Os campos, o mapa e as fotografias serão inseridos no Word no próprio navegador. Depois, somente o arquivo final será salvo no histórico da sua conta.</span></div>`;
 }
 
 function summaryCard(label, value, detail) {
@@ -2458,7 +2507,7 @@ function renderProgress() {
 
 function renderSuccess() {
   const documentLabel = state.flow === "report"
-    ? "O relatório fotográfico"
+    ? "O parecer técnico"
     : state.flow === "cota"
       ? "A folha de cota"
       : state.flow === "notification"
@@ -2692,37 +2741,63 @@ function validateCurrentStep() {
   if (state.flow === "report") {
     const r = state.report;
     if (state.step === 0) {
-      if (!r.title.trim() || !r.date || !r.introduction.trim()) {
+      if (!r.city.trim() || !r.date || !r.neighborhood.trim() || !r.responsibleCompany.trim() || !r.intervention.trim()) {
         showFieldValidationMessage({
-          title: "Complete os dados principais",
-          text: "Informe o título, a data e a introdução antes de continuar.",
+          title: "Complete a identificação",
+          text: "Informe a cidade, a data, o bairro, a empresa responsável e a intervenção fiscalizada.",
           fields: [
-            !r.title.trim() && '[data-bind="report.title"]',
+            !r.city.trim() && '[data-bind="report.city"]',
             !r.date && '[data-bind="report.date"]',
-            !r.introduction.trim() && '[data-bind="report.introduction"]',
+            !r.neighborhood.trim() && '[data-bind="report.neighborhood"]',
+            !r.responsibleCompany.trim() && '[data-bind="report.responsibleCompany"]',
+            !r.intervention.trim() && '[data-bind="report.intervention"]',
           ],
         });
         return false;
       }
     }
-    if (state.step === 1 && !r.photos.length) {
-      showFieldValidationMessage({
-        title: "Adicione as fotografias",
-        text: "Selecione pelo menos uma imagem para montar o relatório.",
-        fields: ['[data-drop="report-photos"]'],
-      });
-      return false;
+    if (state.step === 1) {
+      if (!r.map || !reportStreets().length) {
+        showFieldValidationMessage({
+          title: "Complete o mapa e as vias",
+          text: "Anexe o mapa da vistoria e informe pelo menos uma via.",
+          fields: [
+            !r.map && '[data-upload-kind="report-map"]',
+            !reportStreets().length && '[data-bind="report.streets"]',
+          ],
+        });
+        return false;
+      }
     }
     if (state.step === 2) {
-      const invalidTopicFields = r.topics.flatMap((topic) => [
-        !topic.title.trim() && `[data-topic-field="title"][data-id="${topic.id}"]`,
-        !topic.text.trim() && `[data-topic-field="text"][data-id="${topic.id}"]`,
-      ]).filter(Boolean);
-      if (invalidTopicFields.length) {
+      if (!r.photos.length) {
         showFieldValidationMessage({
-          title: "Complete os tópicos",
-          text: "Todo tópico adicionado precisa ter título e texto, ou deve ser removido.",
-          fields: invalidTopicFields,
+          title: "Adicione as fotografias",
+          text: "Selecione pelo menos uma evidência fotográfica para o anexo do parecer.",
+          fields: ['[data-drop="report-photos"]'],
+        });
+        return false;
+      }
+      const photosWithoutDescription = r.photos.filter((photo) => !photo.description.trim());
+      if (photosWithoutDescription.length) {
+        showFieldValidationMessage({
+          title: "Descreva todas as fotografias",
+          text: "Informe o local e a condição observada em cada evidência, ou remova a fotografia.",
+          fields: photosWithoutDescription.map((photo) => `[data-photo-description="${photo.id}"]`),
+        });
+        return false;
+      }
+    }
+    if (state.step === 3) {
+      if (!r.findings.trim() || !r.impacts.trim() || !reportRecommendations().length) {
+        showFieldValidationMessage({
+          title: "Complete as considerações finais",
+          text: "Informe as constatações, os impactos e pelo menos uma providência recomendada.",
+          fields: [
+            !r.findings.trim() && '[data-bind="report.findings"]',
+            !r.impacts.trim() && '[data-bind="report.impacts"]',
+            !reportRecommendations().length && '[data-bind="report.recommendations"]',
+          ],
         });
         return false;
       }
@@ -2949,9 +3024,18 @@ function getBoundValue(target) {
 }
 
 function updateCounter(target) {
-  if (target.dataset.bind === "report.introduction") {
+  if (["report.findings", "report.impacts"].includes(target.dataset.bind)) {
     const counter = target.parentElement.querySelector(".text-counter span:last-child");
-    if (counter) counter.textContent = `${target.value.length}/4000`;
+    const limit = target.dataset.bind === "report.findings" ? 5000 : 3500;
+    if (counter) counter.textContent = `${target.value.length}/${limit}`;
+  }
+  if (target.dataset.bind === "report.streets") {
+    const counter = target.parentElement.querySelector(".text-counter span:last-child");
+    if (counter) counter.textContent = `${reportStreets().length} via(s)`;
+  }
+  if (target.dataset.bind === "report.recommendations") {
+    const counter = target.parentElement.querySelector(".text-counter span:last-child");
+    if (counter) counter.textContent = `${reportRecommendations().length} item(ns)`;
   }
   if (["cota.baseText", "cota.finalText"].includes(target.dataset.bind)) {
     const metrics = cotaMetrics(target.value);
@@ -2970,7 +3054,7 @@ function updateCounter(target) {
   }
 }
 
-async function handleFiles(kind, files, id = "") {
+async function handleFiles(kind, files) {
   const list = [...files];
   if (!list.length) return;
   const valid = list.filter((file) => {
@@ -3020,13 +3104,8 @@ async function handleFiles(kind, files, id = "") {
 
   const file = valid[0];
   const record = { file, url: URL.createObjectURL(file) };
-  if (kind === "report-logo") replaceImageRecord(state.report, "logo", record);
-  if (kind === "report-intro") replaceImageRecord(state.report, "introImage", record);
+  if (kind === "report-map") replaceImageRecord(state.report, "map", record);
   if (kind === "cota-context") replaceImageRecord(state.cota, "contextImage", record);
-  if (kind === "topic-image") {
-    const topic = state.report.topics.find((item) => item.id === id);
-    if (topic) replaceImageRecord(topic, "image", record);
-  }
   render();
 }
 
@@ -3035,14 +3114,9 @@ function replaceImageRecord(owner, key, record) {
   owner[key] = record;
 }
 
-function removeFile(kind, id) {
-  if (kind === "report-logo") replaceImageRecord(state.report, "logo", null);
-  if (kind === "report-intro") replaceImageRecord(state.report, "introImage", null);
+function removeFile(kind) {
+  if (kind === "report-map") replaceImageRecord(state.report, "map", null);
   if (kind === "cota-context") replaceImageRecord(state.cota, "contextImage", null);
-  if (kind === "topic-image") {
-    const topic = state.report.topics.find((item) => item.id === id);
-    if (topic) replaceImageRecord(topic, "image", null);
-  }
   render();
 }
 
@@ -3483,19 +3557,19 @@ async function generateReport() {
     showMessage({ title: "Gerador indisponível", text: "O componente de criação do Word não foi carregado. Atualize a página e tente novamente.", kind: "error" });
     return;
   }
-  state.generation = { running: true, progress: 8, message: "Organizando textos e seções…" };
+  state.generation = { running: true, progress: 8, message: "Organizando o parecer técnico…" };
   render();
   try {
     const blob = await buildReportDocument((progress, message) => setGenerationProgress(progress, message));
-    const filename = `${slugify(state.report.title, "relatorio-fotografico")}.docx`;
-    await finishDownload(blob, filename, "Relatório fotográfico");
+    const filename = `parecer-tecnico-${slugify(state.report.neighborhood, "vistoria")}.docx`;
+    await finishDownload(blob, filename, "Parecer técnico");
     state.report.complete = true;
     state.generation.running = false;
     render();
   } catch (error) {
     state.generation.running = false;
     render();
-    showMessage({ title: "Não foi possível gerar o relatório", text: error.message, kind: "error" });
+    showMessage({ title: "Não foi possível gerar o parecer", text: error.message, kind: "error" });
   }
 }
 
@@ -4140,73 +4214,98 @@ function richCorrespondenceDocumentBlocks(html, fallbackText, { official = false
 
 async function buildReportDocument(onProgress) {
   const {
-    Document, Packer, Paragraph, TextRun, Table, TableRow, TableCell, WidthType,
-    AlignmentType, VerticalAlign, HeightRule, PageBreak, Header,
+    patchDocument, PatchType, Paragraph, Table, TableRow, TableCell, WidthType,
+    AlignmentType, VerticalAlign, HeightRule, PageBreak,
   } = window.docx;
   const r = state.report;
+  if (typeof patchDocument !== "function" || !PatchType) {
+    throw new Error("O componente de preenchimento do modelo Word não está disponível.");
+  }
+
+  onProgress(15, "Carregando o modelo oficial do parecer…");
+  const template = await loadTechnicalOpinionTemplate();
   const children = [];
-  children.push(new Paragraph({ style: "DocTitle", children: [new TextRun(r.title)] }));
-  children.push(new Paragraph({ alignment: AlignmentType.RIGHT, spacing: { after: 220 }, children: [new TextRun({ text: `Data do relatório: ${formatDate(r.date)}`, size: 20, color: "405049" })] }));
-  children.push(new Paragraph({ style: "SectionTitle", children: [new TextRun("Introdução")] }));
-  children.push(...paragraphsFromText(r.introduction));
-
-  if (r.introImage) {
-    onProgress(16, "Preparando a imagem de abertura…");
-    const introRun = await imageRunFor(r.introImage.file, 610, 480, "Imagem de abertura do relatório");
-    children.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { before: 120, after: 180 }, children: [introRun] }));
-  }
-
-  let photoNumber = 0;
-  for (let index = 0; index < r.topics.length; index += 1) {
-    const topic = r.topics[index];
-    children.push(new Paragraph({ style: "SectionTitle", children: [new TextRun(topic.title)] }));
-    children.push(...paragraphsFromText(topic.text));
-    if (topic.image) {
-      photoNumber += 1;
-      onProgress(18 + Math.round(((index + 1) / Math.max(1, r.topics.length)) * 12), `Preparando a imagem do tópico ${index + 1}…`);
-      const run = await imageRunFor(topic.image.file, 610, 430, `Foto ${photoNumber}`);
-      children.push(new Paragraph({ alignment: AlignmentType.CENTER, spacing: { before: 100, after: 40 }, children: [run] }));
-      children.push(captionParagraph(photoNumber, topic.caption));
-    }
-  }
-
-  if (r.responsibles.length) {
-    children.push(new Paragraph({ style: "SectionTitle", children: [new TextRun("Responsáveis")] }));
-    const cells = r.responsibles.map((signature) => new TableCell({
-      width: { size: 50, type: WidthType.PERCENTAGE },
-      margins: { top: 520, bottom: 80, left: 120, right: 120 },
-      verticalAlign: VerticalAlign.BOTTOM,
-      borders: noBorders(),
-      children: [
-        new Paragraph({ alignment: AlignmentType.CENTER, border: { top: { style: "single", size: 6, color: "68756F" } }, spacing: { before: 80, after: 20 }, children: [new TextRun({ text: signature.name, bold: true, size: 19 })] }),
-        new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 0 }, children: [new TextRun({ text: signature.role, bold: false, italics: true, size: 19, color: "405049" })] }),
-      ],
-    }));
-    const rows = [];
-    for (let index = 0; index < cells.length; index += 2) {
-      const pair = cells.slice(index, index + 2);
-      if (pair.length === 1) pair.push(new TableCell({ borders: noBorders(), children: [new Paragraph("")] }));
-      rows.push(new TableRow({ cantSplit: true, children: pair }));
-    }
-    children.push(new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, borders: noBorders(), rows }));
-  }
-
-  if (r.photos.length && r.startPhotosNewPage) children.push(new Paragraph({ children: [new PageBreak()] }));
-  if (r.photos.length) children.push(new Paragraph({ style: "SectionTitle", children: [new TextRun("Registro fotográfico")] }));
+  children.push(new Paragraph({
+    alignment: AlignmentType.RIGHT,
+    spacing: { after: 0, line: 360 },
+    children: [technicalRun(r.city.trim() + ", " + formatDateLong(r.date))],
+  }));
+  children.push(technicalBlankParagraph(), technicalBlankParagraph(), technicalBlankParagraph());
+  children.push(new Paragraph({
+    alignment: AlignmentType.CENTER,
+    spacing: { after: 0, line: 360 },
+    children: [technicalRun(technicalOpinionTitle(), { bold: true })],
+  }));
+  children.push(technicalBlankParagraph(), technicalBlankParagraph());
+  children.push(technicalHeading("INTRODUÇÃO"));
+  children.push(technicalBlankParagraph());
+  technicalOpinionIntroduction().forEach((text) => children.push(technicalBodyParagraph(text)));
+  children.push(technicalBlankParagraph());
+  children.push(technicalHeading("MAPA DAS VIAS VISTORIADAS"));
+  children.push(technicalBlankParagraph());
+  children.push(technicalBodyParagraph(
+    "Conforme imagem abaixo, apresentam-se destacadas as vias percorridas durante a vistoria no bairro " +
+    r.neighborhood.trim() + ". O mapeamento tem por finalidade registrar o perímetro vistoriado como um todo e, a partir dele, " +
+    "identificar quais ruas receberam intervenções da " + r.responsibleCompany.trim() + " relacionadas à " +
+    r.intervention.trim() + ", bem como apontar os trechos que apresentam não conformidades e pendências de recomposição e acabamento após os serviços executados."
+  ));
+  onProgress(27, "Preparando o mapa da vistoria…");
+  const mapRun = await imageRunFor(r.map.file, 560, 430, "Mapa das vias vistoriadas");
+  children.push(new Paragraph({
+    alignment: AlignmentType.CENTER,
+    spacing: { before: 100, after: 40 },
+    children: [mapRun],
+  }));
+  children.push(technicalMapCaption(r.mapCaption || ("Ruas mapeadas no bairro " + r.neighborhood.trim() + ".")));
+  children.push(technicalBlankParagraph());
+  children.push(technicalBodyParagraph(
+    "Após percorrer o bairro " + r.neighborhood.trim() + ", foram identificadas as seguintes vias que precisam de acabamento após a execução dos serviços realizados pela " + r.responsibleCompany.trim() + ":"
+  ));
+  reportStreets().forEach((street) => children.push(technicalListParagraph(street)));
+  children.push(technicalBlankParagraph());
+  children.push(technicalBodyParagraph(
+    "As imagens que comprovam as situações verificadas durante a fiscalização constam no Anexo Fotográfico deste documento, para fins de registro e evidência."
+  ));
+  children.push(technicalBlankParagraph(), technicalBlankParagraph());
+  children.push(technicalHeading("CONSIDERAÇÕES FINAIS:"));
+  children.push(technicalBlankParagraph());
+  technicalParagraphs(r.findings).forEach((paragraph) => children.push(paragraph));
+  technicalParagraphs(r.impacts).forEach((paragraph) => children.push(paragraph));
+  children.push(technicalBodyParagraph("Diante do exposto, recomenda-se que sejam adotadas providências corretivas abrangendo:"));
+  const recommendations = reportRecommendations();
+  recommendations.forEach((recommendation, index) => {
+    const suffix = index === recommendations.length - 1 ? "." : ";";
+    children.push(technicalListParagraph(recommendation.replace(/[.;]+$/, "") + suffix));
+  });
+  children.push(technicalBlankParagraph());
+  children.push(technicalBodyParagraph(
+    "Por fim, este Parecer Técnico tem caráter de registro e subsídio técnico, ficando as evidências fotográficas anexas como comprovação das condições observadas em campo na data da vistoria."
+  ));
+  children.push(technicalBlankParagraph(), technicalBlankParagraph());
+  children.push(new Paragraph({
+    alignment: AlignmentType.CENTER,
+    spacing: { after: 0, line: 360 },
+    children: [technicalRun("Atenciosamente:")],
+  }));
+  children.push(technicalSignatureTable(r.responsibles));
+  children.push(new Paragraph({ children: [new PageBreak()] }));
+  children.push(technicalHeading("ANEXO FOTOGRÁFICO"));
+  children.push(technicalBlankParagraph());
 
   const perPage = r.onePerPage ? 1 : 2;
   const groups = [];
   for (let index = 0; index < r.photos.length; index += perPage) groups.push(r.photos.slice(index, index + perPage));
   for (let groupIndex = 0; groupIndex < groups.length; groupIndex += 1) {
     const rows = [];
-    for (const photo of groups[groupIndex]) {
-      photoNumber += 1;
+    for (let photoIndex = 0; photoIndex < groups[groupIndex].length; photoIndex += 1) {
+      const photo = groups[groupIndex][photoIndex];
+      const photoNumber = groupIndex * perPage + photoIndex + 1;
       const completed = groupIndex * perPage + rows.length + 1;
-      onProgress(32 + Math.round((completed / r.photos.length) * 58), `Inserindo fotografia ${completed} de ${r.photos.length}…`);
-      const run = await imageRunFor(photo.file, 610, r.onePerPage ? 650 : 300, `Foto ${photoNumber}`);
+      onProgress(38 + Math.round((completed / r.photos.length) * 52), "Inserindo fotografia " + completed + " de " + r.photos.length + "…");
+      const run = await imageRunFor(photo.file, 560, r.onePerPage ? 620 : 285, "Foto " + photoNumber);
       rows.push(new TableRow({
         cantSplit: true,
-        height: { value: r.onePerPage ? 10400 : 5150, rule: HeightRule.ATLEAST },
+        height: { value: r.onePerPage ? 9800 : 4850, rule: HeightRule.ATLEAST },
         children: [new TableCell({
           width: { size: 100, type: WidthType.PERCENTAGE },
           verticalAlign: VerticalAlign.CENTER,
@@ -4214,7 +4313,7 @@ async function buildReportDocument(onProgress) {
           borders: noBorders(),
           children: [
             new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 80 }, children: [run] }),
-            captionParagraph(photoNumber, photo.description),
+            technicalPhotoCaption(photoNumber, photo.description),
           ],
         })],
       }));
@@ -4223,38 +4322,140 @@ async function buildReportDocument(onProgress) {
     if (groupIndex < groups.length - 1) children.push(new Paragraph({ children: [new PageBreak()] }));
   }
 
-  onProgress(93, "Finalizando cabeçalho e paginação…");
-  const header = await headerFor(r);
-  const documentFile = new Document({
-    creator: "Fiscal Bertioga",
-    title: r.title,
-    description: "Relatório fotográfico gerado no Fiscal Bertioga",
-    styles: defaultDocumentStyles(),
-    sections: [{
-      properties: { page: { size: { width: 11906, height: 16838 }, margin: { top: 1134, right: 1134, bottom: 1134, left: 1134, header: 500, footer: 500 }, pageNumbers: { start: 1 } } },
-      headers: { default: header instanceof Header ? header : new Header({ children: [] }) },
-      footers: { default: footer() },
-      children,
-    }],
+  onProgress(93, "Aplicando o conteúdo ao modelo oficial…");
+  const blob = await patchDocument({
+    outputType: "blob",
+    data: template,
+    patches: {
+      technical_opinion_content: {
+        type: PatchType.DOCUMENT,
+        children,
+      },
+    },
+    keepOriginalStyles: true,
+    recursive: false,
   });
-  onProgress(97, "Compactando o arquivo Word…");
-  const blob = await Packer.toBlob(documentFile);
-  onProgress(100, "Relatório concluído.");
+  onProgress(100, "Parecer técnico concluído.");
   return blob;
 }
 
-function captionParagraph(number, description) {
-  const { Paragraph, TextRun, AlignmentType } = window.docx;
-  const prefix = `Foto ${String(number).padStart(2, "0")}`;
-  const text = String(description || "").trim();
+function technicalRun(text, options = {}) {
+  const { TextRun } = window.docx;
+  return new TextRun({
+    text: String(text || ""),
+    font: "Arial",
+    size: options.size || 24,
+    bold: Boolean(options.bold),
+    italics: Boolean(options.italics),
+    language: { value: "pt-BR" },
+  });
+}
+
+function technicalBlankParagraph() {
+  const { Paragraph } = window.docx;
+  return new Paragraph({ spacing: { before: 0, after: 0, line: 360 }, children: [] });
+}
+
+function technicalHeading(text) {
+  const { Paragraph, AlignmentType } = window.docx;
+  return new Paragraph({
+    alignment: AlignmentType.LEFT,
+    keepNext: true,
+    indent: { left: 720 },
+    spacing: { before: 0, after: 0, line: 360 },
+    children: [technicalRun(text, { bold: true })],
+  });
+}
+
+function technicalBodyParagraph(text) {
+  const { Paragraph, AlignmentType } = window.docx;
   return new Paragraph({
     alignment: AlignmentType.JUSTIFIED,
-    spacing: { before: 20, after: 90, line: 240 },
+    indent: { left: 425, firstLine: 1735 },
+    spacing: { before: 0, after: 0, line: 360 },
+    children: [technicalRun(String(text || "").trim())],
+  });
+}
+
+function technicalParagraphs(text) {
+  return String(text || "")
+    .replace(/\r\n?/g, "\n")
+    .split(/\n+/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean)
+    .map((paragraph) => technicalBodyParagraph(paragraph));
+}
+
+function technicalListParagraph(text) {
+  const { Paragraph, AlignmentType } = window.docx;
+  return new Paragraph({
+    alignment: AlignmentType.JUSTIFIED,
+    indent: { left: 1060, hanging: 360 },
+    spacing: { before: 0, after: 0, line: 360 },
+    children: [technicalRun("• "), technicalRun(text)],
+  });
+}
+
+function technicalMapCaption(text) {
+  const { Paragraph, AlignmentType } = window.docx;
+  return new Paragraph({
+    alignment: AlignmentType.CENTER,
+    spacing: { before: 0, after: 0, line: 300 },
+    children: [technicalRun("Foto – " + String(text || "").trim(), { size: 20 })],
+  });
+}
+
+function technicalPhotoCaption(number, description) {
+  const { Paragraph, AlignmentType } = window.docx;
+  const prefix = "Foto " + String(number).padStart(2, "0") + " – ";
+  return new Paragraph({
+    alignment: AlignmentType.JUSTIFIED,
+    spacing: { before: 0, after: 0, line: 300 },
     children: [
-      new TextRun({ text: text ? `${prefix} – ` : prefix, bold: true, size: 19 }),
-      ...(text ? [new TextRun({ text, size: 19 })] : []),
+      technicalRun(prefix, { bold: true, size: 20 }),
+      technicalRun(String(description || "").trim(), { size: 20 }),
     ],
   });
+}
+
+function technicalSignatureTable(signatures) {
+  const { Paragraph, Table, TableRow, TableCell, WidthType, AlignmentType, VerticalAlign } = window.docx;
+  const cells = signatures.map((signature) => new TableCell({
+    width: { size: 50, type: WidthType.PERCENTAGE },
+    margins: { top: 620, bottom: 180, left: 120, right: 120 },
+    verticalAlign: VerticalAlign.BOTTOM,
+    borders: noBorders(),
+    children: [
+      new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 0, line: 300 }, children: [technicalRun("_______________________________")] }),
+      new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 0, line: 300 }, children: [technicalRun(signature.name, { bold: true })] }),
+      new Paragraph({ alignment: AlignmentType.CENTER, spacing: { after: 0, line: 300 }, children: [technicalRun(signature.role)] }),
+    ],
+  }));
+  const rows = [];
+  for (let index = 0; index < cells.length; index += 2) {
+    const pair = cells.slice(index, index + 2);
+    if (pair.length === 1) {
+      pair.push(new TableCell({ width: { size: 50, type: WidthType.PERCENTAGE }, borders: noBorders(), children: [new Paragraph("")] }));
+    }
+    rows.push(new TableRow({ cantSplit: true, children: pair }));
+  }
+  return new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, borders: noBorders(), rows });
+}
+
+async function loadTechnicalOpinionTemplate() {
+  if (!technicalOpinionTemplatePromise) {
+    technicalOpinionTemplatePromise = fetch(TECHNICAL_OPINION_TEMPLATE_URL)
+      .then((response) => {
+        if (!response.ok) throw new Error("O modelo oficial do parecer técnico não pôde ser carregado.");
+        return response.arrayBuffer();
+      })
+      .catch((error) => {
+        technicalOpinionTemplatePromise = null;
+        throw error;
+      });
+  }
+  const data = await technicalOpinionTemplatePromise;
+  return data.slice(0);
 }
 
 async function buildCotaDocument(onProgress) {
@@ -4724,9 +4925,7 @@ async function buildCorrespondenceDocument(onProgress) {
 function resetCurrentDocument() {
   if (state.flow === "report") {
     state.report.photos.forEach((photo) => URL.revokeObjectURL(photo.url));
-    if (state.report.logo?.url) URL.revokeObjectURL(state.report.logo.url);
-    if (state.report.introImage?.url) URL.revokeObjectURL(state.report.introImage.url);
-    state.report.topics.forEach((topic) => topic.image?.url && URL.revokeObjectURL(topic.image.url));
+    if (state.report.map?.url) URL.revokeObjectURL(state.report.map.url);
     state.report = createReportState(readStorage("docflow-preferences", {}));
   } else if (state.flow === "cota") {
     if (state.cota.contextImage?.url) URL.revokeObjectURL(state.cota.contextImage.url);
@@ -4827,18 +5026,6 @@ async function handleAction(action, target) {
   if (action === "remove-correspondence-photo") return removeCorrespondencePhoto(target.dataset.id);
   if (action === "analyze-photo") return analyzePhoto(target.dataset.id);
   if (action === "analyze-all") return analyzeAllPhotos();
-  if (action === "add-topic") {
-    state.report.topics.push({ id: makeId("topic"), title: "", text: "", caption: "", image: null });
-    render();
-    return;
-  }
-  if (action === "remove-topic") {
-    const topic = state.report.topics.find((item) => item.id === target.dataset.id);
-    if (topic?.image?.url) URL.revokeObjectURL(topic.image.url);
-    state.report.topics = state.report.topics.filter((item) => item.id !== target.dataset.id);
-    render();
-    return;
-  }
   if (action === "add-notification-signer") {
     noticeState().signatories.push({ id: makeId(`${state.flow}-signer`), profileId: "", name: "", role: "" });
     render();
@@ -4972,10 +5159,6 @@ document.addEventListener("input", (event) => {
   if (target.dataset.correspondencePhotoCaption) {
     const photo = state.correspondence.photos.find((item) => item.id === target.dataset.correspondencePhotoCaption);
     if (photo) photo.caption = target.value;
-  }
-  if (target.dataset.topicField) {
-    const topic = state.report.topics.find((item) => item.id === target.dataset.id);
-    if (topic) topic[target.dataset.topicField] = target.value;
   }
 });
 
@@ -5142,6 +5325,7 @@ elements.renameDialog.addEventListener("click", (event) => {
 window.addEventListener("beforeunload", () => {
   stopNotificationPolling();
   state.report.photos.forEach((photo) => URL.revokeObjectURL(photo.url));
+  if (state.report.map?.url) URL.revokeObjectURL(state.report.map.url);
   state.notification.photos.forEach((photo) => URL.revokeObjectURL(photo.url));
   state.warning.photos.forEach((photo) => URL.revokeObjectURL(photo.url));
   if (state.lastDownload?.url) URL.revokeObjectURL(state.lastDownload.url);

@@ -1,7 +1,7 @@
 {
   "name": "Fiscal Bertioga — Assistente de Documentos",
   "short_name": "Fiscal Bertioga",
-  "description": "Crie relatórios, folhas de cota, memorandos, ofícios, notificações e advertências em Word.",
+  "description": "Crie pareceres técnicos, folhas de cota, memorandos, ofícios, notificações e advertências em Word.",
   "lang": "pt-BR",
   "start_url": "/",
   "scope": "/",

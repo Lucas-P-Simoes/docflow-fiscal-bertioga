@@ -12,6 +12,7 @@ const DOCX_CONTENT_TYPE = "application/vnd.openxmlformats-officedocument.wordpro
 const MAX_DOCUMENT_BYTES = 50 * 1024 * 1024;
 const MAX_MUTATION_BODY_BYTES = 4 * 1024;
 const DOCUMENT_TYPES = new Set([
+  "Parecer técnico",
   "Relatório fotográfico",
   "Folha de cota",
   "Memorando",
