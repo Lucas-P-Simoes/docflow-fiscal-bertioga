@@ -5344,10 +5344,6 @@ elements.signatureProfileForm.addEventListener("submit", async (event) => {
   await saveSignatureProfile();
 });
 
-elements.signatureDialog.addEventListener("click", (event) => {
-  if (event.target === elements.signatureDialog) closeSignatureConfiguration();
-});
-
 elements.messageDialog.addEventListener("click", (event) => {
   if (event.target === elements.messageDialog) closeDialog(elements.messageDialog);
 });

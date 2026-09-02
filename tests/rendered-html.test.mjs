@@ -347,6 +347,7 @@ test("builds technical opinions from the supplied model with map, streets, photo
   assert.match(app, /data-bind="report\.impacts"/);
   assert.match(app, /data-bind="report\.recommendations"/);
   assert.match(app, /data-report-signature-choice=/);
+  assert.doesNotMatch(app, /event\.target === elements\.signatureDialog/);
   assert.match(app, /state\.report\.responsibles\.push/);
   assert.match(app, /state\.report\.responsibles = state\.report\.responsibles\.filter/);
   assert.match(app, /signatures\.map\(\(signature\) => new TableCell/);
