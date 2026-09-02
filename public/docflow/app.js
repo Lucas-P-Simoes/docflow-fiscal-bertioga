@@ -1084,6 +1084,7 @@ function panelHeader(title, description, action = "") {
 function render() {
   updateApiBadge();
   elements.main.classList.toggle("is-home", !state.admin.open && !state.history.open && !state.kanban.open && !state.flow);
+  elements.main.classList.toggle("is-kanban", state.kanban.open);
   if (state.admin.open) {
     elements.sidebar.classList.add("is-hidden");
     elements.actionBar.classList.add("is-hidden");
