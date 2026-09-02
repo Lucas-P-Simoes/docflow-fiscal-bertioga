@@ -311,6 +311,19 @@
       </form>
     </dialog>
 
+    <dialog id="kanbanHistoryDialog" class="dialog kanban-history-dialog" aria-labelledby="kanbanHistoryDialogTitle">
+      <div class="dialog-card">
+        <div class="dialog-topline">
+          <span class="dialog-icon" aria-hidden="true">⚙</span>
+          <button class="icon-button" type="button" data-action="close-kanban-history" aria-label="Fechar histórico">×</button>
+        </div>
+        <span class="eyebrow eyebrow-dark">Transparência</span>
+        <h2 id="kanbanHistoryDialogTitle">Histórico do quadro</h2>
+        <p class="dialog-lead">Alterações e movimentações registradas por usuário.</p>
+        <div id="kanbanHistoryDialogContent" class="kanban-history-content" aria-live="polite"></div>
+      </div>
+    </dialog>
+
     <dialog id="kanbanCardDialog" class="dialog kanban-card-dialog">
       <form id="kanbanCardForm" class="dialog-card" method="dialog">
         <div class="dialog-topline">

@@ -673,6 +673,8 @@ test("adds private Kanban boards with member permissions, activity history, and 
   assert.match(page, /id="kanbanAssigneeList"/);
   assert.match(page, /id="kanbanBoardDialog"/);
   assert.match(page, /id="kanbanBoardMemberList"/);
+  assert.match(page, /id="kanbanHistoryDialog"/);
+  assert.match(page, /id="kanbanHistoryDialogContent"/);
   assert.match(page, /Somente as pessoas selecionadas poderão visualizar o quadro e editar seus cartões/);
   assert.match(app, /const KANBAN_COLUMNS = \[/);
   assert.match(app, /id: "todo"/);
@@ -680,8 +682,10 @@ test("adds private Kanban boards with member permissions, activity history, and 
   assert.match(app, /id: "done"/);
   assert.match(app, /apiRequest\(`\/api\/kanban\$\{query\}`\)/);
   assert.match(app, /data-action="select-kanban-board"/);
+  assert.match(app, /data-action="open-kanban-history"/);
+  assert.match(app, /openKanbanHistoryDialog/);
   assert.match(app, /data-action="edit-kanban-board"/);
-  assert.match(app, /Histórico do quadro/);
+  assert.match(app, /Histórico —/);
   assert.match(app, /data-kanban-board-member/);
   assert.match(app, /\/api\/kanban\/cards\/\$\{encodeURIComponent\(cardId\)\}/);
   assert.match(app, /data-kanban-column/);
@@ -690,7 +694,9 @@ test("adds private Kanban boards with member permissions, activity history, and 
   assert.match(app, /setInterval\([\s\S]*?30_000/);
   assert.match(styles, /\.kanban-board/);
   assert.match(styles, /\.kanban-board-sidebar/);
-  assert.match(styles, /\.kanban-activity-panel/);
+  assert.match(styles, /\.kanban-board-history-button/);
+  assert.match(styles, /\.kanban-history-dialog/);
+  assert.match(styles, /overflow-wrap:\s*anywhere/);
   assert.match(styles, /\.notification-button/);
   assert.match(styles, /\.notification-badge/);
 

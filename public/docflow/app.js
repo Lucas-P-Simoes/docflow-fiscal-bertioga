@@ -222,6 +222,9 @@ const elements = {
   kanbanBoardFeedback: document.querySelector("#kanbanBoardFeedback"),
   saveKanbanBoardButton: document.querySelector("#saveKanbanBoardButton"),
   deleteKanbanBoardButton: document.querySelector("#deleteKanbanBoardButton"),
+  kanbanHistoryDialog: document.querySelector("#kanbanHistoryDialog"),
+  kanbanHistoryDialogTitle: document.querySelector("#kanbanHistoryDialogTitle"),
+  kanbanHistoryDialogContent: document.querySelector("#kanbanHistoryDialogContent"),
   kanbanCardDialog: document.querySelector("#kanbanCardDialog"),
   kanbanCardForm: document.querySelector("#kanbanCardForm"),
   kanbanCardFormTitle: document.querySelector("#kanbanCardFormTitle"),
@@ -1563,11 +1566,8 @@ function renderKanban() {
           ${KANBAN_COLUMNS.map((column) => `<article><span>${e(column.label)}</span><strong>${kanban.cards.filter((card) => card.status === column.id).length}</strong></article>`).join("")}
         </div>
         ${error}
-        <div class="kanban-board-with-activity">
-          <div class="kanban-board" aria-label="Quadro Kanban">
-            ${KANBAN_COLUMNS.map((column) => renderKanbanColumn(column)).join("")}
-          </div>
-          ${renderKanbanActivity()}
+        <div class="kanban-board" aria-label="Quadro Kanban">
+          ${KANBAN_COLUMNS.map((column) => renderKanbanColumn(column)).join("")}
         </div>
       </div>`
     : `<div class="kanban-main-panel kanban-empty-board">
@@ -1594,24 +1594,19 @@ function renderKanbanBoardSidebar() {
     <div class="kanban-sidebar-heading"><div><span class="eyebrow eyebrow-dark">Kanban</span><h3>Meus quadros</h3></div><button type="button" data-action="add-kanban-board" aria-label="Criar novo quadro">+</button></div>
     <nav class="kanban-board-list" aria-label="Quadros disponíveis">
       ${kanban.boards.length
-        ? kanban.boards.map((board) => `<button class="kanban-board-link${board.id === kanban.activeBoardId ? " is-active" : ""}" type="button" data-action="select-kanban-board" data-id="${e(board.id)}" aria-current="${board.id === kanban.activeBoardId ? "page" : "false"}"><span class="kanban-board-link-icon" aria-hidden="true">▥</span><span><strong>${e(board.name)}</strong><small>${board.isOwner ? "Criado por você" : `Compartilhado por ${e(board.createdBy?.name || "outro usuário")}`}</small></span><em>${board.cardCount}</em></button>`).join("")
+        ? kanban.boards.map((board) => `<div class="kanban-board-list-item${board.id === kanban.activeBoardId ? " is-active" : ""}"><button class="kanban-board-link${board.id === kanban.activeBoardId ? " is-active" : ""}" type="button" data-action="select-kanban-board" data-id="${e(board.id)}" aria-current="${board.id === kanban.activeBoardId ? "page" : "false"}"><span class="kanban-board-link-icon" aria-hidden="true">▥</span><span><strong>${e(board.name)}</strong><small>${board.isOwner ? "Criado por você" : `Compartilhado por ${e(board.createdBy?.name || "outro usuário")}`}</small></span><em>${board.cardCount}</em></button><button class="kanban-board-history-button" type="button" data-action="open-kanban-history" data-id="${e(board.id)}" aria-label="Ver histórico do quadro ${e(board.name)}" title="Ver histórico do quadro"><span aria-hidden="true">⚙</span></button></div>`).join("")
         : `<div class="kanban-sidebar-empty">Nenhum quadro disponível.</div>`}
     </nav>
     <div class="kanban-sidebar-security"><span aria-hidden="true">◆</span><p><strong>Acesso privado</strong>Os quadros aparecem apenas para as pessoas selecionadas.</p></div>
   </aside>`;
 }
 
-function renderKanbanActivity() {
-  const items = state.kanban.activity;
-  return `<aside class="kanban-activity-panel" aria-label="Histórico de alterações do quadro">
-    <div class="kanban-activity-heading"><span class="kanban-activity-icon" aria-hidden="true">↻</span><div><span class="eyebrow eyebrow-dark">Transparência</span><h3>Histórico do quadro</h3></div></div>
-    <p class="kanban-activity-lead">Alterações e movimentações registradas por usuário.</p>
-    <div class="kanban-activity-list">
+function renderKanbanActivity(items = []) {
+  return `<div class="kanban-activity-list">
       ${items.length
         ? items.map((item) => `<article class="kanban-activity-item"><span class="kanban-activity-avatar" aria-hidden="true">${e(personInitials(item.actor?.name || "Sistema"))}</span><div><p><strong>${e(item.actor?.name || "Sistema")}</strong> ${e(item.summary)}</p><time datetime="${new Date(item.createdAt * 1000).toISOString()}">${e(formatHistoryDate(item.createdAt))}</time></div></article>`).join("")
         : `<div class="kanban-activity-empty"><span aria-hidden="true">↻</span><strong>Nenhuma alteração registrada</strong><p>As ações deste quadro aparecerão aqui.</p></div>`}
-    </div>
-  </aside>`;
+    </div>`;
 }
 
 function renderKanbanColumn(column) {
@@ -1708,6 +1703,34 @@ async function selectKanbanBoard(boardId) {
   state.kanban.cards = [];
   state.kanban.activity = [];
   await loadKanban();
+}
+
+async function openKanbanHistoryDialog(boardId) {
+  const board = state.kanban.boards.find((item) => item.id === boardId);
+  if (!board) {
+    showToast("Não foi possível localizar este quadro.");
+    return;
+  }
+  elements.kanbanHistoryDialog.dataset.boardId = boardId;
+  elements.kanbanHistoryDialogTitle.textContent = `Histórico — ${board.name}`;
+  elements.kanbanHistoryDialogContent.innerHTML = `<div class="kanban-history-loading"><span class="history-spinner" aria-hidden="true"></span><strong>Carregando histórico…</strong></div>`;
+  openDialog(elements.kanbanHistoryDialog);
+  try {
+    const payload = await apiRequest(`/api/kanban?boardId=${encodeURIComponent(boardId)}`);
+    if (!elements.kanbanHistoryDialog.open || elements.kanbanHistoryDialog.dataset.boardId !== boardId) return;
+    const items = Array.isArray(payload.activity) ? payload.activity : [];
+    if (boardId === state.kanban.activeBoardId) state.kanban.activity = items;
+    elements.kanbanHistoryDialogTitle.textContent = `Histórico — ${payload.board?.name || board.name}`;
+    elements.kanbanHistoryDialogContent.innerHTML = renderKanbanActivity(items);
+  } catch (error) {
+    if (!elements.kanbanHistoryDialog.open || elements.kanbanHistoryDialog.dataset.boardId !== boardId) return;
+    elements.kanbanHistoryDialogContent.innerHTML = `<div class="notice is-warning"><span aria-hidden="true">!</span><span>${e(error.message)}</span></div>`;
+  }
+}
+
+function closeKanbanHistoryDialog() {
+  elements.kanbanHistoryDialog.dataset.boardId = "";
+  closeDialog(elements.kanbanHistoryDialog);
 }
 
 async function openKanbanBoardDialog(boardId = "") {
@@ -5191,6 +5214,8 @@ async function handleAction(action, target) {
   if (action === "add-kanban-board") return openKanbanBoardDialog();
   if (action === "edit-kanban-board") return openKanbanBoardDialog(state.kanban.activeBoardId);
   if (action === "select-kanban-board") return selectKanbanBoard(target.dataset.id);
+  if (action === "open-kanban-history") return openKanbanHistoryDialog(target.dataset.id);
+  if (action === "close-kanban-history") return closeKanbanHistoryDialog();
   if (action === "close-kanban-board") return closeKanbanBoardDialog();
   if (action === "delete-kanban-board") return confirmKanbanBoardDeletion();
   if (action === "add-kanban-card") return openKanbanCardDialog();
