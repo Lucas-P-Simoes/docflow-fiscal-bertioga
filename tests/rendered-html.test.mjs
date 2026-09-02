@@ -346,6 +346,12 @@ test("builds technical opinions from the supplied model with map, streets, photo
   assert.match(app, /data-bind="report\.findings"/);
   assert.match(app, /data-bind="report\.impacts"/);
   assert.match(app, /data-bind="report\.recommendations"/);
+  assert.match(app, /data-report-signature-choice=/);
+  assert.match(app, /state\.report\.responsibles\.push/);
+  assert.match(app, /state\.report\.responsibles = state\.report\.responsibles\.filter/);
+  assert.match(app, /signatures\.map\(\(signature\) => new TableCell/);
+  assert.match(app, /cells\.slice\(index, index \+ 2\)/);
+  assert.match(app, /columnWidths: \[columnWidth, columnWidth\]/);
   assert.match(app, /technicalHeading\("INTRODUÇÃO"\)/);
   assert.match(app, /technicalHeading\("MAPA DAS VIAS VISTORIADAS"\)/);
   assert.match(app, /technicalHeading\("CONSIDERAÇÕES FINAIS:"\)/);
@@ -528,7 +534,7 @@ test("saves reusable signatures per account and formats name and role correctly"
   assert.match(app, /OTHER_SIGNATURE_VALUE\s*=\s*"__other__"/);
   assert.match(app, /Outro — cadastrar nova assinatura/);
   assert.match(app, /apiRequest\("\/api\/signatures"\)/);
-  assert.match(app, /data-signature-target="report"/);
+  assert.match(app, /data-report-signature-choice=/);
   assert.match(app, /data-signature-target="correspondence"/);
   assert.match(app, /data-signature-target="notice"/);
   assert.match(app, /technicalRun\(signature\.name, \{ bold: true \}\)/);

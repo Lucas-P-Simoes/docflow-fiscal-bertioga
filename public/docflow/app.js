@@ -545,6 +545,38 @@ function renderCorrespondenceSignatureSelector() {
     </div>`;
 }
 
+function renderReportSignatureChoices() {
+  const profiles = sortedSignatureProfiles();
+  const selectedProfileIds = new Set(
+    state.report.responsibles.map((signature) => signature.profileId).filter(Boolean),
+  );
+  if (state.signatures.loading) {
+    return '<div class="report-signature-choices signature-profile-state" data-report-signature-group><strong>Carregando assinaturas…</strong><span>Aguarde para selecionar as pessoas que assinarão o parecer.</span></div>';
+  }
+  if (state.signatures.error) {
+    return '<div class="report-signature-choices signature-profile-state is-error" data-report-signature-group><strong>Não foi possível carregar as assinaturas</strong><span>' +
+      e(state.signatures.error) +
+      '</span><button class="button button-secondary" type="button" data-action="reload-signatures">Tentar novamente</button></div>';
+  }
+  if (!profiles.length) {
+    return '<div class="report-signature-choices signature-profile-state" data-report-signature-group><strong>Nenhuma assinatura cadastrada</strong><span>Cadastre as pessoas e depois marque todas as que assinarão este parecer.</span></div>';
+  }
+  const choices = profiles.map((profile) =>
+    '<label class="report-signature-choice"><input type="checkbox" data-report-signature-choice="' +
+    e(profile.id) +
+    '" ' +
+    (selectedProfileIds.has(profile.id) ? "checked" : "") +
+    ' /><span><strong>' +
+    e(profile.name) +
+    '</strong><em>' +
+    e(profile.role) +
+    '</em></span></label>'
+  ).join("");
+  return '<fieldset class="report-signature-choices" data-report-signature-group><legend>Selecione uma ou mais pessoas *</legend><p>Marque todas as pessoas que deverão aparecer na área de assinaturas do Word.</p><div class="report-signature-choice-grid">' +
+    choices +
+    '</div></fieldset>';
+}
+
 async function loadSignatureProfiles() {
   if (!state.auth.user || state.signatures.loading) return;
   state.signatures.loading = true;
@@ -629,7 +661,7 @@ function applySignatureProfile(target, profile) {
   if (!target || !profile) return;
   if (target.type === "report") {
     if (state.report.responsibles.some((item) => item.profileId === profile.id)) {
-      showToast("Essa assinatura já foi adicionada ao relatório.");
+      showToast("Essa assinatura já foi adicionada ao parecer.");
       return;
     }
     state.report.responsibles.push({ profileId: profile.id, name: profile.name, role: profile.role });
@@ -1959,17 +1991,14 @@ function renderReportContent() {
     <label class="field stacked"><span>Providências recomendadas *</span><textarea data-bind="report.recommendations" maxlength="3500">${e(r.recommendations)}</textarea><span class="text-counter"><span>Uma providência por linha</span><span>${reportRecommendations().length} item(ns)</span></span></label>
   </section>
   <section class="panel">
-    ${panelHeader("Responsáveis pelas assinaturas", "Escolha uma assinatura salva. Para cadastrar uma nova, selecione Outro.", `<button class="button button-secondary" type="button" data-action="open-signatures">Configurar assinaturas</button>`)}
-    <label class="field signature-select-field">
-      <span>Adicionar responsável</span>
-      <select data-signature-target="report" ${state.signatures.loading ? "disabled" : ""}>${signatureSelectOptions("", "Selecione uma pessoa")}</select>
-    </label>
+    ${panelHeader("Assinaturas do parecer", "Você pode marcar quantas pessoas forem necessárias. No Word, elas serão organizadas em duas colunas.", `<button class="button button-secondary" type="button" data-action="open-signatures">Cadastrar ou editar assinaturas</button>`)}
+    ${renderReportSignatureChoices()}
     <div class="selected-signature-list">
       ${r.responsibles.length ? r.responsibles.map((signature, index) => `<article class="selected-signature-card">
         <span class="signatory-index">${String(index + 1).padStart(2, "0")}</span>
         <div class="signature-profile-copy"><strong>${e(signature.name)}</strong><em>${e(signature.role)}</em></div>
         <button class="icon-button" type="button" data-action="remove-report-signature" data-index="${index}" aria-label="Remover assinatura de ${e(signature.name)}" title="Remover">×</button>
-      </article>`).join("") : `<div class="signature-profile-state"><strong>Nenhuma assinatura selecionada</strong><span>Use o dropdown acima para adicionar os responsáveis.</span></div>`}
+      </article>`).join("") : `<div class="signature-profile-state"><strong>Nenhuma assinatura selecionada</strong><span>Marque uma ou mais pessoas na lista acima.</span></div>`}
     </div>
   </section>
   <section class="panel">
@@ -2803,9 +2832,9 @@ function validateCurrentStep() {
       }
       if (!r.responsibles.length) {
         showFieldValidationMessage({
-          title: "Selecione um responsável",
-          text: "Escolha pelo menos uma pessoa para a área de assinaturas.",
-          fields: ['[data-signature-target="report"]'],
+          title: "Selecione as assinaturas",
+          text: "Marque pelo menos uma pessoa. Você pode incluir quantos responsáveis forem necessários.",
+          fields: ['[data-report-signature-group]'],
         });
         return false;
       }
@@ -4419,9 +4448,11 @@ function technicalPhotoCaption(number, description) {
 }
 
 function technicalSignatureTable(signatures) {
-  const { Paragraph, Table, TableRow, TableCell, WidthType, AlignmentType, VerticalAlign } = window.docx;
+  const { Paragraph, Table, TableRow, TableCell, WidthType, TableLayoutType, AlignmentType, VerticalAlign } = window.docx;
+  const tableWidth = 9000;
+  const columnWidth = tableWidth / 2;
   const cells = signatures.map((signature) => new TableCell({
-    width: { size: 50, type: WidthType.PERCENTAGE },
+    width: { size: columnWidth, type: WidthType.DXA },
     margins: { top: 620, bottom: 180, left: 120, right: 120 },
     verticalAlign: VerticalAlign.BOTTOM,
     borders: noBorders(),
@@ -4435,11 +4466,17 @@ function technicalSignatureTable(signatures) {
   for (let index = 0; index < cells.length; index += 2) {
     const pair = cells.slice(index, index + 2);
     if (pair.length === 1) {
-      pair.push(new TableCell({ width: { size: 50, type: WidthType.PERCENTAGE }, borders: noBorders(), children: [new Paragraph("")] }));
+      pair.push(new TableCell({ width: { size: columnWidth, type: WidthType.DXA }, borders: noBorders(), children: [new Paragraph("")] }));
     }
     rows.push(new TableRow({ cantSplit: true, children: pair }));
   }
-  return new Table({ width: { size: 100, type: WidthType.PERCENTAGE }, borders: noBorders(), rows });
+  return new Table({
+    width: { size: tableWidth, type: WidthType.DXA },
+    layout: TableLayoutType.FIXED,
+    columnWidths: [columnWidth, columnWidth],
+    borders: noBorders(),
+    rows,
+  });
 }
 
 async function loadTechnicalOpinionTemplate() {
@@ -5165,6 +5202,17 @@ document.addEventListener("input", (event) => {
 document.addEventListener("change", (event) => {
   const target = event.target;
   clearValidationHighlight(target);
+  if (target.dataset.reportSignatureChoice !== undefined) {
+    const profileId = target.dataset.reportSignatureChoice;
+    const profile = state.signatures.items.find((item) => item.id === profileId);
+    if (target.checked && profile) {
+      applySignatureProfile({ type: "report" }, profile);
+    } else if (!target.checked) {
+      state.report.responsibles = state.report.responsibles.filter((item) => item.profileId !== profileId);
+    }
+    render();
+    return;
+  }
   if (target.dataset.kanbanStatus !== undefined) {
     moveKanbanCard(target.dataset.id, target.value);
     return;

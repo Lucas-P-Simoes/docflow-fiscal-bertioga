@@ -2693,6 +2693,95 @@ textarea::placeholder {
   max-width: 680px;
 }
 
+.report-signature-choices {
+  min-width: 0;
+  margin: 0;
+  padding: 16px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: var(--canvas);
+}
+
+.report-signature-choices legend {
+  padding: 0 7px;
+  color: var(--ink);
+  font-size: 12px;
+  font-weight: 760;
+}
+
+.report-signature-choices > p {
+  margin: 0 0 12px;
+  color: var(--muted);
+  font-size: 11px;
+  line-height: 1.5;
+}
+
+.report-signature-choice-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.report-signature-choice {
+  display: grid;
+  grid-template-columns: 20px minmax(0, 1fr);
+  gap: 10px;
+  align-items: center;
+  min-width: 0;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 11px;
+  background: #ffffff;
+  cursor: pointer;
+  transition: border-color 150ms ease, background-color 150ms ease, box-shadow 150ms ease;
+}
+
+.report-signature-choice:hover {
+  border-color: var(--line-strong);
+}
+
+.report-signature-choice:has(input:checked) {
+  border-color: var(--forest);
+  background: var(--forest-soft);
+  box-shadow: inset 0 0 0 1px color-mix(in srgb, var(--forest) 22%, transparent);
+}
+
+.report-signature-choice input {
+  width: 17px;
+  height: 17px;
+  margin: 0;
+  accent-color: var(--forest);
+}
+
+.report-signature-choice span {
+  display: grid;
+  min-width: 0;
+  gap: 3px;
+}
+
+.report-signature-choice strong,
+.report-signature-choice em {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.report-signature-choice strong {
+  color: var(--ink);
+  font-size: 12px;
+}
+
+.report-signature-choice em {
+  color: var(--muted);
+  font-size: 10px;
+  font-style: normal;
+}
+
+.report-signature-choices.is-validation-error {
+  border-color: #c23a32;
+  box-shadow: 0 0 0 3px rgba(194, 58, 50, 0.1);
+}
+
 .selected-signature-list,
 .review-signatures {
   display: grid;
@@ -3905,6 +3994,7 @@ textarea::placeholder {
   .field-grid,
   .field-grid.three,
   .choice-grid,
+  .report-signature-choice-grid,
   .responsible-list,
   .summary-grid,
   .topic-image-row {
