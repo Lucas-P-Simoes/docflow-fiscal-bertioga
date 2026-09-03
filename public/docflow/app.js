@@ -1562,8 +1562,8 @@ function renderKanban() {
           <strong>Somente membros deste quadro podem visualizar e editar</strong>
         </div>
         <div class="kanban-summary" aria-label="Resumo do quadro">
-          <article><span>Total</span><strong>${kanban.cards.length}</strong></article>
-          ${KANBAN_COLUMNS.map((column) => `<article><span>${e(column.label)}</span><strong>${kanban.cards.filter((card) => card.status === column.id).length}</strong></article>`).join("")}
+          <article><span>Total</span><strong data-kanban-summary="total">${kanban.cards.length}</strong></article>
+          ${KANBAN_COLUMNS.map((column) => `<article><span>${e(column.label)}</span><strong data-kanban-summary="${e(column.id)}">${kanban.cards.filter((card) => card.status === column.id).length}</strong></article>`).join("")}
         </div>
         ${error}
         <div class="kanban-board" aria-label="Quadro Kanban">
@@ -1617,19 +1617,24 @@ function renderKanbanColumn(column) {
       <span>${cards.length}</span>
     </div>
     <div class="kanban-column-cards">
-      ${cards.length ? cards.map(renderKanbanCard).join("") : `<div class="kanban-column-empty"><strong>Nenhum cartão</strong><span>Arraste uma atividade para cá ou crie um novo cartão.</span></div>`}
+      ${cards.length ? cards.map(renderKanbanCard).join("") : renderKanbanColumnEmpty()}
     </div>
   </section>`;
+}
+
+function renderKanbanColumnEmpty() {
+  return `<div class="kanban-column-empty"><strong>Nenhum cartão</strong><span>Arraste uma atividade para cá ou crie um novo cartão.</span></div>`;
 }
 
 function renderKanbanCard(card) {
   const busy = state.kanban.busy.get(card.id) || "";
   const canEdit = Boolean(state.kanban.board?.canEdit);
   const disabled = busy || !canEdit ? "disabled" : "";
+  const busyClass = busy === "move" ? " is-syncing" : busy ? " is-busy" : "";
   const assignees = card.assignees.length
     ? `<div class="kanban-card-assignees" aria-label="Responsáveis">${card.assignees.map((person) => `<span class="kanban-person-chip" title="${e(person.name)} — ${e(person.email)}"><span aria-hidden="true">${e(personInitials(person.name))}</span>${e(person.name)}</span>`).join("")}</div>`
     : `<span class="kanban-unassigned">Sem responsável</span>`;
-  return `<article class="kanban-card${busy ? " is-busy" : ""}" draggable="${busy || !canEdit ? "false" : "true"}" data-kanban-card-id="${e(card.id)}" tabindex="0">
+  return `<article class="kanban-card${busyClass}" draggable="${busy || !canEdit ? "false" : "true"}" data-kanban-card-id="${e(card.id)}" tabindex="0"${busy === "move" ? ' aria-busy="true"' : ""}>
     <div class="kanban-card-topline"><span>${e(kanbanStatusLabel(card.status))}</span><small>${e(formatHistoryDate(card.updatedAt))}</small></div>
     <h4>${e(card.title)}</h4>
     ${card.description ? `<p>${e(card.description).replace(/\n/g, "<br>")}</p>` : ""}
@@ -1910,8 +1915,13 @@ async function saveKanbanCard() {
 async function moveKanbanCard(cardId, status) {
   const card = state.kanban.cards.find((item) => item.id === cardId);
   if (!card || card.status === status || state.kanban.busy.has(cardId)) return;
+  const boardId = state.kanban.activeBoardId;
+  const previousCard = card;
+  const optimisticCard = { ...card, status, updatedAt: Math.floor(Date.now() / 1000) };
   state.kanban.busy.set(cardId, "move");
-  render();
+  state.kanban.error = "";
+  state.kanban.cards = state.kanban.cards.map((item) => item.id === cardId ? optimisticCard : item);
+  moveKanbanCardInView(cardId, status);
   try {
     const payload = await apiRequest(`/api/kanban/cards/${encodeURIComponent(cardId)}`, {
       method: "PATCH",
@@ -1922,15 +1932,105 @@ async function moveKanbanCard(cardId, status) {
         assigneeIds: card.assignees.map((person) => person.id),
       },
     });
-    state.kanban.cards = state.kanban.cards.map((item) => item.id === cardId ? payload.card : item);
-    await loadKanban({ silent: true });
+    state.kanban.cards = state.kanban.cards.map((item) => item.id === cardId ? (payload.card || optimisticCard) : item);
+    state.kanban.busy.delete(cardId);
+    if (state.kanban.open && state.kanban.activeBoardId === boardId) {
+      settleKanbanCardInView(cardId, payload.card || optimisticCard);
+    }
     showToast(`Cartão movido para ${kanbanStatusLabel(status)}.`);
   } catch (error) {
-    state.kanban.error = error.message;
-  } finally {
+    state.kanban.cards = state.kanban.cards.map((item) => item.id === cardId ? previousCard : item);
     state.kanban.busy.delete(cardId);
-    if (state.kanban.open) render();
+    if (state.kanban.open && state.kanban.activeBoardId === boardId) {
+      state.kanban.error = error.message;
+      moveKanbanCardInView(cardId, previousCard.status);
+      settleKanbanCardInView(cardId, previousCard);
+      showToast("Não foi possível mover o cartão. A alteração foi desfeita.");
+    }
   }
+}
+
+function moveKanbanCardInView(cardId, status) {
+  if (!state.kanban.open) return;
+  const cardElement = document.querySelector(`[data-kanban-card-id="${cardId}"]`);
+  const targetColumn = document.querySelector(`[data-kanban-column="${status}"]`);
+  const targetCards = targetColumn?.querySelector(".kanban-column-cards");
+  if (!cardElement || !targetCards) {
+    render();
+    return;
+  }
+
+  const sourceColumn = cardElement.closest("[data-kanban-column]");
+  const previousRect = cardElement.getBoundingClientRect();
+  targetCards.querySelector(".kanban-column-empty")?.remove();
+  targetCards.append(cardElement);
+  syncKanbanColumnInView(sourceColumn);
+  syncKanbanColumnInView(targetColumn);
+  syncKanbanSummaryInView();
+
+  const statusBadge = cardElement.querySelector(".kanban-card-topline > span");
+  const statusSelect = cardElement.querySelector("[data-kanban-status]");
+  if (statusBadge) statusBadge.textContent = kanbanStatusLabel(status);
+  if (statusSelect) statusSelect.value = status;
+  setKanbanCardSyncingInView(cardElement, true);
+
+  if (!window.matchMedia?.("(prefers-reduced-motion: reduce)").matches) {
+    const nextRect = cardElement.getBoundingClientRect();
+    const translateX = previousRect.left - nextRect.left;
+    const translateY = previousRect.top - nextRect.top;
+    if (translateX || translateY) {
+      cardElement.style.transition = "none";
+      cardElement.style.transform = `translate(${translateX}px, ${translateY}px)`;
+      cardElement.getBoundingClientRect();
+      requestAnimationFrame(() => {
+        cardElement.style.transition = "";
+        cardElement.style.transform = "";
+      });
+    }
+  }
+}
+
+function syncKanbanColumnInView(columnElement) {
+  if (!columnElement) return;
+  const status = columnElement.dataset.kanbanColumn;
+  const count = state.kanban.cards.filter((card) => card.status === status).length;
+  const counter = columnElement.querySelector(".kanban-column-heading > span");
+  const cards = columnElement.querySelector(".kanban-column-cards");
+  if (counter) counter.textContent = String(count);
+  if (!cards) return;
+  if (count === 0 && !cards.querySelector(".kanban-column-empty")) {
+    cards.insertAdjacentHTML("beforeend", renderKanbanColumnEmpty());
+  } else if (count > 0) {
+    cards.querySelector(".kanban-column-empty")?.remove();
+  }
+}
+
+function syncKanbanSummaryInView() {
+  for (const status of ["total", ...KANBAN_COLUMNS.map((column) => column.id)]) {
+    const value = status === "total"
+      ? state.kanban.cards.length
+      : state.kanban.cards.filter((card) => card.status === status).length;
+    const counter = document.querySelector(`[data-kanban-summary="${status}"]`);
+    if (counter) counter.textContent = String(value);
+  }
+}
+
+function setKanbanCardSyncingInView(cardElement, syncing) {
+  cardElement.classList.toggle("is-syncing", syncing);
+  if (syncing) cardElement.setAttribute("aria-busy", "true");
+  else cardElement.removeAttribute("aria-busy");
+  cardElement.draggable = !syncing && Boolean(state.kanban.board?.canEdit);
+  cardElement.querySelectorAll("select, button").forEach((control) => {
+    control.disabled = syncing || !state.kanban.board?.canEdit;
+  });
+}
+
+function settleKanbanCardInView(cardId, card) {
+  const cardElement = document.querySelector(`[data-kanban-card-id="${cardId}"]`);
+  if (!cardElement) return;
+  const updatedAt = cardElement.querySelector(".kanban-card-topline small");
+  if (updatedAt) updatedAt.textContent = formatHistoryDate(card.updatedAt);
+  setKanbanCardSyncingInView(cardElement, false);
 }
 
 function confirmKanbanCardDeletion(cardId) {

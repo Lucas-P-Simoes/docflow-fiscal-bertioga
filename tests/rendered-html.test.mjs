@@ -691,11 +691,17 @@ test("adds private Kanban boards with member permissions, activity history, and 
   assert.match(app, /data-kanban-column/);
   assert.match(app, /data-kanban-status/);
   assert.match(app, /data-kanban-assignee/);
+  assert.match(app, /const optimisticCard = \{ \.\.\.card, status,/);
+  assert.match(app, /moveKanbanCardInView\(cardId, status\)/);
+  assert.match(app, /A alteração foi desfeita/);
+  assert.doesNotMatch(app, /state\.kanban\.cards = state\.kanban\.cards\.map\(\(item\) => item\.id === cardId \? payload\.card : item\);\s*await loadKanban/);
   assert.match(app, /setInterval\([\s\S]*?30_000/);
   assert.match(styles, /\.kanban-board/);
   assert.match(styles, /\.kanban-board-sidebar/);
   assert.match(styles, /\.kanban-board-history-button/);
   assert.match(styles, /\.kanban-history-dialog/);
+  assert.match(styles, /\.kanban-card\.is-syncing/);
+  assert.match(styles, /@keyframes kanban-syncing/);
   assert.match(styles, /overflow-wrap:\s*anywhere/);
   assert.match(styles, /\.notification-button/);
   assert.match(styles, /\.notification-badge/);

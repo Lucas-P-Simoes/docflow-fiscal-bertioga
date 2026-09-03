@@ -1657,6 +1657,7 @@ select:focus-visible,
 }
 
 .kanban-card {
+  position: relative;
   min-width: 0;
   overflow: hidden;
   padding: 15px;
@@ -1677,6 +1678,30 @@ select:focus-visible,
 .kanban-card.is-dragging,
 .kanban-card.is-busy {
   opacity: 0.55;
+}
+
+.kanban-card.is-syncing {
+  border-color: #aac7ba;
+  box-shadow: 0 8px 25px rgba(23, 33, 29, 0.08), inset 0 -3px 0 rgba(31, 107, 80, 0.18);
+  cursor: progress;
+}
+
+.kanban-card.is-syncing::after {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 3px;
+  background: linear-gradient(90deg, transparent, var(--forest), transparent);
+  content: "";
+  animation: kanban-syncing 900ms ease-in-out infinite;
+  transform: translateX(-65%);
+}
+
+@keyframes kanban-syncing {
+  to {
+    transform: translateX(65%);
+  }
 }
 
 .kanban-card.is-notification-target {
