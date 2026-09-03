@@ -45,6 +45,28 @@ export type KanbanActivity = {
   createdAt: number;
 };
 
+export type KanbanCardComment = {
+  id: string;
+  cardId: string;
+  body: string;
+  author: KanbanPerson | null;
+  createdAt: number;
+};
+
+export type KanbanCardAttachment = {
+  id: string;
+  cardId: string;
+  filename: string;
+  contentType: string;
+  sizeBytes: number;
+  uploadedBy: KanbanPerson | null;
+  createdAt: number;
+};
+
+export type KanbanCardAttachmentRecord = KanbanCardAttachment & {
+  objectKey: string;
+};
+
 export type KanbanNotification = {
   id: string;
   boardId: string;
@@ -104,6 +126,29 @@ type ActivityRow = {
   actor_user_id: string | null;
   actor_name: string | null;
   actor_email: string | null;
+  created_at: number;
+};
+
+type CommentRow = {
+  id: string;
+  card_id: string;
+  body: string;
+  author_user_id: string | null;
+  author_name: string | null;
+  author_email: string | null;
+  created_at: number;
+};
+
+type AttachmentRow = {
+  id: string;
+  card_id: string;
+  object_key: string;
+  filename: string;
+  content_type: string;
+  size_bytes: number;
+  uploaded_by: string | null;
+  uploader_name: string | null;
+  uploader_email: string | null;
   created_at: number;
 };
 
@@ -429,6 +474,270 @@ export async function listKanbanActivity(
     actor: nullablePerson(row.actor_user_id, row.actor_name, row.actor_email),
     createdAt: row.created_at,
   }));
+}
+
+export async function listKanbanCardActivity(
+  db: D1Database,
+  cardId: string,
+): Promise<KanbanActivity[]> {
+  const result = await db
+    .prepare(
+      `SELECT
+         activity.id, activity.card_id, activity.action, activity.summary,
+         activity.actor_user_id, actor.name AS actor_name, actor.email AS actor_email,
+         activity.created_at
+       FROM kanban_activity AS activity
+       LEFT JOIN users AS actor ON actor.id = activity.actor_user_id
+       WHERE activity.card_id = ?
+       ORDER BY activity.created_at DESC, activity.rowid DESC
+       LIMIT 120`,
+    )
+    .bind(cardId)
+    .all<ActivityRow>();
+  return result.results.map((row) => ({
+    id: row.id,
+    cardId: row.card_id,
+    action: row.action,
+    summary: row.summary,
+    actor: nullablePerson(row.actor_user_id, row.actor_name, row.actor_email),
+    createdAt: row.created_at,
+  }));
+}
+
+export async function listKanbanCardComments(
+  db: D1Database,
+  cardId: string,
+): Promise<KanbanCardComment[]> {
+  const result = await db
+    .prepare(
+      `SELECT
+         comments.id, comments.card_id, comments.body, comments.author_user_id,
+         author.name AS author_name, author.email AS author_email, comments.created_at
+       FROM kanban_card_comments AS comments
+       LEFT JOIN users AS author ON author.id = comments.author_user_id
+       WHERE comments.card_id = ?
+       ORDER BY comments.created_at DESC, comments.rowid DESC
+       LIMIT 120`,
+    )
+    .bind(cardId)
+    .all<CommentRow>();
+  return result.results.map((row) => ({
+    id: row.id,
+    cardId: row.card_id,
+    body: row.body,
+    author: nullablePerson(row.author_user_id, row.author_name, row.author_email),
+    createdAt: row.created_at,
+  }));
+}
+
+export async function createKanbanCardComment(
+  db: D1Database,
+  values: {
+    id: string;
+    cardId: string;
+    boardId: string;
+    body: string;
+    actor: KanbanPerson;
+    now: number;
+  },
+): Promise<KanbanCardComment> {
+  await db.batch([
+    db
+      .prepare(
+        `INSERT INTO kanban_card_comments (id, card_id, author_user_id, body, created_at)
+         VALUES (?, ?, ?, ?, ?)`,
+      )
+      .bind(values.id, values.cardId, values.actor.id, values.body, values.now),
+    db.prepare("UPDATE kanban_cards SET updated_at = ? WHERE id = ?").bind(values.now, values.cardId),
+    db.prepare("UPDATE kanban_boards SET updated_at = ? WHERE id = ?").bind(values.now, values.boardId),
+  ]);
+  return {
+    id: values.id,
+    cardId: values.cardId,
+    body: values.body,
+    author: values.actor,
+    createdAt: values.now,
+  };
+}
+
+export async function listKanbanCardAttachments(
+  db: D1Database,
+  cardId: string,
+): Promise<KanbanCardAttachment[]> {
+  const records = await listKanbanCardAttachmentRecords(db, cardId);
+  return records.map((record) => ({
+    id: record.id,
+    cardId: record.cardId,
+    filename: record.filename,
+    contentType: record.contentType,
+    sizeBytes: record.sizeBytes,
+    uploadedBy: record.uploadedBy,
+    createdAt: record.createdAt,
+  }));
+}
+
+export async function getKanbanCardAttachment(
+  db: D1Database,
+  cardId: string,
+  attachmentId: string,
+): Promise<KanbanCardAttachmentRecord | null> {
+  const row = await db
+    .prepare(
+      `SELECT
+         attachments.id, attachments.card_id, attachments.object_key, attachments.filename,
+         attachments.content_type, attachments.size_bytes, attachments.uploaded_by,
+         uploader.name AS uploader_name, uploader.email AS uploader_email, attachments.created_at
+       FROM kanban_card_attachments AS attachments
+       LEFT JOIN users AS uploader ON uploader.id = attachments.uploaded_by
+       WHERE attachments.id = ? AND attachments.card_id = ?
+       LIMIT 1`,
+    )
+    .bind(attachmentId, cardId)
+    .first<AttachmentRow>();
+  return row ? attachmentFromRow(row) : null;
+}
+
+export async function countKanbanCardAttachments(db: D1Database, cardId: string): Promise<number> {
+  const row = await db
+    .prepare("SELECT COUNT(*) AS count FROM kanban_card_attachments WHERE card_id = ?")
+    .bind(cardId)
+    .first<{ count: number }>();
+  return Number(row?.count || 0);
+}
+
+export async function createKanbanCardAttachments(
+  db: D1Database,
+  values: {
+    cardId: string;
+    boardId: string;
+    attachments: Array<{
+      id: string;
+      objectKey: string;
+      filename: string;
+      contentType: string;
+      sizeBytes: number;
+    }>;
+    actor: KanbanPerson;
+    now: number;
+  },
+): Promise<KanbanCardAttachment[]> {
+  const statements: D1PreparedStatement[] = [];
+  for (const attachment of values.attachments) {
+    statements.push(
+      db
+        .prepare(
+          `INSERT INTO kanban_card_attachments (
+             id, card_id, uploaded_by, object_key, filename, content_type, size_bytes, created_at
+           ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        )
+        .bind(
+          attachment.id,
+          values.cardId,
+          values.actor.id,
+          attachment.objectKey,
+          attachment.filename,
+          attachment.contentType,
+          attachment.sizeBytes,
+          values.now,
+        ),
+      activityStatement(db, {
+        boardId: values.boardId,
+        cardId: values.cardId,
+        actorUserId: values.actor.id,
+        action: "attachment_added",
+        summary: `anexou o arquivo “${attachment.filename}”`,
+        now: values.now,
+      }),
+    );
+  }
+  statements.push(
+    db.prepare("UPDATE kanban_cards SET updated_at = ? WHERE id = ?").bind(values.now, values.cardId),
+    db.prepare("UPDATE kanban_boards SET updated_at = ? WHERE id = ?").bind(values.now, values.boardId),
+  );
+  await db.batch(statements);
+  return listKanbanCardAttachments(db, values.cardId);
+}
+
+export async function deleteKanbanCardAttachment(
+  db: D1Database,
+  values: {
+    cardId: string;
+    boardId: string;
+    attachmentId: string;
+    actor: KanbanPerson;
+    now: number;
+  },
+): Promise<KanbanCardAttachmentRecord | null> {
+  const attachment = await getKanbanCardAttachment(db, values.cardId, values.attachmentId);
+  if (!attachment) return null;
+  await db.batch([
+    db.prepare("DELETE FROM kanban_card_attachments WHERE id = ? AND card_id = ?").bind(values.attachmentId, values.cardId),
+    activityStatement(db, {
+      boardId: values.boardId,
+      cardId: values.cardId,
+      actorUserId: values.actor.id,
+      action: "attachment_deleted",
+      summary: `removeu o arquivo “${attachment.filename}”`,
+      now: values.now,
+    }),
+    db.prepare("UPDATE kanban_cards SET updated_at = ? WHERE id = ?").bind(values.now, values.cardId),
+    db.prepare("UPDATE kanban_boards SET updated_at = ? WHERE id = ?").bind(values.now, values.boardId),
+  ]);
+  return attachment;
+}
+
+export async function listKanbanAttachmentKeysForCard(db: D1Database, cardId: string): Promise<string[]> {
+  const result = await db
+    .prepare("SELECT object_key FROM kanban_card_attachments WHERE card_id = ?")
+    .bind(cardId)
+    .all<{ object_key: string }>();
+  return result.results.map((row) => row.object_key);
+}
+
+export async function listKanbanAttachmentKeysForBoard(db: D1Database, boardId: string): Promise<string[]> {
+  const result = await db
+    .prepare(
+      `SELECT attachments.object_key
+       FROM kanban_card_attachments AS attachments
+       INNER JOIN kanban_cards AS cards ON cards.id = attachments.card_id
+       WHERE cards.board_id = ?`,
+    )
+    .bind(boardId)
+    .all<{ object_key: string }>();
+  return result.results.map((row) => row.object_key);
+}
+
+async function listKanbanCardAttachmentRecords(
+  db: D1Database,
+  cardId: string,
+): Promise<KanbanCardAttachmentRecord[]> {
+  const result = await db
+    .prepare(
+      `SELECT
+         attachments.id, attachments.card_id, attachments.object_key, attachments.filename,
+         attachments.content_type, attachments.size_bytes, attachments.uploaded_by,
+         uploader.name AS uploader_name, uploader.email AS uploader_email, attachments.created_at
+       FROM kanban_card_attachments AS attachments
+       LEFT JOIN users AS uploader ON uploader.id = attachments.uploaded_by
+       WHERE attachments.card_id = ?
+       ORDER BY attachments.created_at DESC, attachments.rowid DESC`,
+    )
+    .bind(cardId)
+    .all<AttachmentRow>();
+  return result.results.map(attachmentFromRow);
+}
+
+function attachmentFromRow(row: AttachmentRow): KanbanCardAttachmentRecord {
+  return {
+    id: row.id,
+    cardId: row.card_id,
+    objectKey: row.object_key,
+    filename: row.filename,
+    contentType: row.content_type,
+    sizeBytes: Number(row.size_bytes),
+    uploadedBy: nullablePerson(row.uploaded_by, row.uploader_name, row.uploader_email),
+    createdAt: row.created_at,
+  };
 }
 
 export async function getKanbanCardAccess(

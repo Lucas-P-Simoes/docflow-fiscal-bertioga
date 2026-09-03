@@ -1,13 +1,23 @@
 import {
+  countKanbanCardAttachments,
   createKanbanBoard,
   createKanbanCard,
+  createKanbanCardAttachments,
+  createKanbanCardComment,
   deleteKanbanBoard,
   deleteKanbanCard,
+  deleteKanbanCardAttachment,
   getKanbanBoard,
+  getKanbanCardAttachment,
   getKanbanCardAccess,
   listAccessibleKanbanBoards,
   listApprovedKanbanPeople,
+  listKanbanAttachmentKeysForBoard,
+  listKanbanAttachmentKeysForCard,
   listKanbanActivity,
+  listKanbanCardActivity,
+  listKanbanCardAttachments,
+  listKanbanCardComments,
   listKanbanCards,
   listKanbanNotifications,
   markAllKanbanNotificationsRead,
@@ -22,6 +32,11 @@ import { authenticateRequest, authError, authJson } from "./auth";
 const MAX_KANBAN_BODY_BYTES = 48 * 1024;
 const MAX_ASSIGNEES = 30;
 const MAX_BOARD_MEMBERS = 40;
+const MAX_COMMENT_LENGTH = 2_000;
+const MAX_ATTACHMENTS_PER_CARD = 40;
+const MAX_FILES_PER_UPLOAD = 5;
+const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
+const MAX_ATTACHMENT_REQUEST_BYTES = MAX_FILES_PER_UPLOAD * MAX_ATTACHMENT_BYTES + 512 * 1024;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const KANBAN_STATUSES = new Set<KanbanStatus>(["todo", "doing", "done"]);
 
@@ -88,8 +103,10 @@ export async function handleKanbanBoardMutation(
   if (!board.isOwner) return authError(403, "Somente o criador pode gerenciar este quadro.");
 
   if (request.method === "DELETE") {
+    const attachmentKeys = await listKanbanAttachmentKeysForBoard(env.DB, boardId);
     const deleted = await deleteKanbanBoard(env.DB, boardId, authenticated.account.id);
     if (!deleted) return authError(404, "Quadro não encontrado.");
+    await removeStoredAttachments(env.DOCUMENTS, attachmentKeys);
     return authJson(200, { deleted: true, id: boardId });
   }
   if (request.method !== "PATCH") return authError(405, "Método não permitido.");
@@ -145,6 +162,7 @@ export async function handleKanbanCardMutation(
   if (!access.canEdit) return authError(403, "Você não tem permissão para editar este cartão.");
 
   if (request.method === "DELETE") {
+    const attachmentKeys = await listKanbanAttachmentKeysForCard(env.DB, cardId);
     const deleted = await deleteKanbanCard(env.DB, {
       cardId,
       boardId: access.boardId,
@@ -152,6 +170,7 @@ export async function handleKanbanCardMutation(
       now: unixNow(),
     });
     if (!deleted) return authError(404, "Cartão não encontrado.");
+    await removeStoredAttachments(env.DOCUMENTS, attachmentKeys);
     return authJson(200, { deleted: true, id: cardId });
   }
   if (request.method !== "PATCH") return authError(405, "Método não permitido.");
@@ -171,6 +190,235 @@ export async function handleKanbanCardMutation(
   });
   if (!card) return authError(404, "Cartão não encontrado.");
   return authJson(200, { card });
+}
+
+export async function handleKanbanCardDetails(
+  request: Request,
+  env: Env,
+  cardId: string,
+): Promise<Response> {
+  if (request.method !== "GET") return authError(405, "Método não permitido.");
+  const authenticated = await requireKanbanAccount(request, env);
+  if (authenticated instanceof Response) return authenticated;
+  const access = await getKanbanCardAccess(env.DB, cardId, authenticated.account.id);
+  if (!access) return authError(404, "Cartão não encontrado ou sem acesso.");
+  return authJson(200, await getCardDetails(env.DB, cardId));
+}
+
+export async function handleKanbanCardComments(
+  request: Request,
+  env: Env,
+  cardId: string,
+): Promise<Response> {
+  if (request.method !== "POST") return authError(405, "Método não permitido.");
+  const authenticated = await requireKanbanAccount(request, env);
+  if (authenticated instanceof Response) return authenticated;
+  const access = await getKanbanCardAccess(env.DB, cardId, authenticated.account.id);
+  if (!access) return authError(404, "Cartão não encontrado ou sem acesso.");
+  if (!access.canEdit) return authError(403, "Você não tem permissão para comentar neste cartão.");
+  const body = await readBodyOrResponse(request);
+  if (body instanceof Response) return body;
+  const commentBody = cleanMultiline(body.body, MAX_COMMENT_LENGTH);
+  if (!commentBody) return authError(400, "Escreva um comentário antes de enviar.");
+
+  const comment = await createKanbanCardComment(env.DB, {
+    id: crypto.randomUUID(),
+    cardId,
+    boardId: access.boardId,
+    body: commentBody,
+    actor: accountPerson(authenticated),
+    now: unixNow(),
+  });
+  return authJson(201, {
+    timelineItem: {
+      id: comment.id,
+      type: "comment",
+      body: comment.body,
+      actor: comment.author,
+      createdAt: comment.createdAt,
+    },
+  });
+}
+
+export async function handleKanbanCardAttachments(
+  request: Request,
+  env: Env,
+  cardId: string,
+): Promise<Response> {
+  if (request.method !== "POST") return authError(405, "Método não permitido.");
+  const authenticated = await requireKanbanAccount(request, env);
+  if (authenticated instanceof Response) return authenticated;
+  const access = await getKanbanCardAccess(env.DB, cardId, authenticated.account.id);
+  if (!access) return authError(404, "Cartão não encontrado ou sem acesso.");
+  if (!access.canEdit) return authError(403, "Você não tem permissão para anexar arquivos neste cartão.");
+
+  const declaredLength = Number(request.headers.get("Content-Length") || 0);
+  if (declaredLength > MAX_ATTACHMENT_REQUEST_BYTES) {
+    return authError(413, "O envio ultrapassa o limite permitido.");
+  }
+  if (!request.headers.get("Content-Type")?.toLowerCase().includes("multipart/form-data")) {
+    return authError(400, "Envie os arquivos no formato correto.");
+  }
+
+  let formData: FormData;
+  try {
+    formData = await request.formData();
+  } catch {
+    return authError(400, "Não foi possível ler os arquivos enviados.");
+  }
+  const files = formData.getAll("files").filter((value): value is File => value instanceof File);
+  if (!files.length) return authError(400, "Selecione pelo menos um arquivo.");
+  if (files.length > MAX_FILES_PER_UPLOAD) {
+    return authError(400, `Envie no máximo ${MAX_FILES_PER_UPLOAD} arquivos por vez.`);
+  }
+  const existingCount = await countKanbanCardAttachments(env.DB, cardId);
+  if (existingCount + files.length > MAX_ATTACHMENTS_PER_CARD) {
+    return authError(400, `Cada cartão pode guardar até ${MAX_ATTACHMENTS_PER_CARD} arquivos.`);
+  }
+
+  const uploads = files.map((file) => ({
+    id: crypto.randomUUID(),
+    objectKey: `kanban/${access.boardId}/${cardId}/${crypto.randomUUID()}`,
+    filename: cleanSingleLine(file.name, 180) || "arquivo",
+    contentType: cleanSingleLine(file.type, 120) || "application/octet-stream",
+    sizeBytes: file.size,
+    file,
+  }));
+  if (uploads.some((upload) => upload.sizeBytes <= 0 || upload.sizeBytes > MAX_ATTACHMENT_BYTES)) {
+    return authError(400, "Cada arquivo deve ter conteúdo e no máximo 10 MB.");
+  }
+  const totalBytes = uploads.reduce((total, upload) => total + upload.sizeBytes, 0);
+  if (totalBytes > MAX_FILES_PER_UPLOAD * MAX_ATTACHMENT_BYTES) {
+    return authError(413, "O envio ultrapassa o limite permitido.");
+  }
+
+  const storedKeys: string[] = [];
+  try {
+    for (const upload of uploads) {
+      await env.DOCUMENTS.put(upload.objectKey, upload.file.stream(), {
+        httpMetadata: { contentType: upload.contentType },
+        customMetadata: { filename: upload.filename },
+      });
+      storedKeys.push(upload.objectKey);
+    }
+  } catch (error) {
+    await removeStoredAttachments(env.DOCUMENTS, storedKeys);
+    console.error("Falha ao armazenar anexos do Kanban", error);
+    return authError(500, "Não foi possível salvar os arquivos.");
+  }
+
+  try {
+    await createKanbanCardAttachments(env.DB, {
+      cardId,
+      boardId: access.boardId,
+      attachments: uploads.map((upload) => ({
+        id: upload.id,
+        objectKey: upload.objectKey,
+        filename: upload.filename,
+        contentType: upload.contentType,
+        sizeBytes: upload.sizeBytes,
+      })),
+      actor: accountPerson(authenticated),
+      now: unixNow(),
+    });
+  } catch (error) {
+    await removeStoredAttachments(env.DOCUMENTS, storedKeys);
+    console.error("Falha ao registrar anexos do Kanban", error);
+    return authError(500, "Não foi possível salvar os arquivos.");
+  }
+
+  return authJson(201, await getCardDetails(env.DB, cardId));
+}
+
+export async function handleKanbanAttachmentMutation(
+  request: Request,
+  env: Env,
+  cardId: string,
+  attachmentId: string,
+  download: boolean,
+): Promise<Response> {
+  const authenticated = await requireKanbanAccount(request, env);
+  if (authenticated instanceof Response) return authenticated;
+  const access = await getKanbanCardAccess(env.DB, cardId, authenticated.account.id);
+  if (!access) return authError(404, "Cartão não encontrado ou sem acesso.");
+  const attachment = await getKanbanCardAttachment(env.DB, cardId, attachmentId);
+  if (!attachment) return authError(404, "Arquivo não encontrado.");
+
+  if (download) {
+    if (request.method !== "GET") return authError(405, "Método não permitido.");
+    const object = await env.DOCUMENTS.get(attachment.objectKey);
+    if (!object) return authError(404, "O conteúdo deste arquivo não foi encontrado.");
+    return new Response(object.body, {
+      headers: {
+        "Cache-Control": "private, no-store",
+        "Content-Disposition": attachmentContentDisposition(attachment.filename),
+        "Content-Length": String(attachment.sizeBytes),
+        "Content-Type": attachment.contentType || "application/octet-stream",
+        "X-Content-Type-Options": "nosniff",
+      },
+    });
+  }
+
+  if (request.method !== "DELETE") return authError(405, "Método não permitido.");
+  if (!access.canEdit) return authError(403, "Você não tem permissão para remover arquivos deste cartão.");
+  const deleted = await deleteKanbanCardAttachment(env.DB, {
+    cardId,
+    boardId: access.boardId,
+    attachmentId,
+    actor: accountPerson(authenticated),
+    now: unixNow(),
+  });
+  if (!deleted) return authError(404, "Arquivo não encontrado.");
+  await removeStoredAttachments(env.DOCUMENTS, [deleted.objectKey]);
+  return authJson(200, await getCardDetails(env.DB, cardId));
+}
+
+async function getCardDetails(db: D1Database, cardId: string) {
+  const [attachments, activities, comments] = await Promise.all([
+    listKanbanCardAttachments(db, cardId),
+    listKanbanCardActivity(db, cardId),
+    listKanbanCardComments(db, cardId),
+  ]);
+  const timeline = [
+    ...activities.map((activity) => ({
+      id: activity.id,
+      type: "activity" as const,
+      action: activity.action,
+      summary: activity.summary,
+      actor: activity.actor,
+      createdAt: activity.createdAt,
+    })),
+    ...comments.map((comment) => ({
+      id: comment.id,
+      type: "comment" as const,
+      body: comment.body,
+      actor: comment.author,
+      createdAt: comment.createdAt,
+    })),
+  ]
+    .sort((left, right) => right.createdAt - left.createdAt || right.id.localeCompare(left.id))
+    .slice(0, 160);
+  return { attachments, timeline };
+}
+
+async function removeStoredAttachments(bucket: R2Bucket, objectKeys: string[]): Promise<void> {
+  if (!objectKeys.length) return;
+  try {
+    for (let index = 0; index < objectKeys.length; index += 1_000) {
+      await bucket.delete(objectKeys.slice(index, index + 1_000));
+    }
+  } catch (error) {
+    console.error("Falha ao remover objetos de anexos do Kanban", error);
+  }
+}
+
+function attachmentContentDisposition(filename: string): string {
+  const asciiName = filename
+    .normalize("NFKD")
+    .replace(/[^\x20-\x7e]/g, "_")
+    .replace(/["\\]/g, "_")
+    .slice(0, 120) || "arquivo";
+  return `attachment; filename="${asciiName}"; filename*=UTF-8''${encodeURIComponent(filename)}`;
 }
 
 export async function handleKanbanNotifications(

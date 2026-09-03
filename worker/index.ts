@@ -20,8 +20,12 @@ import { handleDocumentDownload, handleDocumentMutation, handleDocuments } from 
 import { handleSignatureMutation, handleSignatures } from "./signatures";
 import {
   handleKanban,
+  handleKanbanAttachmentMutation,
   handleKanbanBoardMutation,
   handleKanbanBoards,
+  handleKanbanCardAttachments,
+  handleKanbanCardComments,
+  handleKanbanCardDetails,
   handleKanbanCardMutation,
   handleKanbanCards,
   handleKanbanNotificationMutation,
@@ -240,6 +244,38 @@ const worker = {
       const kanbanNotificationMutation = url.pathname.match(/^\/api\/kanban\/notifications\/([0-9a-f-]{36})$/i);
       if (kanbanNotificationMutation) {
         return await handleKanbanNotificationMutation(request, env, kanbanNotificationMutation[1]);
+      }
+      const kanbanCardDetails = url.pathname.match(/^\/api\/kanban\/cards\/([0-9a-f-]{36})\/details$/i);
+      if (kanbanCardDetails) {
+        return await handleKanbanCardDetails(request, env, kanbanCardDetails[1]);
+      }
+      const kanbanCardComments = url.pathname.match(/^\/api\/kanban\/cards\/([0-9a-f-]{36})\/comments$/i);
+      if (kanbanCardComments) {
+        return await handleKanbanCardComments(request, env, kanbanCardComments[1]);
+      }
+      const kanbanCardAttachments = url.pathname.match(/^\/api\/kanban\/cards\/([0-9a-f-]{36})\/attachments$/i);
+      if (kanbanCardAttachments) {
+        return await handleKanbanCardAttachments(request, env, kanbanCardAttachments[1]);
+      }
+      const kanbanAttachmentDownload = url.pathname.match(/^\/api\/kanban\/cards\/([0-9a-f-]{36})\/attachments\/([0-9a-f-]{36})\/download$/i);
+      if (kanbanAttachmentDownload) {
+        return await handleKanbanAttachmentMutation(
+          request,
+          env,
+          kanbanAttachmentDownload[1],
+          kanbanAttachmentDownload[2],
+          true,
+        );
+      }
+      const kanbanAttachmentMutation = url.pathname.match(/^\/api\/kanban\/cards\/([0-9a-f-]{36})\/attachments\/([0-9a-f-]{36})$/i);
+      if (kanbanAttachmentMutation) {
+        return await handleKanbanAttachmentMutation(
+          request,
+          env,
+          kanbanAttachmentMutation[1],
+          kanbanAttachmentMutation[2],
+          false,
+        );
       }
       const kanbanCardMutation = url.pathname.match(/^\/api\/kanban\/cards\/([0-9a-f-]{36})$/i);
       if (kanbanCardMutation) {

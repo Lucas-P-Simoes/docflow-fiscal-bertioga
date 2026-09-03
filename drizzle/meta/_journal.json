@@ -43,6 +43,13 @@
       "when": 1788363819195,
       "tag": "0005_free_sasquatch",
       "breakpoints": true
+    },
+    {
+      "idx": 6,
+      "version": "6",
+      "when": 1788463924941,
+      "tag": "0006_gifted_crusher_hogan",
+      "breakpoints": true
     }
   ]
 }

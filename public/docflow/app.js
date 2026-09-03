@@ -233,6 +233,14 @@ const elements = {
   kanbanCardDescription: document.querySelector("#kanbanCardDescription"),
   kanbanCardStatus: document.querySelector("#kanbanCardStatus"),
   kanbanAssigneeList: document.querySelector("#kanbanAssigneeList"),
+  kanbanCardCollaboration: document.querySelector("#kanbanCardCollaboration"),
+  kanbanAttachmentInput: document.querySelector("#kanbanAttachmentInput"),
+  kanbanAttachmentList: document.querySelector("#kanbanAttachmentList"),
+  kanbanAttachmentFeedback: document.querySelector("#kanbanAttachmentFeedback"),
+  kanbanCommentInput: document.querySelector("#kanbanCommentInput"),
+  addKanbanCommentButton: document.querySelector("#addKanbanCommentButton"),
+  kanbanCommentFeedback: document.querySelector("#kanbanCommentFeedback"),
+  kanbanCardTimeline: document.querySelector("#kanbanCardTimeline"),
   kanbanCardFeedback: document.querySelector("#kanbanCardFeedback"),
   saveKanbanCardButton: document.querySelector("#saveKanbanCardButton"),
   toast: document.querySelector("#toast"),
@@ -279,6 +287,15 @@ function createKanbanState() {
     error: "",
     busy: new Map(),
     editingCardId: "",
+    cardDetails: {
+      cardId: "",
+      loading: false,
+      error: "",
+      attachments: [],
+      timeline: [],
+      uploading: false,
+      commenting: false,
+    },
     notifications: [],
     unreadCount: 0,
     notificationsLoading: false,
@@ -1854,21 +1871,251 @@ async function openKanbanCardDialog(cardId = "") {
   elements.saveKanbanCardButton.textContent = card ? "Salvar alterações" : "Criar cartão";
   elements.saveKanbanCardButton.disabled = false;
   setKanbanCardFeedback();
+  resetKanbanCardDetails(card?.id || "");
   const selectedIds = new Set(card?.assignees.map((person) => person.id) || []);
   const members = state.kanban.board.members || [];
   elements.kanbanAssigneeList.innerHTML = members.length
     ? members.map((person) => `<label class="kanban-assignee-option"><input type="checkbox" data-kanban-assignee value="${e(person.id)}" ${selectedIds.has(person.id) ? "checked" : ""} /><span class="kanban-assignee-avatar" aria-hidden="true">${e(personInitials(person.name))}</span><span><strong>${e(person.name)}</strong><small>${e(person.email)}</small></span></label>`).join("")
     : `<div class="kanban-assignee-empty">Este quadro ainda não possui participantes.</div>`;
+  renderKanbanCardDetails();
   openDialog(elements.kanbanCardDialog);
   setTimeout(() => elements.kanbanCardTitle.focus(), 40);
+  if (card) void loadKanbanCardDetails(card.id);
 }
 
 function closeKanbanCardDialog() {
-  if (elements.saveKanbanCardButton.disabled) return;
+  if (elements.saveKanbanCardButton.disabled || state.kanban.cardDetails.uploading || state.kanban.cardDetails.commenting) return;
   state.kanban.editingCardId = "";
+  resetKanbanCardDetails();
   elements.kanbanCardForm.reset();
   setKanbanCardFeedback();
   closeDialog(elements.kanbanCardDialog);
+}
+
+function resetKanbanCardDetails(cardId = "") {
+  state.kanban.cardDetails = {
+    cardId,
+    loading: false,
+    error: "",
+    attachments: [],
+    timeline: [],
+    uploading: false,
+    commenting: false,
+  };
+  if (elements.kanbanAttachmentInput) elements.kanbanAttachmentInput.value = "";
+  if (elements.kanbanCommentInput) elements.kanbanCommentInput.value = "";
+  if (elements.kanbanAttachmentFeedback) {
+    elements.kanbanAttachmentFeedback.textContent = "";
+    elements.kanbanAttachmentFeedback.className = "inline-feedback is-hidden";
+  }
+  if (elements.kanbanCommentFeedback) {
+    elements.kanbanCommentFeedback.textContent = "";
+    elements.kanbanCommentFeedback.className = "inline-feedback is-hidden";
+  }
+}
+
+function renderKanbanCardDetails() {
+  const details = state.kanban.cardDetails;
+  const visible = Boolean(details.cardId);
+  elements.kanbanCardCollaboration.classList.remove("is-hidden");
+  if (!visible) {
+    elements.kanbanAttachmentInput.disabled = true;
+    elements.kanbanAttachmentInput.closest(".kanban-attachment-button")?.classList.add("is-disabled");
+    elements.kanbanAttachmentFeedback.textContent = "";
+    elements.kanbanAttachmentFeedback.className = "inline-feedback is-hidden";
+    elements.kanbanAttachmentList.innerHTML = `<div class="kanban-card-detail-state"><strong>Crie o cartão para anexar arquivos</strong><span>Depois de salvar, esta área será liberada sem fechar a janela.</span></div>`;
+    elements.kanbanCommentInput.disabled = true;
+    elements.addKanbanCommentButton.disabled = true;
+    elements.kanbanCardTimeline.innerHTML = `<div class="kanban-card-detail-state"><strong>O histórico começa ao criar o cartão</strong><span>Alterações e comentários ficarão reunidos aqui.</span></div>`;
+    return;
+  }
+
+  const fileMessage = details.error || "";
+  elements.kanbanAttachmentFeedback.textContent = fileMessage;
+  elements.kanbanAttachmentFeedback.className = `inline-feedback${fileMessage ? " is-error" : " is-hidden"}`;
+  elements.kanbanAttachmentInput.disabled = details.loading || details.uploading;
+  const uploadLabel = elements.kanbanAttachmentInput.closest(".kanban-attachment-button");
+  uploadLabel?.classList.toggle("is-disabled", elements.kanbanAttachmentInput.disabled);
+  const uploadText = uploadLabel?.querySelector(":scope > span");
+  if (uploadText) uploadText.textContent = details.uploading ? "Enviando…" : "+ Adicionar arquivos";
+
+  elements.kanbanAttachmentList.innerHTML = details.loading
+    ? `<div class="kanban-card-detail-state"><span class="history-spinner" aria-hidden="true"></span><strong>Carregando arquivos…</strong></div>`
+    : details.attachments.length
+      ? details.attachments.map((attachment) => `<article class="kanban-attachment-item">
+          <span class="kanban-attachment-icon" aria-hidden="true">${e(attachmentFileMark(attachment.filename))}</span>
+          <div><strong>${e(attachment.filename)}</strong><small>${e(formatFileSize(attachment.sizeBytes))} • ${e(attachment.uploadedBy?.name || "Usuário removido")} • ${e(formatHistoryDate(attachment.createdAt))}</small></div>
+          <div class="kanban-attachment-actions">
+            <a class="button button-quiet" href="/api/kanban/cards/${encodeURIComponent(details.cardId)}/attachments/${encodeURIComponent(attachment.id)}/download">Baixar</a>
+            <button class="button button-quiet button-danger" type="button" data-action="delete-kanban-attachment" data-id="${e(attachment.id)}" ${details.uploading ? "disabled" : ""}>Remover</button>
+          </div>
+        </article>`).join("")
+      : `<div class="kanban-card-detail-state"><strong>Nenhum arquivo anexado</strong><span>Adicione documentos, imagens ou planilhas relacionados a esta atividade.</span></div>`;
+
+  elements.addKanbanCommentButton.disabled = details.loading || details.commenting;
+  elements.addKanbanCommentButton.textContent = details.commenting ? "Adicionando…" : "Adicionar comentário";
+  elements.kanbanCommentInput.disabled = details.loading || details.commenting;
+  elements.kanbanCardTimeline.innerHTML = details.loading
+    ? `<div class="kanban-card-detail-state"><span class="history-spinner" aria-hidden="true"></span><strong>Carregando histórico…</strong></div>`
+    : details.timeline.length
+      ? details.timeline.map(renderKanbanCardTimelineItem).join("")
+      : `<div class="kanban-card-detail-state"><strong>Histórico ainda vazio</strong><span>Comentários e alterações deste cartão aparecerão aqui.</span></div>`;
+}
+
+function renderKanbanCardTimelineItem(item) {
+  const actorName = item.actor?.name || "Sistema";
+  const content = item.type === "comment"
+    ? `<p>${e(item.body).replace(/\n/g, "<br>")}</p>`
+    : `<p><strong>${e(actorName)}</strong> ${e(item.summary)}</p>`;
+  return `<article class="kanban-card-timeline-item is-${e(item.type)}">
+    <span class="kanban-activity-avatar" aria-hidden="true">${e(personInitials(actorName))}</span>
+    <div>${item.type === "comment" ? `<strong>${e(actorName)}</strong>` : ""}${content}<time datetime="${new Date(item.createdAt * 1000).toISOString()}">${e(formatHistoryDate(item.createdAt))}</time></div>
+  </article>`;
+}
+
+function attachmentFileMark(filename) {
+  const extension = String(filename || "").split(".").pop()?.slice(0, 4).toUpperCase();
+  return extension && extension !== filename.toUpperCase() ? extension : "ARQ";
+}
+
+async function loadKanbanCardDetails(cardId) {
+  const details = state.kanban.cardDetails;
+  if (!cardId || details.cardId !== cardId || details.loading) return;
+  details.loading = true;
+  details.error = "";
+  renderKanbanCardDetails();
+  try {
+    const payload = await apiRequest(`/api/kanban/cards/${encodeURIComponent(cardId)}/details`);
+    if (state.kanban.cardDetails.cardId !== cardId) return;
+    state.kanban.cardDetails.attachments = Array.isArray(payload.attachments) ? payload.attachments : [];
+    state.kanban.cardDetails.timeline = Array.isArray(payload.timeline) ? payload.timeline : [];
+  } catch (error) {
+    if (state.kanban.cardDetails.cardId === cardId) state.kanban.cardDetails.error = error.message;
+  } finally {
+    if (state.kanban.cardDetails.cardId === cardId) {
+      state.kanban.cardDetails.loading = false;
+      renderKanbanCardDetails();
+    }
+  }
+}
+
+async function uploadKanbanAttachments(fileList) {
+  const details = state.kanban.cardDetails;
+  const cardId = details.cardId;
+  const files = Array.from(fileList || []);
+  if (!cardId || !files.length || details.uploading) return;
+  if (files.length > 5) {
+    details.error = "Selecione no máximo 5 arquivos por vez.";
+    renderKanbanCardDetails();
+    return;
+  }
+  if (files.some((file) => file.size <= 0 || file.size > 10 * 1024 * 1024)) {
+    details.error = "Cada arquivo deve ter conteúdo e no máximo 10 MB.";
+    renderKanbanCardDetails();
+    return;
+  }
+
+  const formData = new FormData();
+  files.forEach((file) => formData.append("files", file, file.name));
+  details.uploading = true;
+  details.error = "";
+  renderKanbanCardDetails();
+  try {
+    const payload = await apiRequest(`/api/kanban/cards/${encodeURIComponent(cardId)}/attachments`, {
+      method: "POST",
+      body: formData,
+    });
+    if (state.kanban.cardDetails.cardId !== cardId) return;
+    details.attachments = Array.isArray(payload.attachments) ? payload.attachments : [];
+    details.timeline = Array.isArray(payload.timeline) ? payload.timeline : details.timeline;
+    showToast(files.length === 1 ? "Arquivo anexado ao cartão." : `${files.length} arquivos anexados ao cartão.`);
+  } catch (error) {
+    if (state.kanban.cardDetails.cardId === cardId) details.error = error.message;
+  } finally {
+    if (state.kanban.cardDetails.cardId === cardId) {
+      details.uploading = false;
+      elements.kanbanAttachmentInput.value = "";
+      renderKanbanCardDetails();
+    }
+  }
+}
+
+async function addKanbanComment() {
+  const details = state.kanban.cardDetails;
+  const cardId = details.cardId;
+  const body = elements.kanbanCommentInput.value.trim();
+  if (!cardId || details.commenting) return;
+  if (!body) {
+    elements.kanbanCommentFeedback.textContent = "Escreva um comentário antes de adicionar.";
+    elements.kanbanCommentFeedback.className = "inline-feedback is-error";
+    elements.kanbanCommentInput.focus();
+    return;
+  }
+
+  details.commenting = true;
+  elements.kanbanCommentFeedback.textContent = "";
+  elements.kanbanCommentFeedback.className = "inline-feedback is-hidden";
+  renderKanbanCardDetails();
+  try {
+    const payload = await apiRequest(`/api/kanban/cards/${encodeURIComponent(cardId)}/comments`, {
+      method: "POST",
+      body: { body },
+    });
+    if (state.kanban.cardDetails.cardId !== cardId) return;
+    details.timeline = [payload.timelineItem, ...details.timeline].filter(Boolean);
+    elements.kanbanCommentInput.value = "";
+    showToast("Comentário adicionado ao histórico.");
+  } catch (error) {
+    if (state.kanban.cardDetails.cardId === cardId) {
+      elements.kanbanCommentFeedback.textContent = error.message;
+      elements.kanbanCommentFeedback.className = "inline-feedback is-error";
+    }
+  } finally {
+    if (state.kanban.cardDetails.cardId === cardId) {
+      details.commenting = false;
+      renderKanbanCardDetails();
+    }
+  }
+}
+
+function confirmKanbanAttachmentDeletion(attachmentId) {
+  const details = state.kanban.cardDetails;
+  const attachment = details.attachments.find((item) => item.id === attachmentId);
+  if (!attachment) return;
+  showMessage({
+    title: "Remover este arquivo?",
+    text: `O arquivo “${attachment.filename}” será removido deste cartão. Esta ação ficará registrada no histórico.`,
+    kind: "error",
+    actions: [
+      { label: "Cancelar" },
+      { label: "Remover arquivo", danger: true, onClick: () => deleteKanbanAttachment(attachmentId) },
+    ],
+  });
+}
+
+async function deleteKanbanAttachment(attachmentId) {
+  const details = state.kanban.cardDetails;
+  const cardId = details.cardId;
+  if (!cardId || details.uploading) return;
+  details.uploading = true;
+  details.error = "";
+  renderKanbanCardDetails();
+  try {
+    const payload = await apiRequest(`/api/kanban/cards/${encodeURIComponent(cardId)}/attachments/${encodeURIComponent(attachmentId)}`, {
+      method: "DELETE",
+    });
+    if (state.kanban.cardDetails.cardId !== cardId) return;
+    details.attachments = Array.isArray(payload.attachments) ? payload.attachments : [];
+    details.timeline = Array.isArray(payload.timeline) ? payload.timeline : details.timeline;
+    showToast("Arquivo removido do cartão.");
+  } catch (error) {
+    if (state.kanban.cardDetails.cardId === cardId) details.error = error.message;
+  } finally {
+    if (state.kanban.cardDetails.cardId === cardId) {
+      details.uploading = false;
+      renderKanbanCardDetails();
+    }
+  }
 }
 
 function setKanbanCardFeedback(message = "") {
@@ -1896,10 +2143,24 @@ async function saveKanbanCard() {
   elements.saveKanbanCardButton.textContent = cardId ? "Salvando…" : "Criando…";
   setKanbanCardFeedback();
   try {
-    await apiRequest(cardId ? `/api/kanban/cards/${encodeURIComponent(cardId)}` : "/api/kanban/cards", {
+    const payload = await apiRequest(cardId ? `/api/kanban/cards/${encodeURIComponent(cardId)}` : "/api/kanban/cards", {
       method: cardId ? "PATCH" : "POST",
       body,
     });
+    if (!cardId && payload.card?.id) {
+      const createdCardId = payload.card.id;
+      state.kanban.editingCardId = createdCardId;
+      elements.kanbanCardId.value = createdCardId;
+      elements.kanbanCardFormTitle.textContent = "Editar cartão";
+      elements.saveKanbanCardButton.disabled = false;
+      elements.saveKanbanCardButton.textContent = "Salvar alterações";
+      resetKanbanCardDetails(createdCardId);
+      renderKanbanCardDetails();
+      await loadKanban({ silent: true });
+      void loadKanbanCardDetails(createdCardId);
+      showToast("Cartão criado. Agora você pode adicionar arquivos e comentários.");
+      return;
+    }
     state.kanban.editingCardId = "";
     elements.saveKanbanCardButton.disabled = false;
     closeDialog(elements.kanbanCardDialog);
@@ -5322,6 +5583,8 @@ async function handleAction(action, target) {
   if (action === "add-kanban-card") return openKanbanCardDialog();
   if (action === "edit-kanban-card") return openKanbanCardDialog(target.dataset.id);
   if (action === "delete-kanban-card") return confirmKanbanCardDeletion(target.dataset.id);
+  if (action === "add-kanban-comment") return addKanbanComment();
+  if (action === "delete-kanban-attachment") return confirmKanbanAttachmentDeletion(target.dataset.id);
   if (action === "close-kanban-card") return closeKanbanCardDialog();
   if (action === "toggle-notifications") return toggleNotificationPopover();
   if (action === "close-notifications") return closeNotificationPopover();
@@ -5522,6 +5785,10 @@ document.addEventListener("input", (event) => {
 document.addEventListener("change", (event) => {
   const target = event.target;
   clearValidationHighlight(target);
+  if (target === elements.kanbanAttachmentInput) {
+    void uploadKanbanAttachments(target.files);
+    return;
+  }
   if (target.dataset.reportSignatureChoice !== undefined) {
     const profileId = target.dataset.reportSignatureChoice;
     const profile = state.signatures.items.find((item) => item.id === profileId);

@@ -354,6 +354,41 @@
           <legend>Pessoas responsáveis</legend>
           <div id="kanbanAssigneeList" class="kanban-assignee-list"></div>
         </fieldset>
+        <section id="kanbanCardCollaboration" class="kanban-card-collaboration is-hidden" aria-label="Arquivos, histórico e comentários do cartão">
+          <section class="kanban-card-detail-panel" aria-labelledby="kanbanAttachmentsTitle">
+            <div class="kanban-card-detail-heading">
+              <div>
+                <span class="eyebrow eyebrow-dark">Documentos do cartão</span>
+                <h3 id="kanbanAttachmentsTitle">Arquivos</h3>
+              </div>
+              <label class="button button-secondary kanban-attachment-button" for="kanbanAttachmentInput">
+                <span>+ Adicionar arquivos</span>
+                <input id="kanbanAttachmentInput" class="sr-only" type="file" multiple accept=".pdf,.doc,.docx,.xls,.xlsx,.csv,.txt,.png,.jpg,.jpeg,.webp,.zip" />
+              </label>
+            </div>
+            <p class="kanban-card-detail-help">Envie até 5 arquivos por vez, com no máximo 10 MB cada.</p>
+            <div id="kanbanAttachmentFeedback" class="inline-feedback is-hidden" role="status"></div>
+            <div id="kanbanAttachmentList" class="kanban-attachment-list" aria-live="polite"></div>
+          </section>
+          <section class="kanban-card-detail-panel" aria-labelledby="kanbanTimelineTitle">
+            <div class="kanban-card-detail-heading">
+              <div>
+                <span class="eyebrow eyebrow-dark">Acompanhamento</span>
+                <h3 id="kanbanTimelineTitle">Histórico e comentários</h3>
+              </div>
+            </div>
+            <label class="field kanban-comment-field">
+              <span>Novo comentário</span>
+              <textarea id="kanbanCommentInput" maxlength="2000" placeholder="Registre uma atualização, decisão ou observação…"></textarea>
+            </label>
+            <div class="kanban-comment-actions">
+              <span>Os comentários ficam registrados com autor e data.</span>
+              <button id="addKanbanCommentButton" class="button button-primary" type="button" data-action="add-kanban-comment">Adicionar comentário</button>
+            </div>
+            <div id="kanbanCommentFeedback" class="inline-feedback is-hidden" role="status"></div>
+            <div id="kanbanCardTimeline" class="kanban-card-timeline" aria-live="polite"></div>
+          </section>
+        </section>
         <div id="kanbanCardFeedback" class="inline-feedback is-hidden" role="status"></div>
         <div class="dialog-actions">
           <button class="button button-secondary" type="button" data-action="close-kanban-card">Cancelar</button>

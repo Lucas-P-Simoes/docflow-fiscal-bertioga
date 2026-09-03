@@ -208,3 +208,39 @@ export const kanbanNotifications = sqliteTable(
     index("idx_kanban_notifications_card").on(table.cardId),
   ],
 );
+
+export const kanbanCardComments = sqliteTable(
+  "kanban_card_comments",
+  {
+    id: text("id").primaryKey(),
+    cardId: text("card_id")
+      .notNull()
+      .references(() => kanbanCards.id, { onDelete: "cascade" }),
+    authorUserId: text("author_user_id").references(() => users.id, { onDelete: "set null" }),
+    body: text("body").notNull(),
+    createdAt: integer("created_at").notNull(),
+  },
+  (table) => [
+    index("idx_kanban_card_comments_card_created").on(table.cardId, table.createdAt),
+  ],
+);
+
+export const kanbanCardAttachments = sqliteTable(
+  "kanban_card_attachments",
+  {
+    id: text("id").primaryKey(),
+    cardId: text("card_id")
+      .notNull()
+      .references(() => kanbanCards.id, { onDelete: "cascade" }),
+    uploadedBy: text("uploaded_by").references(() => users.id, { onDelete: "set null" }),
+    objectKey: text("object_key").notNull(),
+    filename: text("filename").notNull(),
+    contentType: text("content_type").notNull(),
+    sizeBytes: integer("size_bytes").notNull(),
+    createdAt: integer("created_at").notNull(),
+  },
+  (table) => [
+    index("idx_kanban_card_attachments_card_created").on(table.cardId, table.createdAt),
+    uniqueIndex("idx_kanban_card_attachments_object_key").on(table.objectKey),
+  ],
+);
