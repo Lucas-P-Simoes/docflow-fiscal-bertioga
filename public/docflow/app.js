@@ -1552,7 +1552,8 @@ function renderKanban() {
           </div>
           <div class="kanban-heading-actions">
             <button class="button button-secondary" type="button" data-action="refresh-kanban" ${kanban.loading ? "disabled" : ""}>Atualizar</button>
-            ${board.isOwner ? `<button class="button button-secondary" type="button" data-action="edit-kanban-board">Gerenciar acesso</button>` : ""}
+            ${board.isOwner ? `<button class="button button-secondary" type="button" data-action="edit-kanban-board">Renomear quadro</button>
+            <button class="button button-secondary button-danger" type="button" data-action="delete-kanban-board">Excluir quadro</button>` : ""}
             <button class="button button-primary" type="button" data-action="add-kanban-card" ${kanban.loading || !board.canEdit ? "disabled" : ""}>+ Novo cartão</button>
           </div>
         </div>
@@ -1749,7 +1750,7 @@ async function openKanbanBoardDialog(boardId = "") {
   elements.kanbanBoardId.value = board?.id || "";
   elements.kanbanBoardName.value = board?.name || "";
   elements.kanbanBoardDescription.value = board?.description || "";
-  elements.kanbanBoardFormTitle.textContent = board ? "Gerenciar quadro" : "Novo quadro";
+  elements.kanbanBoardFormTitle.textContent = board ? "Renomear e gerenciar quadro" : "Novo quadro";
   elements.saveKanbanBoardButton.textContent = board ? "Salvar alterações" : "Criar quadro";
   elements.saveKanbanBoardButton.disabled = false;
   elements.deleteKanbanBoardButton.classList.toggle("is-hidden", !board);

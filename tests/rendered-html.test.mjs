@@ -685,6 +685,9 @@ test("adds private Kanban boards with member permissions, activity history, and 
   assert.match(app, /data-action="open-kanban-history"/);
   assert.match(app, /openKanbanHistoryDialog/);
   assert.match(app, /data-action="edit-kanban-board"/);
+  assert.match(app, /data-action="edit-kanban-board">Renomear quadro/);
+  assert.match(app, /data-action="delete-kanban-board">Excluir quadro/);
+  assert.match(app, /board\.isOwner \? `<button[\s\S]*?Renomear quadro[\s\S]*?Excluir quadro/);
   assert.match(app, /Histórico —/);
   assert.match(app, /data-kanban-board-member/);
   assert.match(app, /\/api\/kanban\/cards\/\$\{encodeURIComponent\(cardId\)\}/);
