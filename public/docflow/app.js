@@ -231,6 +231,9 @@ const elements = {
   kanbanCardId: document.querySelector("#kanbanCardId"),
   kanbanCardTitle: document.querySelector("#kanbanCardTitle"),
   kanbanCardDescription: document.querySelector("#kanbanCardDescription"),
+  kanbanCardStartDate: document.querySelector("#kanbanCardStartDate"),
+  kanbanCardDurationDays: document.querySelector("#kanbanCardDurationDays"),
+  kanbanSchedulePreview: document.querySelector("#kanbanSchedulePreview"),
   kanbanCardStatus: document.querySelector("#kanbanCardStatus"),
   kanbanAssigneeList: document.querySelector("#kanbanAssigneeList"),
   kanbanCardCollaboration: document.querySelector("#kanbanCardCollaboration"),
@@ -1648,10 +1651,12 @@ function renderKanbanCard(card) {
   const assignees = card.assignees.length
     ? `<div class="kanban-card-assignees" aria-label="Responsáveis">${card.assignees.map((person) => `<span class="kanban-person-chip" title="${e(person.name)} — ${e(person.email)}"><span aria-hidden="true">${e(personInitials(person.name))}</span>${e(person.name)}</span>`).join("")}</div>`
     : `<span class="kanban-unassigned">Sem responsável</span>`;
+  const schedule = renderKanbanCardSchedule(card);
   return `<article class="kanban-card${busyClass}" draggable="${busy || !canEdit ? "false" : "true"}" data-kanban-card-id="${e(card.id)}" tabindex="0"${busy === "move" ? ' aria-busy="true"' : ""}>
     <div class="kanban-card-topline"><span>${e(kanbanStatusLabel(card.status))}</span><small>${e(formatHistoryDate(card.updatedAt))}</small></div>
     <h4>${e(card.title)}</h4>
     ${card.description ? `<p>${e(card.description).replace(/\n/g, "<br>")}</p>` : ""}
+    ${schedule}
     ${assignees}
     <div class="kanban-card-footer">
       <label><span class="sr-only">Mover ${e(card.title)}</span><select data-kanban-status data-id="${e(card.id)}" aria-label="Mover cartão ${e(card.title)}" ${disabled}>${KANBAN_COLUMNS.map((column) => `<option value="${e(column.id)}" ${card.status === column.id ? "selected" : ""}>${e(column.label)}</option>`).join("")}</select></label>
@@ -1661,6 +1666,46 @@ function renderKanbanCard(card) {
       </div>
     </div>
   </article>`;
+}
+
+function renderKanbanCardSchedule(card) {
+  const schedule = getKanbanSchedule(card.startDate, card.durationDays);
+  if (!schedule) {
+    return `<div class="kanban-card-schedule is-missing"><span aria-hidden="true">◷</span><div><strong>Prazo não definido</strong><small>Edite o cartão para informar o início e a vigência.</small></div></div>`;
+  }
+  return `<div class="kanban-card-schedule ${e(schedule.className)}"><span aria-hidden="true">◷</span><div><strong>${e(schedule.label)}</strong><small>Início: ${e(formatDate(schedule.startDate))} • Término: ${e(formatDate(schedule.endDate))}</small></div></div>`;
+}
+
+function getKanbanSchedule(startDate, durationDays) {
+  const startTime = isoDateToUtc(startDate);
+  const duration = Number(durationDays);
+  if (!Number.isFinite(startTime) || !Number.isInteger(duration) || duration < 1) return null;
+  const dayMilliseconds = 86_400_000;
+  const endTime = startTime + duration * dayMilliseconds;
+  const todayTime = isoDateToUtc(todayInputValue());
+  const daysRemaining = Math.round((endTime - todayTime) / dayMilliseconds);
+  const label = daysRemaining > 1
+    ? `Faltam ${daysRemaining} dias`
+    : daysRemaining === 1
+      ? "Falta 1 dia"
+      : daysRemaining === 0
+        ? "Termina hoje"
+        : `Em atraso há ${Math.abs(daysRemaining)} ${Math.abs(daysRemaining) === 1 ? "dia" : "dias"}`;
+  return {
+    startDate,
+    endDate: new Date(endTime).toISOString().slice(0, 10),
+    daysRemaining,
+    label,
+    className: daysRemaining < 0 ? "is-overdue" : daysRemaining <= 3 ? "is-ending" : "is-active",
+  };
+}
+
+function isoDateToUtc(value) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(value || ""))) return Number.NaN;
+  const [year, month, day] = String(value).split("-").map(Number);
+  const timestamp = Date.UTC(year, month - 1, day);
+  const normalized = new Date(timestamp).toISOString().slice(0, 10);
+  return normalized === value ? timestamp : Number.NaN;
 }
 
 function kanbanStatusLabel(status) {
@@ -1862,11 +1907,14 @@ async function openKanbanCardDialog(cardId = "") {
   elements.kanbanCardId.value = card?.id || "";
   elements.kanbanCardTitle.value = card?.title || "";
   elements.kanbanCardDescription.value = card?.description || "";
+  elements.kanbanCardStartDate.value = card?.startDate || (card ? "" : todayInputValue());
+  elements.kanbanCardDurationDays.value = card?.durationDays || "";
   elements.kanbanCardStatus.value = card?.status || "todo";
   elements.kanbanCardFormTitle.textContent = card ? "Editar cartão" : "Novo cartão";
   elements.saveKanbanCardButton.textContent = card ? "Salvar alterações" : "Criar cartão";
   elements.saveKanbanCardButton.disabled = false;
   setKanbanCardFeedback();
+  renderKanbanSchedulePreview();
   resetKanbanCardDetails(card?.id || "");
   const selectedIds = new Set(card?.assignees.map((person) => person.id) || []);
   const members = state.kanban.board.members || [];
@@ -2072,6 +2120,17 @@ function setKanbanCardFeedback(message = "") {
   elements.kanbanCardFeedback.textContent = message;
   elements.kanbanCardFeedback.className = `inline-feedback${message ? " is-error" : " is-hidden"}`;
   elements.kanbanCardTitle.classList.toggle("is-validation-error", Boolean(message && !elements.kanbanCardTitle.value.trim()));
+  elements.kanbanCardStartDate.classList.toggle("is-validation-error", Boolean(message && !elements.kanbanCardStartDate.value));
+  const duration = Number(elements.kanbanCardDurationDays.value);
+  elements.kanbanCardDurationDays.classList.toggle("is-validation-error", Boolean(message && (!Number.isInteger(duration) || duration < 1 || duration > 3650)));
+}
+
+function renderKanbanSchedulePreview() {
+  const schedule = getKanbanSchedule(elements.kanbanCardStartDate.value, elements.kanbanCardDurationDays.value);
+  elements.kanbanSchedulePreview.className = `kanban-schedule-preview${schedule ? ` ${schedule.className}` : ""}`;
+  elements.kanbanSchedulePreview.textContent = schedule
+    ? `${schedule.label}. Término calculado: ${formatDate(schedule.endDate)}.`
+    : "Informe a data de início e a vigência para calcular o término.";
 }
 
 async function saveKanbanCard() {
@@ -2082,10 +2141,24 @@ async function saveKanbanCard() {
     elements.kanbanCardTitle.focus();
     return;
   }
+  const startDate = elements.kanbanCardStartDate.value;
+  const durationDays = Number(elements.kanbanCardDurationDays.value);
+  if (!startDate) {
+    setKanbanCardFeedback("Informe a data de início da tarefa.");
+    elements.kanbanCardStartDate.focus();
+    return;
+  }
+  if (!Number.isInteger(durationDays) || durationDays < 1 || durationDays > 3650) {
+    setKanbanCardFeedback("Informe uma vigência entre 1 e 3650 dias.");
+    elements.kanbanCardDurationDays.focus();
+    return;
+  }
   const body = {
     boardId: state.kanban.activeBoardId,
     title,
     description: elements.kanbanCardDescription.value.trim(),
+    startDate,
+    durationDays,
     status: elements.kanbanCardStatus.value,
     assigneeIds: Array.from(elements.kanbanAssigneeList.querySelectorAll("[data-kanban-assignee]:checked")).map((input) => input.value),
   };
@@ -2108,7 +2181,7 @@ async function saveKanbanCard() {
       renderKanbanCardDetails();
       await loadKanban({ silent: true });
       void loadKanbanCardDetails(createdCardId);
-      showToast("Cartão criado. Agora você pode adicionar arquivos e comentários.");
+      showToast("Cartão criado. O prazo será atualizado automaticamente.");
       return;
     }
     state.kanban.editingCardId = "";
@@ -2140,6 +2213,8 @@ async function moveKanbanCard(cardId, status) {
       body: {
         title: card.title,
         description: card.description,
+        startDate: card.startDate,
+        durationDays: card.durationDays,
         status,
         assigneeIds: card.assignees.map((person) => person.id),
       },
@@ -5705,6 +5780,9 @@ document.addEventListener("keydown", (event) => {
 document.addEventListener("input", (event) => {
   const target = event.target;
   clearValidationHighlight(target);
+  if (target === elements.kanbanCardStartDate || target === elements.kanbanCardDurationDays) {
+    renderKanbanSchedulePreview();
+  }
   if (target.dataset.richEditor) {
     updateRichEditorState(target);
     return;

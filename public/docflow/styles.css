@@ -1753,6 +1753,77 @@ select:focus-visible,
   -webkit-line-clamp: 4;
 }
 
+.kanban-card-schedule {
+  display: grid;
+  grid-template-columns: 30px minmax(0, 1fr);
+  gap: 9px;
+  align-items: center;
+  margin-top: 12px;
+  padding: 10px;
+  border: 1px solid #c9ddd3;
+  border-radius: 11px;
+  color: #185b43;
+  background: #eef8f3;
+}
+
+.kanban-card-schedule > span {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  color: #fff;
+  background: var(--forest);
+  font-size: 15px;
+}
+
+.kanban-card-schedule strong,
+.kanban-card-schedule small {
+  display: block;
+}
+
+.kanban-card-schedule strong {
+  font-size: 13px;
+  line-height: 1.25;
+}
+
+.kanban-card-schedule small {
+  margin-top: 3px;
+  color: #49665a;
+  font-size: 12px;
+  line-height: 1.35;
+}
+
+.kanban-card-schedule.is-ending {
+  border-color: #e2c277;
+  color: #744f06;
+  background: #fff8e7;
+}
+
+.kanban-card-schedule.is-ending > span {
+  background: #a56b05;
+}
+
+.kanban-card-schedule.is-overdue {
+  border-color: #e5b2ae;
+  color: #8b2720;
+  background: #fff1f0;
+}
+
+.kanban-card-schedule.is-overdue > span {
+  background: #b33a31;
+}
+
+.kanban-card-schedule.is-missing {
+  border-color: #d7dcd9;
+  color: #58625d;
+  background: #f4f6f5;
+}
+
+.kanban-card-schedule.is-missing > span {
+  background: #7a8680;
+}
+
 .kanban-card-assignees {
   display: flex;
   flex-wrap: wrap;
@@ -3843,6 +3914,38 @@ textarea::placeholder {
   min-height: 105px;
 }
 
+.kanban-schedule-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+  margin-top: 16px;
+}
+
+.kanban-schedule-preview {
+  margin: 8px 0 16px;
+  padding: 10px 12px;
+  border-radius: 10px;
+  color: var(--muted);
+  background: #f2f5f3;
+  font-size: 13px;
+  line-height: 1.4;
+}
+
+.kanban-schedule-preview.is-active {
+  color: #185b43;
+  background: #eef8f3;
+}
+
+.kanban-schedule-preview.is-ending {
+  color: #744f06;
+  background: #fff8e7;
+}
+
+.kanban-schedule-preview.is-overdue {
+  color: #8b2720;
+  background: #fff1f0;
+}
+
 .kanban-card-collaboration {
   display: grid;
   gap: 16px;
@@ -4799,6 +4902,10 @@ textarea::placeholder {
   }
 
   .kanban-assignee-list {
+    grid-template-columns: 1fr;
+  }
+
+  .kanban-schedule-fields {
     grid-template-columns: 1fr;
   }
 

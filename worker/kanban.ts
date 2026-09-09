@@ -137,13 +137,18 @@ export async function handleKanbanCards(request: Request, env: Env): Promise<Res
   const board = await getKanbanBoard(env.DB, boardId, authenticated.account.id);
   if (!board) return authError(404, "Quadro não encontrado ou sem acesso.");
   if (!board.canEdit) return authError(403, "Você não tem permissão para editar este quadro.");
-  const parsed = parseCardBody(body, new Set(board.members.map((item) => item.id)));
+  const parsed = parseCardBody(body, new Set(board.members.map((item) => item.id)), true);
   if (parsed instanceof Response) return parsed;
+  if (!parsed.startDate || parsed.durationDays === null) {
+    return authError(400, "Informe a data de início e os dias de vigência da tarefa.");
+  }
 
   const card = await createKanbanCard(env.DB, {
     id: crypto.randomUUID(),
     boardId,
     ...parsed,
+    startDate: parsed.startDate,
+    durationDays: parsed.durationDays,
     actor: accountPerson(authenticated),
     now: unixNow(),
   });
@@ -494,16 +499,32 @@ async function parseBoardBody(
 function parseCardBody(
   body: JsonObject,
   allowedMemberIds: Set<string>,
+  requireSchedule = false,
 ): {
   title: string;
   description: string;
+  startDate: string | null;
+  durationDays: number | null;
   status: KanbanStatus;
   assigneeIds: string[];
 } | Response {
   const title = cleanSingleLine(body.title, 160);
   const description = cleanMultiline(body.description, 2_000);
+  const startDate = cleanSingleLine(body.startDate, 10) || null;
+  const hasDuration = body.durationDays !== null && body.durationDays !== undefined && body.durationDays !== "";
+  const durationDays = hasDuration ? Number(body.durationDays) : null;
   const status = body.status;
   if (!title) return authError(400, "Informe o título do cartão.");
+  if (requireSchedule && (!startDate || durationDays === null)) {
+    return authError(400, "Informe a data de início e os dias de vigência da tarefa.");
+  }
+  if ((startDate && durationDays === null) || (!startDate && durationDays !== null)) {
+    return authError(400, "Informe a data de início e a vigência juntas.");
+  }
+  if (startDate && !isValidIsoDate(startDate)) return authError(400, "Informe uma data de início válida.");
+  if (durationDays !== null && (!Number.isInteger(durationDays) || durationDays < 1 || durationDays > 3650)) {
+    return authError(400, "Informe uma vigência entre 1 e 3650 dias.");
+  }
   if (typeof status !== "string" || !KANBAN_STATUSES.has(status as KanbanStatus)) {
     return authError(400, "Escolha uma coluna válida para o cartão.");
   }
@@ -519,7 +540,13 @@ function parseCardBody(
     return authError(400, "Selecione somente participantes deste quadro.");
   }
 
-  return { title, description, status: status as KanbanStatus, assigneeIds };
+  return { title, description, startDate, durationDays, status: status as KanbanStatus, assigneeIds };
+}
+
+function isValidIsoDate(value: string): boolean {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
+  const [year, month, day] = value.split("-").map(Number);
+  return new Date(Date.UTC(year, month - 1, day)).toISOString().slice(0, 10) === value;
 }
 
 async function readBodyOrResponse(request: Request): Promise<JsonObject | Response> {

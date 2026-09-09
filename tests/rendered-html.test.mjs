@@ -652,7 +652,7 @@ test("lets each account rename, delete, preview, and download its history as PDF
 
 
 test("adds private Kanban boards with member permissions, files, comments, history, and notifications", async () => {
-  const [app, page, styles, worker, kanbanWorker, kanbanDb, schema, initialMigration, boardMigration, collaborationMigration] = await Promise.all([
+  const [app, page, styles, worker, kanbanWorker, kanbanDb, schema, initialMigration, boardMigration, collaborationMigration, scheduleMigration] = await Promise.all([
     readFile(new URL("public/docflow/app.js", siteRoot), "utf8"),
     readFile(new URL("public/docflow/index.html", siteRoot), "utf8"),
     readFile(new URL("public/docflow/styles.css", siteRoot), "utf8"),
@@ -663,6 +663,7 @@ test("adds private Kanban boards with member permissions, files, comments, histo
     readFile(new URL("drizzle/0004_loud_brood.sql", siteRoot), "utf8"),
     readFile(new URL("drizzle/0005_free_sasquatch.sql", siteRoot), "utf8"),
     readFile(new URL("drizzle/0006_gifted_crusher_hogan.sql", siteRoot), "utf8"),
+    readFile(new URL("drizzle/0008_flaky_king_bedlam.sql", siteRoot), "utf8"),
   ]);
 
   assert.match(page, /id="kanbanButton"/);
@@ -682,6 +683,9 @@ test("adds private Kanban boards with member permissions, files, comments, histo
   assert.doesNotMatch(page, /Novo comentário/);
   assert.doesNotMatch(page, /Adicionar comentário/);
   assert.match(page, /id="kanbanCardTimeline"/);
+  assert.match(page, /id="kanbanCardStartDate"/);
+  assert.match(page, /id="kanbanCardDurationDays"/);
+  assert.match(page, /id="kanbanSchedulePreview"/);
   assert.match(page, /id="kanbanTimelineTitle">Histórico</);
   assert.match(page, /Somente as pessoas selecionadas poderão visualizar o quadro e editar seus cartões/);
   assert.match(app, /const KANBAN_COLUMNS = \[/);
@@ -707,6 +711,10 @@ test("adds private Kanban boards with member permissions, files, comments, histo
   assert.match(app, /uploadKanbanAttachments/);
   assert.doesNotMatch(app, /addKanbanComment/);
   assert.match(app, /Descrição salva nesta alteração/);
+  assert.match(app, /function getKanbanSchedule/);
+  assert.match(app, /Faltam \$\{daysRemaining\} dias/);
+  assert.match(app, /Em atraso há/);
+  assert.match(app, /startDate: card\.startDate/);
   assert.match(app, /deleteKanbanAttachment/);
   assert.match(app, /\/api\/kanban\/cards\/\$\{encodeURIComponent\(cardId\)\}\/details/);
   assert.match(app, /formData\.append\("files", file, file\.name\)/);
@@ -740,6 +748,8 @@ test("adds private Kanban boards with member permissions, files, comments, histo
   assert.match(kanbanWorker, /Somente o criador pode gerenciar este quadro/);
   assert.match(kanbanWorker, /Você não tem permissão para editar este cartão/);
   assert.match(kanbanWorker, /Selecione somente participantes deste quadro/);
+  assert.match(kanbanWorker, /Informe a data de início e os dias de vigência da tarefa/);
+  assert.match(kanbanWorker, /isValidIsoDate/);
   assert.match(kanbanWorker, /Selecione somente pessoas com acesso aprovado/);
   assert.match(kanbanWorker, /MAX_ATTACHMENT_BYTES = 10 \* 1024 \* 1024/);
   assert.match(kanbanWorker, /env\.DOCUMENTS\.put/);
@@ -758,11 +768,15 @@ test("adds private Kanban boards with member permissions, files, comments, histo
   assert.match(kanbanDb, /adicionou uma descrição ao cartão/);
   assert.match(kanbanDb, /removeu a descrição do cartão/);
   assert.match(kanbanDb, /details: descriptionChanged && values\.description/);
+  assert.match(kanbanDb, /alterou a data de início do cartão/);
+  assert.match(kanbanDb, /alterou a vigência do cartão/);
   assert.match(schema, /kanbanBoards/);
   assert.match(schema, /kanbanBoardMembers/);
   assert.match(schema, /kanbanCards/);
   assert.match(schema, /kanbanActivity/);
   assert.match(schema, /details: text\("details"\)/);
+  assert.match(schema, /startDate: text\("start_date"\)/);
+  assert.match(schema, /durationDays: integer\("duration_days"\)/);
   assert.match(schema, /kanbanCardAssignees/);
   assert.match(schema, /kanbanNotifications/);
   assert.match(schema, /kanbanCardComments/);
@@ -781,4 +795,6 @@ test("adds private Kanban boards with member permissions, files, comments, histo
   assert.match(collaborationMigration, /idx_kanban_card_comments_card_created/);
   assert.match(collaborationMigration, /idx_kanban_card_attachments_card_created/);
   assert.match(collaborationMigration, /PRAGMA optimize/);
+  assert.match(scheduleMigration, /ALTER TABLE `kanban_cards` ADD `start_date` text/);
+  assert.match(scheduleMigration, /ALTER TABLE `kanban_cards` ADD `duration_days` integer/);
 });

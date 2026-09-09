@@ -28,6 +28,8 @@ export type KanbanCard = {
   boardId: string;
   title: string;
   description: string;
+  startDate: string | null;
+  durationDays: number | null;
   status: KanbanStatus;
   position: number;
   createdBy: KanbanPerson | null;
@@ -106,6 +108,8 @@ type CardRow = {
   board_id: string;
   title: string;
   description: string;
+  start_date: string | null;
+  duration_days: number | null;
   status: KanbanStatus;
   position: number;
   created_by: string | null;
@@ -410,7 +414,7 @@ export async function listKanbanCards(db: D1Database, boardId: string): Promise<
   const cardResult = await db
     .prepare(
       `SELECT
-         c.id, c.board_id, c.title, c.description, c.status, c.position,
+         c.id, c.board_id, c.title, c.description, c.start_date, c.duration_days, c.status, c.position,
          c.created_by, creator.name AS creator_name, creator.email AS creator_email,
          c.created_at, c.updated_at
        FROM kanban_cards AS c
@@ -450,6 +454,8 @@ export async function listKanbanCards(db: D1Database, boardId: string): Promise<
     boardId: row.board_id,
     title: row.title,
     description: row.description,
+    startDate: row.start_date,
+    durationDays: row.duration_days,
     status: row.status,
     position: row.position,
     createdBy: nullablePerson(row.created_by, row.creator_name, row.creator_email),
@@ -785,6 +791,8 @@ export async function createKanbanCard(
     boardId: string;
     title: string;
     description: string;
+    startDate: string;
+    durationDays: number;
     status: KanbanStatus;
     assigneeIds: string[];
     actor: KanbanPerson;
@@ -795,14 +803,16 @@ export async function createKanbanCard(
     db
       .prepare(
         `INSERT INTO kanban_cards (
-           id, board_id, title, description, status, position, created_by, created_at, updated_at
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           id, board_id, title, description, start_date, duration_days, status, position, created_by, created_at, updated_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .bind(
         values.id,
         values.boardId,
         values.title,
         values.description,
+        values.startDate,
+        values.durationDays,
         values.status,
         values.now,
         values.actor.id,
@@ -815,7 +825,7 @@ export async function createKanbanCard(
       cardId: values.id,
       actorUserId: values.actor.id,
       action: "card_created",
-      summary: `criou o cartão “${values.title}”`,
+      summary: `criou o cartão “${values.title}” com início em ${formatKanbanDate(values.startDate)} e ${values.durationDays} ${values.durationDays === 1 ? "dia" : "dias"} de vigência`,
       details: values.description || null,
       now: values.now,
     }),
@@ -855,6 +865,8 @@ export async function updateKanbanCard(
     boardId: string;
     title: string;
     description: string;
+    startDate: string | null;
+    durationDays: number | null;
     status: KanbanStatus;
     assigneeIds: string[];
     actor: KanbanPerson;
@@ -862,9 +874,9 @@ export async function updateKanbanCard(
   },
 ): Promise<KanbanCard | null> {
   const existing = await db
-    .prepare("SELECT id, title, description, status, position FROM kanban_cards WHERE id = ? AND board_id = ? LIMIT 1")
+    .prepare("SELECT id, title, description, start_date, duration_days, status, position FROM kanban_cards WHERE id = ? AND board_id = ? LIMIT 1")
     .bind(values.id, values.boardId)
-    .first<{ id: string; title: string; description: string; status: KanbanStatus; position: number }>();
+    .first<{ id: string; title: string; description: string; start_date: string | null; duration_days: number | null; status: KanbanStatus; position: number }>();
   if (!existing) return null;
 
   const currentAssignees = await db
@@ -878,7 +890,8 @@ export async function updateKanbanCard(
   const assigneesChanged = currentIds.size !== nextIds.size || [...currentIds].some((id) => !nextIds.has(id));
   const titleChanged = existing.title !== values.title;
   const descriptionChanged = existing.description !== values.description;
-  const contentChanged = titleChanged || descriptionChanged || assigneesChanged;
+  const scheduleChanged = existing.start_date !== values.startDate || existing.duration_days !== values.durationDays;
+  const contentChanged = titleChanged || descriptionChanged || scheduleChanged || assigneesChanged;
   const statusChanged = existing.status !== values.status;
   const nextPosition = statusChanged ? values.now : existing.position;
 
@@ -886,12 +899,14 @@ export async function updateKanbanCard(
     db
       .prepare(
         `UPDATE kanban_cards
-         SET title = ?, description = ?, status = ?, position = ?, updated_at = ?
+         SET title = ?, description = ?, start_date = ?, duration_days = ?, status = ?, position = ?, updated_at = ?
          WHERE id = ? AND board_id = ?`,
       )
       .bind(
         values.title,
         values.description,
+        values.startDate,
+        values.durationDays,
         values.status,
         nextPosition,
         values.now,
@@ -931,6 +946,16 @@ export async function updateKanbanCard(
       if (!existing.description && values.description) changes.push(`adicionou uma descrição ao cartão “${values.title}”`);
       else if (existing.description && !values.description) changes.push(`removeu a descrição do cartão “${values.title}”`);
       else changes.push(`alterou a descrição do cartão “${values.title}”`);
+    }
+    if (scheduleChanged) {
+      if (!values.startDate || !values.durationDays) {
+        changes.push(`removeu o prazo do cartão “${values.title}”`);
+      } else if (!existing.start_date || !existing.duration_days) {
+        changes.push(`definiu o prazo do cartão “${values.title}”: início em ${formatKanbanDate(values.startDate)} e ${values.durationDays} ${values.durationDays === 1 ? "dia" : "dias"} de vigência`);
+      } else {
+        if (existing.start_date !== values.startDate) changes.push(`alterou a data de início do cartão “${values.title}” para ${formatKanbanDate(values.startDate)}`);
+        if (existing.duration_days !== values.durationDays) changes.push(`alterou a vigência do cartão “${values.title}” para ${values.durationDays} ${values.durationDays === 1 ? "dia" : "dias"}`);
+      }
     }
     if (newlyAssigned.length) {
       changes.push(`adicionou ${newlyAssigned.length} ${newlyAssigned.length === 1 ? "responsável" : "responsáveis"} ao cartão “${values.title}”`);
@@ -1069,6 +1094,11 @@ function statusLabel(status: KanbanStatus): string {
   if (status === "doing") return "Em andamento";
   if (status === "done") return "Concluído";
   return "A fazer";
+}
+
+function formatKanbanDate(value: string): string {
+  const [year, month, day] = value.split("-");
+  return `${day}/${month}/${year}`;
 }
 
 function activityStatement(

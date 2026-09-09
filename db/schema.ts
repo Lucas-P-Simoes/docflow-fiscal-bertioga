@@ -138,6 +138,8 @@ export const kanbanCards = sqliteTable(
     boardId: text("board_id").references(() => kanbanBoards.id, { onDelete: "cascade" }),
     title: text("title").notNull(),
     description: text("description").notNull().default(""),
+    startDate: text("start_date"),
+    durationDays: integer("duration_days"),
     status: text("status", { enum: ["todo", "doing", "done"] }).notNull().default("todo"),
     position: integer("position").notNull(),
     createdBy: text("created_by").references(() => users.id, { onDelete: "set null" }),

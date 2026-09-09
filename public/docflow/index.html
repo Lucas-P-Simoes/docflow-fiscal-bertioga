@@ -342,6 +342,17 @@
           <span>Descrição</span>
           <textarea id="kanbanCardDescription" maxlength="2000" placeholder="Detalhes, prazo ou providências necessárias…"></textarea>
         </label>
+        <div class="kanban-schedule-fields">
+          <label class="field">
+            <span>Data de início *</span>
+            <input id="kanbanCardStartDate" type="date" required />
+          </label>
+          <label class="field">
+            <span>Dias de vigência *</span>
+            <input id="kanbanCardDurationDays" type="number" min="1" max="3650" step="1" inputmode="numeric" placeholder="Ex.: 30" required />
+          </label>
+        </div>
+        <div id="kanbanSchedulePreview" class="kanban-schedule-preview" aria-live="polite">Informe a data de início e a vigência para calcular o término.</div>
         <label class="field">
           <span>Coluna</span>
           <select id="kanbanCardStatus">
