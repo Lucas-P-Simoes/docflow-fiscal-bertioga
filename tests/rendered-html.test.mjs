@@ -720,7 +720,10 @@ test("adds private Kanban boards with member permissions, files, comments, histo
   assert.match(app, /formData\.append\("files", file, file\.name\)/);
   assert.match(app, /A alteração foi desfeita/);
   assert.doesNotMatch(app, /event\.target === elements\.kanbanCardDialog/);
-  assert.doesNotMatch(app, /state\.kanban\.cards = state\.kanban\.cards\.map\(\(item\) => item\.id === cardId \? payload\.card : item\);\s*await loadKanban/);
+  assert.match(app, /const savedCard = payload\.card;/);
+  assert.match(app, /state\.kanban\.cards = state\.kanban\.cards\.map\(\(item\) => item\.id === cardId \? savedCard : item\);/);
+  assert.match(app, /cardElement\.outerHTML = renderKanbanCard\(card\);/);
+  assert.doesNotMatch(app, /closeDialog\(elements\.kanbanCardDialog\);\s*await loadKanban/);
   assert.match(app, /setInterval\([\s\S]*?30_000/);
   assert.match(styles, /\.kanban-board/);
   assert.match(styles, /\.kanban-board-sidebar/);

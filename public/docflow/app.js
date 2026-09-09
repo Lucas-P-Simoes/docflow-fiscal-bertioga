@@ -2170,8 +2170,10 @@ async function saveKanbanCard() {
       method: cardId ? "PATCH" : "POST",
       body,
     });
-    if (!cardId && payload.card?.id) {
-      const createdCardId = payload.card.id;
+    const savedCard = payload.card;
+    if (!savedCard?.id) throw new ApiRequestError("O cartão foi salvo, mas a confirmação do prazo não foi recebida.", 502);
+    if (!cardId) {
+      const createdCardId = savedCard.id;
       state.kanban.editingCardId = createdCardId;
       elements.kanbanCardId.value = createdCardId;
       elements.kanbanCardFormTitle.textContent = "Editar cartão";
@@ -2184,11 +2186,16 @@ async function saveKanbanCard() {
       showToast("Cartão criado. O prazo será atualizado automaticamente.");
       return;
     }
+    const previousCard = state.kanban.cards.find((item) => item.id === cardId);
+    state.kanban.cards = state.kanban.cards.map((item) => item.id === cardId ? savedCard : item);
     state.kanban.editingCardId = "";
     elements.saveKanbanCardButton.disabled = false;
     closeDialog(elements.kanbanCardDialog);
-    await loadKanban({ silent: true });
-    showToast(cardId ? "Cartão atualizado." : "Cartão criado.");
+    if (state.kanban.open && state.kanban.activeBoardId === savedCard.boardId) {
+      if (previousCard?.status !== savedCard.status) moveKanbanCardInView(cardId, savedCard.status);
+      settleKanbanCardInView(cardId, savedCard);
+    }
+    showToast("Cartão e prazo atualizados.");
     await loadKanbanNotifications({ silent: true });
   } catch (error) {
     elements.saveKanbanCardButton.disabled = false;
@@ -2314,10 +2321,11 @@ function setKanbanCardSyncingInView(cardElement, syncing) {
 
 function settleKanbanCardInView(cardId, card) {
   const cardElement = document.querySelector(`[data-kanban-card-id="${cardId}"]`);
-  if (!cardElement) return;
-  const updatedAt = cardElement.querySelector(".kanban-card-topline small");
-  if (updatedAt) updatedAt.textContent = formatHistoryDate(card.updatedAt);
-  setKanbanCardSyncingInView(cardElement, false);
+  if (!cardElement) {
+    render();
+    return;
+  }
+  cardElement.outerHTML = renderKanbanCard(card);
 }
 
 function confirmKanbanCardDeletion(cardId) {
