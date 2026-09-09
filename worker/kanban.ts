@@ -385,6 +385,7 @@ async function getCardDetails(db: D1Database, cardId: string) {
       type: "activity" as const,
       action: activity.action,
       summary: activity.summary,
+      details: activity.details,
       actor: activity.actor,
       createdAt: activity.createdAt,
     })),

@@ -1,0 +1,1 @@
+ALTER TABLE `kanban_activity` ADD `details` text;

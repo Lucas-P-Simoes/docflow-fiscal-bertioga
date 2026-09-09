@@ -237,9 +237,6 @@ const elements = {
   kanbanAttachmentInput: document.querySelector("#kanbanAttachmentInput"),
   kanbanAttachmentList: document.querySelector("#kanbanAttachmentList"),
   kanbanAttachmentFeedback: document.querySelector("#kanbanAttachmentFeedback"),
-  kanbanCommentInput: document.querySelector("#kanbanCommentInput"),
-  addKanbanCommentButton: document.querySelector("#addKanbanCommentButton"),
-  kanbanCommentFeedback: document.querySelector("#kanbanCommentFeedback"),
   kanbanCardTimeline: document.querySelector("#kanbanCardTimeline"),
   kanbanCardFeedback: document.querySelector("#kanbanCardFeedback"),
   saveKanbanCardButton: document.querySelector("#saveKanbanCardButton"),
@@ -294,7 +291,6 @@ function createKanbanState() {
       attachments: [],
       timeline: [],
       uploading: false,
-      commenting: false,
     },
     notifications: [],
     unreadCount: 0,
@@ -1884,7 +1880,7 @@ async function openKanbanCardDialog(cardId = "") {
 }
 
 function closeKanbanCardDialog() {
-  if (elements.saveKanbanCardButton.disabled || state.kanban.cardDetails.uploading || state.kanban.cardDetails.commenting) return;
+  if (elements.saveKanbanCardButton.disabled || state.kanban.cardDetails.uploading) return;
   state.kanban.editingCardId = "";
   resetKanbanCardDetails();
   elements.kanbanCardForm.reset();
@@ -1900,17 +1896,11 @@ function resetKanbanCardDetails(cardId = "") {
     attachments: [],
     timeline: [],
     uploading: false,
-    commenting: false,
   };
   if (elements.kanbanAttachmentInput) elements.kanbanAttachmentInput.value = "";
-  if (elements.kanbanCommentInput) elements.kanbanCommentInput.value = "";
   if (elements.kanbanAttachmentFeedback) {
     elements.kanbanAttachmentFeedback.textContent = "";
     elements.kanbanAttachmentFeedback.className = "inline-feedback is-hidden";
-  }
-  if (elements.kanbanCommentFeedback) {
-    elements.kanbanCommentFeedback.textContent = "";
-    elements.kanbanCommentFeedback.className = "inline-feedback is-hidden";
   }
 }
 
@@ -1924,9 +1914,7 @@ function renderKanbanCardDetails() {
     elements.kanbanAttachmentFeedback.textContent = "";
     elements.kanbanAttachmentFeedback.className = "inline-feedback is-hidden";
     elements.kanbanAttachmentList.innerHTML = `<div class="kanban-card-detail-state"><strong>Crie o cartão para anexar arquivos</strong><span>Depois de salvar, esta área será liberada sem fechar a janela.</span></div>`;
-    elements.kanbanCommentInput.disabled = true;
-    elements.addKanbanCommentButton.disabled = true;
-    elements.kanbanCardTimeline.innerHTML = `<div class="kanban-card-detail-state"><strong>O histórico começa ao criar o cartão</strong><span>Alterações e comentários ficarão reunidos aqui.</span></div>`;
+    elements.kanbanCardTimeline.innerHTML = `<div class="kanban-card-detail-state"><strong>O histórico começa ao criar o cartão</strong><span>As alterações feitas no cartão ficarão registradas aqui.</span></div>`;
     return;
   }
 
@@ -1952,24 +1940,24 @@ function renderKanbanCardDetails() {
         </article>`).join("")
       : `<div class="kanban-card-detail-state"><strong>Nenhum arquivo anexado</strong><span>Adicione documentos, imagens ou planilhas relacionados a esta atividade.</span></div>`;
 
-  elements.addKanbanCommentButton.disabled = details.loading || details.commenting;
-  elements.addKanbanCommentButton.textContent = details.commenting ? "Adicionando…" : "Adicionar comentário";
-  elements.kanbanCommentInput.disabled = details.loading || details.commenting;
   elements.kanbanCardTimeline.innerHTML = details.loading
     ? `<div class="kanban-card-detail-state"><span class="history-spinner" aria-hidden="true"></span><strong>Carregando histórico…</strong></div>`
     : details.timeline.length
       ? details.timeline.map(renderKanbanCardTimelineItem).join("")
-      : `<div class="kanban-card-detail-state"><strong>Histórico ainda vazio</strong><span>Comentários e alterações deste cartão aparecerão aqui.</span></div>`;
+      : `<div class="kanban-card-detail-state"><strong>Histórico ainda vazio</strong><span>As alterações deste cartão aparecerão aqui.</span></div>`;
 }
 
 function renderKanbanCardTimelineItem(item) {
   const actorName = item.actor?.name || "Sistema";
+  const descriptionSnapshot = item.type === "activity" && item.details
+    ? `<div class="kanban-activity-snapshot"><strong>${item.action === "card_created" ? "Descrição inicial" : "Descrição salva nesta alteração"}</strong><p>${e(item.details).replace(/\n/g, "<br>")}</p></div>`
+    : "";
   const content = item.type === "comment"
     ? `<p>${e(item.body).replace(/\n/g, "<br>")}</p>`
     : `<p><strong>${e(actorName)}</strong> ${e(item.summary)}</p>`;
   return `<article class="kanban-card-timeline-item is-${e(item.type)}">
     <span class="kanban-activity-avatar" aria-hidden="true">${e(personInitials(actorName))}</span>
-    <div>${item.type === "comment" ? `<strong>${e(actorName)}</strong>` : ""}${content}<time datetime="${new Date(item.createdAt * 1000).toISOString()}">${e(formatHistoryDate(item.createdAt))}</time></div>
+    <div>${item.type === "comment" ? `<strong>${e(actorName)}</strong>` : ""}${content}${descriptionSnapshot}<time datetime="${new Date(item.createdAt * 1000).toISOString()}">${e(formatHistoryDate(item.createdAt))}</time></div>
   </article>`;
 }
 
@@ -2035,44 +2023,6 @@ async function uploadKanbanAttachments(fileList) {
     if (state.kanban.cardDetails.cardId === cardId) {
       details.uploading = false;
       elements.kanbanAttachmentInput.value = "";
-      renderKanbanCardDetails();
-    }
-  }
-}
-
-async function addKanbanComment() {
-  const details = state.kanban.cardDetails;
-  const cardId = details.cardId;
-  const body = elements.kanbanCommentInput.value.trim();
-  if (!cardId || details.commenting) return;
-  if (!body) {
-    elements.kanbanCommentFeedback.textContent = "Escreva um comentário antes de adicionar.";
-    elements.kanbanCommentFeedback.className = "inline-feedback is-error";
-    elements.kanbanCommentInput.focus();
-    return;
-  }
-
-  details.commenting = true;
-  elements.kanbanCommentFeedback.textContent = "";
-  elements.kanbanCommentFeedback.className = "inline-feedback is-hidden";
-  renderKanbanCardDetails();
-  try {
-    const payload = await apiRequest(`/api/kanban/cards/${encodeURIComponent(cardId)}/comments`, {
-      method: "POST",
-      body: { body },
-    });
-    if (state.kanban.cardDetails.cardId !== cardId) return;
-    details.timeline = [payload.timelineItem, ...details.timeline].filter(Boolean);
-    elements.kanbanCommentInput.value = "";
-    showToast("Comentário adicionado ao histórico.");
-  } catch (error) {
-    if (state.kanban.cardDetails.cardId === cardId) {
-      elements.kanbanCommentFeedback.textContent = error.message;
-      elements.kanbanCommentFeedback.className = "inline-feedback is-error";
-    }
-  } finally {
-    if (state.kanban.cardDetails.cardId === cardId) {
-      details.commenting = false;
       renderKanbanCardDetails();
     }
   }
@@ -5583,7 +5533,6 @@ async function handleAction(action, target) {
   if (action === "add-kanban-card") return openKanbanCardDialog();
   if (action === "edit-kanban-card") return openKanbanCardDialog(target.dataset.id);
   if (action === "delete-kanban-card") return confirmKanbanCardDeletion(target.dataset.id);
-  if (action === "add-kanban-comment") return addKanbanComment();
   if (action === "delete-kanban-attachment") return confirmKanbanAttachmentDeletion(target.dataset.id);
   if (action === "close-kanban-card") return closeKanbanCardDialog();
   if (action === "toggle-notifications") return toggleNotificationPopover();
@@ -5955,10 +5904,6 @@ elements.kanbanBoardForm.addEventListener("submit", async (event) => {
 
 elements.kanbanBoardDialog.addEventListener("click", (event) => {
   if (event.target === elements.kanbanBoardDialog) closeKanbanBoardDialog();
-});
-
-elements.kanbanCardDialog.addEventListener("click", (event) => {
-  if (event.target === elements.kanbanCardDialog) closeKanbanCardDialog();
 });
 
 elements.renameDialog.addEventListener("click", (event) => {

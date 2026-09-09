@@ -162,6 +162,7 @@ export const kanbanActivity = sqliteTable(
     actorUserId: text("actor_user_id").references(() => users.id, { onDelete: "set null" }),
     action: text("action").notNull(),
     summary: text("summary").notNull(),
+    details: text("details"),
     createdAt: integer("created_at").notNull(),
   },
   (table) => [

@@ -3983,31 +3983,6 @@ textarea::placeholder {
   line-height: 1.45;
 }
 
-.kanban-comment-field {
-  margin-top: 14px;
-}
-
-.kanban-card-dialog .kanban-comment-field textarea {
-  min-height: 82px;
-}
-
-.kanban-comment-actions {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 14px;
-  margin-top: 9px;
-}
-
-.kanban-comment-actions > span {
-  color: var(--muted);
-  font-size: 9px;
-}
-
-.kanban-comment-actions .button {
-  flex: 0 0 auto;
-}
-
 .kanban-card-timeline {
   max-height: 330px;
   margin-top: 15px;
@@ -4041,6 +4016,26 @@ textarea::placeholder {
   font-size: 10px;
   line-height: 1.5;
   overflow-wrap: anywhere;
+}
+
+.kanban-activity-snapshot {
+  margin-top: 9px;
+  padding: 9px 10px;
+  border: 1px solid #d6e2dc;
+  border-radius: 9px;
+  background: #f4f8f6;
+}
+
+.kanban-activity-snapshot > strong {
+  display: block;
+  color: var(--forest-dark);
+  font-size: 9px;
+}
+
+.kanban-activity-snapshot p {
+  margin-top: 5px;
+  color: var(--ink);
+  white-space: normal;
 }
 
 .kanban-card-timeline-item time {
@@ -4807,14 +4802,12 @@ textarea::placeholder {
     grid-template-columns: 1fr;
   }
 
-  .kanban-card-detail-heading,
-  .kanban-comment-actions {
+  .kanban-card-detail-heading {
     align-items: stretch;
     flex-direction: column;
   }
 
-  .kanban-attachment-button,
-  .kanban-comment-actions .button {
+  .kanban-attachment-button {
     width: 100%;
   }
 

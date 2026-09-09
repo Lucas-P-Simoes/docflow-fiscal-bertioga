@@ -41,6 +41,7 @@ export type KanbanActivity = {
   cardId: string | null;
   action: string;
   summary: string;
+  details: string | null;
   actor: KanbanPerson | null;
   createdAt: number;
 };
@@ -123,6 +124,7 @@ type ActivityRow = {
   card_id: string | null;
   action: string;
   summary: string;
+  details: string | null;
   actor_user_id: string | null;
   actor_name: string | null;
   actor_email: string | null;
@@ -388,11 +390,20 @@ export async function deleteKanbanBoard(
   boardId: string,
   userId: string,
 ): Promise<boolean> {
-  const result = await db
-    .prepare("DELETE FROM kanban_boards WHERE id = ? AND created_by = ?")
-    .bind(boardId, userId)
-    .run();
-  return result.meta.changes > 0;
+  const [, boardResult] = await db.batch([
+    db
+      .prepare(
+        `DELETE FROM kanban_cards
+         WHERE board_id IN (
+           SELECT id FROM kanban_boards WHERE id = ? AND created_by = ?
+         )`,
+      )
+      .bind(boardId, userId),
+    db
+      .prepare("DELETE FROM kanban_boards WHERE id = ? AND created_by = ?")
+      .bind(boardId, userId),
+  ]);
+  return boardResult.meta.changes > 0;
 }
 
 export async function listKanbanCards(db: D1Database, boardId: string): Promise<KanbanCard[]> {
@@ -455,7 +466,7 @@ export async function listKanbanActivity(
   const result = await db
     .prepare(
       `SELECT
-         activity.id, activity.card_id, activity.action, activity.summary,
+         activity.id, activity.card_id, activity.action, activity.summary, activity.details,
          activity.actor_user_id, actor.name AS actor_name, actor.email AS actor_email,
          activity.created_at
        FROM kanban_activity AS activity
@@ -471,6 +482,7 @@ export async function listKanbanActivity(
     cardId: row.card_id,
     action: row.action,
     summary: row.summary,
+    details: row.details,
     actor: nullablePerson(row.actor_user_id, row.actor_name, row.actor_email),
     createdAt: row.created_at,
   }));
@@ -483,7 +495,7 @@ export async function listKanbanCardActivity(
   const result = await db
     .prepare(
       `SELECT
-         activity.id, activity.card_id, activity.action, activity.summary,
+         activity.id, activity.card_id, activity.action, activity.summary, activity.details,
          activity.actor_user_id, actor.name AS actor_name, actor.email AS actor_email,
          activity.created_at
        FROM kanban_activity AS activity
@@ -499,6 +511,7 @@ export async function listKanbanCardActivity(
     cardId: row.card_id,
     action: row.action,
     summary: row.summary,
+    details: row.details,
     actor: nullablePerson(row.actor_user_id, row.actor_name, row.actor_email),
     createdAt: row.created_at,
   }));
@@ -803,6 +816,7 @@ export async function createKanbanCard(
       actorUserId: values.actor.id,
       action: "card_created",
       summary: `criou o cartão “${values.title}”`,
+      details: values.description || null,
       now: values.now,
     }),
   ];
@@ -860,8 +874,11 @@ export async function updateKanbanCard(
   const currentIds = new Set(currentAssignees.results.map((row) => row.user_id));
   const nextIds = new Set(values.assigneeIds);
   const newlyAssigned = values.assigneeIds.filter((userId) => !currentIds.has(userId));
+  const removedAssignees = [...currentIds].filter((userId) => !nextIds.has(userId));
   const assigneesChanged = currentIds.size !== nextIds.size || [...currentIds].some((id) => !nextIds.has(id));
-  const contentChanged = existing.title !== values.title || existing.description !== values.description || assigneesChanged;
+  const titleChanged = existing.title !== values.title;
+  const descriptionChanged = existing.description !== values.description;
+  const contentChanged = titleChanged || descriptionChanged || assigneesChanged;
   const statusChanged = existing.status !== values.status;
   const nextPosition = statusChanged ? values.now : existing.position;
 
@@ -908,12 +925,26 @@ export async function updateKanbanCard(
     }
   }
   if (contentChanged) {
+    const changes: string[] = [];
+    if (titleChanged) changes.push(`alterou o título de “${existing.title}” para “${values.title}”`);
+    if (descriptionChanged) {
+      if (!existing.description && values.description) changes.push(`adicionou uma descrição ao cartão “${values.title}”`);
+      else if (existing.description && !values.description) changes.push(`removeu a descrição do cartão “${values.title}”`);
+      else changes.push(`alterou a descrição do cartão “${values.title}”`);
+    }
+    if (newlyAssigned.length) {
+      changes.push(`adicionou ${newlyAssigned.length} ${newlyAssigned.length === 1 ? "responsável" : "responsáveis"} ao cartão “${values.title}”`);
+    }
+    if (removedAssignees.length) {
+      changes.push(`removeu ${removedAssignees.length} ${removedAssignees.length === 1 ? "responsável" : "responsáveis"} do cartão “${values.title}”`);
+    }
     statements.push(activityStatement(db, {
       boardId: values.boardId,
       cardId: values.id,
       actorUserId: values.actor.id,
       action: "card_updated",
-      summary: `atualizou o cartão “${values.title}”`,
+      summary: changes.join("; "),
+      details: descriptionChanged && values.description ? values.description : null,
       now: values.now,
     }));
   }
@@ -1048,14 +1079,15 @@ function activityStatement(
     actorUserId: string;
     action: string;
     summary: string;
+    details?: string | null;
     now: number;
   },
 ): D1PreparedStatement {
   return db
     .prepare(
       `INSERT INTO kanban_activity (
-         id, board_id, card_id, actor_user_id, action, summary, created_at
-       ) VALUES (?, ?, ?, ?, ?, ?, ?)`,
+         id, board_id, card_id, actor_user_id, action, summary, details, created_at
+       ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
     )
     .bind(
       crypto.randomUUID(),
@@ -1064,6 +1096,7 @@ function activityStatement(
       values.actorUserId,
       values.action,
       values.summary,
+      values.details || null,
       values.now,
     );
 }

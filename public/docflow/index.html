@@ -354,7 +354,7 @@
           <legend>Pessoas responsáveis</legend>
           <div id="kanbanAssigneeList" class="kanban-assignee-list"></div>
         </fieldset>
-        <section id="kanbanCardCollaboration" class="kanban-card-collaboration is-hidden" aria-label="Arquivos, histórico e comentários do cartão">
+        <section id="kanbanCardCollaboration" class="kanban-card-collaboration is-hidden" aria-label="Arquivos e histórico do cartão">
           <section class="kanban-card-detail-panel" aria-labelledby="kanbanAttachmentsTitle">
             <div class="kanban-card-detail-heading">
               <div>
@@ -374,18 +374,9 @@
             <div class="kanban-card-detail-heading">
               <div>
                 <span class="eyebrow eyebrow-dark">Acompanhamento</span>
-                <h3 id="kanbanTimelineTitle">Histórico e comentários</h3>
+                <h3 id="kanbanTimelineTitle">Histórico</h3>
               </div>
             </div>
-            <label class="field kanban-comment-field">
-              <span>Novo comentário</span>
-              <textarea id="kanbanCommentInput" maxlength="2000" placeholder="Registre uma atualização, decisão ou observação…"></textarea>
-            </label>
-            <div class="kanban-comment-actions">
-              <span>Os comentários ficam registrados com autor e data.</span>
-              <button id="addKanbanCommentButton" class="button button-primary" type="button" data-action="add-kanban-comment">Adicionar comentário</button>
-            </div>
-            <div id="kanbanCommentFeedback" class="inline-feedback is-hidden" role="status"></div>
             <div id="kanbanCardTimeline" class="kanban-card-timeline" aria-live="polite"></div>
           </section>
         </section>
