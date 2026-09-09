@@ -2171,7 +2171,10 @@ async function saveKanbanCard() {
       body,
     });
     const savedCard = payload.card;
-    if (!savedCard?.id) throw new ApiRequestError("O cartão foi salvo, mas a confirmação do prazo não foi recebida.", 502);
+    const savedDurationDays = Number(savedCard?.durationDays);
+    if (!savedCard?.id || savedCard.startDate !== startDate || savedDurationDays !== durationDays) {
+      throw new ApiRequestError("O servidor não confirmou a data de início e a vigência. Tente salvar novamente.", 502);
+    }
     if (!cardId) {
       const createdCardId = savedCard.id;
       state.kanban.editingCardId = createdCardId;

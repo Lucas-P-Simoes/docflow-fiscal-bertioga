@@ -721,6 +721,8 @@ test("adds private Kanban boards with member permissions, files, comments, histo
   assert.match(app, /A alteração foi desfeita/);
   assert.doesNotMatch(app, /event\.target === elements\.kanbanCardDialog/);
   assert.match(app, /const savedCard = payload\.card;/);
+  assert.match(app, /savedCard\.startDate !== startDate \|\| savedDurationDays !== durationDays/);
+  assert.match(app, /O servidor não confirmou a data de início e a vigência/);
   assert.match(app, /state\.kanban\.cards = state\.kanban\.cards\.map\(\(item\) => item\.id === cardId \? savedCard : item\);/);
   assert.match(app, /cardElement\.outerHTML = renderKanbanCard\(card\);/);
   assert.doesNotMatch(app, /closeDialog\(elements\.kanbanCardDialog\);\s*await loadKanban/);
