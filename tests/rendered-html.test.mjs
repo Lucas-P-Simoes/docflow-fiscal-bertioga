@@ -716,6 +716,9 @@ test("adds private Kanban boards with member permissions, files, comments, histo
   assert.match(app, /Em atraso há/);
   assert.match(app, /startDate: card\.startDate/);
   assert.match(app, /deleteKanbanAttachment/);
+  assert.match(app, /download\?view=1/);
+  assert.match(app, /Visualizar <span aria-hidden="true">↗<\/span>/);
+  assert.match(app, /target="_blank" rel="noopener noreferrer"/);
   assert.match(app, /\/api\/kanban\/cards\/\$\{encodeURIComponent\(cardId\)\}\/details/);
   assert.match(app, /formData\.append\("files", file, file\.name\)/);
   assert.match(app, /A alteração foi desfeita/);
@@ -734,6 +737,7 @@ test("adds private Kanban boards with member permissions, files, comments, histo
   assert.match(styles, /\.kanban-card\.is-syncing/);
   assert.match(styles, /@keyframes kanban-syncing/);
   assert.match(styles, /\.kanban-attachment-list/);
+  assert.match(styles, /\.kanban-attachment-preview/);
   assert.match(styles, /\.kanban-card-timeline/);
   assert.match(styles, /overflow-wrap:\s*anywhere/);
   assert.match(styles, /\.notification-button/);
@@ -769,6 +773,9 @@ test("adds private Kanban boards with member permissions, files, comments, histo
   assert.match(kanbanWorker, /env\.DOCUMENTS\.get/);
   assert.match(kanbanWorker, /removeStoredAttachments/);
   assert.match(kanbanWorker, /Content-Disposition/);
+  assert.match(kanbanWorker, /searchParams\.get\("view"\) === "1"/);
+  assert.match(kanbanWorker, /previewInline \? "inline" : "attachment"/);
+  assert.match(kanbanWorker, /isPreviewableAttachmentType/);
   assert.match(kanbanWorker, /searchParams\.get\("all"\) === "1"/);
   assert.match(kanbanDb, /WHERE status = 'approved'/);
   assert.match(kanbanDb, /listAccessibleKanbanBoards/);

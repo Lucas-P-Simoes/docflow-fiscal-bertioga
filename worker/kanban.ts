@@ -353,10 +353,15 @@ export async function handleKanbanAttachmentMutation(
     if (request.method !== "GET") return authError(405, "Método não permitido.");
     const object = await env.DOCUMENTS.get(attachment.objectKey);
     if (!object) return authError(404, "O conteúdo deste arquivo não foi encontrado.");
+    const wantsPreview = new URL(request.url).searchParams.get("view") === "1";
+    const previewInline = wantsPreview && isPreviewableAttachmentType(attachment.contentType);
     return new Response(object.body, {
       headers: {
         "Cache-Control": "private, no-store",
-        "Content-Disposition": attachmentContentDisposition(attachment.filename),
+        "Content-Disposition": attachmentContentDisposition(
+          attachment.filename,
+          previewInline ? "inline" : "attachment",
+        ),
         "Content-Length": String(attachment.sizeBytes),
         "Content-Type": attachment.contentType || "application/octet-stream",
         "X-Content-Type-Options": "nosniff",
@@ -418,13 +423,34 @@ async function removeStoredAttachments(bucket: R2Bucket, objectKeys: string[]): 
   }
 }
 
-function attachmentContentDisposition(filename: string): string {
+function attachmentContentDisposition(
+  filename: string,
+  disposition: "attachment" | "inline" = "attachment",
+): string {
   const asciiName = filename
     .normalize("NFKD")
     .replace(/[^\x20-\x7e]/g, "_")
     .replace(/["\\]/g, "_")
     .slice(0, 120) || "arquivo";
-  return `attachment; filename="${asciiName}"; filename*=UTF-8''${encodeURIComponent(filename)}`;
+  return `${disposition}; filename="${asciiName}"; filename*=UTF-8''${encodeURIComponent(filename)}`;
+}
+
+function isPreviewableAttachmentType(contentType: string): boolean {
+  const normalized = contentType.toLowerCase().split(";", 1)[0].trim();
+  return normalized === "application/pdf"
+    || normalized === "application/json"
+    || normalized === "text/plain"
+    || normalized === "text/csv"
+    || normalized === "image/jpeg"
+    || normalized === "image/png"
+    || normalized === "image/gif"
+    || normalized === "image/webp"
+    || normalized === "image/avif"
+    || normalized === "audio/mpeg"
+    || normalized === "audio/ogg"
+    || normalized === "audio/wav"
+    || normalized === "video/mp4"
+    || normalized === "video/webm";
 }
 
 export async function handleKanbanNotifications(

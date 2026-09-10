@@ -4082,6 +4082,15 @@ textarea::placeholder {
   text-decoration: none;
 }
 
+.kanban-attachment-actions .kanban-attachment-preview {
+  color: var(--forest-dark);
+  background: var(--forest-soft);
+}
+
+.kanban-attachment-actions .kanban-attachment-preview:hover {
+  background: #d8ebe2;
+}
+
 .kanban-card-detail-state {
   display: grid;
   place-items: center;

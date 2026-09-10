@@ -1984,7 +1984,8 @@ function renderKanbanCardDetails() {
           <span class="kanban-attachment-icon" aria-hidden="true">${e(attachmentFileMark(attachment.filename))}</span>
           <div><strong>${e(attachment.filename)}</strong><small>${e(formatFileSize(attachment.sizeBytes))} • ${e(attachment.uploadedBy?.name || "Usuário removido")} • ${e(formatHistoryDate(attachment.createdAt))}</small></div>
           <div class="kanban-attachment-actions">
-            <a class="button button-quiet" href="/api/kanban/cards/${encodeURIComponent(details.cardId)}/attachments/${encodeURIComponent(attachment.id)}/download">Baixar</a>
+            <a class="button button-quiet kanban-attachment-preview" href="/api/kanban/cards/${encodeURIComponent(details.cardId)}/attachments/${encodeURIComponent(attachment.id)}/download?view=1" target="_blank" rel="noopener noreferrer" aria-label="Visualizar ${e(attachment.filename)} em uma nova guia">Visualizar <span aria-hidden="true">↗</span></a>
+            <a class="button button-quiet" href="/api/kanban/cards/${encodeURIComponent(details.cardId)}/attachments/${encodeURIComponent(attachment.id)}/download" aria-label="Baixar ${e(attachment.filename)}">Baixar</a>
             <button class="button button-quiet button-danger" type="button" data-action="delete-kanban-attachment" data-id="${e(attachment.id)}" ${details.uploading ? "disabled" : ""}>Remover</button>
           </div>
         </article>`).join("")
