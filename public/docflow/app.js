@@ -297,8 +297,10 @@ function createKanbanState() {
     },
     notifications: [],
     unreadCount: 0,
+    notificationTotalCount: 0,
     notificationsLoading: false,
     notificationsOpen: false,
+    notificationsExpanded: false,
   };
 }
 
@@ -2373,11 +2375,25 @@ function updateNotificationBell() {
 
 function renderNotificationPopover() {
   const notifications = state.kanban.notifications;
-  elements.notificationList.innerHTML = state.kanban.notificationsLoading && !notifications.length
-    ? `<div class="notification-state"><span class="history-spinner" aria-hidden="true"></span><strong>Carregando…</strong></div>`
-    : notifications.length
-      ? `<div class="notification-items">${notifications.map((notification) => `<button class="notification-item${notification.readAt ? "" : " is-unread"}" type="button" data-action="open-kanban-notification" data-id="${e(notification.id)}" data-board-id="${e(notification.boardId)}" data-card-id="${e(notification.cardId)}"><span class="notification-item-bell" aria-hidden="true">&#128276;&#65038;</span><span><strong>${e(notification.message)}</strong><small>${e(formatHistoryDate(notification.createdAt))}</small></span></button>`).join("")}</div>${state.kanban.unreadCount ? `<button class="notification-read-all" type="button" data-action="read-all-notifications">Marcar todas como lidas</button>` : ""}`
-      : `<div class="notification-state"><span class="notification-empty-bell" aria-hidden="true">&#128276;&#65038;</span><strong>Nenhuma notificação</strong><span>Quando alguém marcar você em um cartão, o aviso aparecerá aqui.</span></div>`;
+  const expanded = state.kanban.notificationsExpanded;
+  const totalCount = Math.max(state.kanban.notificationTotalCount, notifications.length);
+  const visibleNotifications = expanded ? notifications : notifications.slice(0, 5);
+  elements.notificationPopover.classList.toggle("is-expanded", expanded);
+  if (state.kanban.notificationsLoading && !notifications.length) {
+    elements.notificationList.innerHTML = `<div class="notification-state"><span class="history-spinner" aria-hidden="true"></span><strong>Carregando…</strong></div>`;
+    return;
+  }
+  if (!notifications.length) {
+    elements.notificationList.innerHTML = `<div class="notification-state"><span class="notification-empty-bell" aria-hidden="true">&#128276;&#65038;</span><strong>Nenhuma notificação</strong><span>Quando outro participante alterar um cartão do seu quadro, o aviso aparecerá aqui.</span></div>`;
+    return;
+  }
+  const expandButton = totalCount > 5
+    ? `<button class="notification-expand-button" type="button" data-action="toggle-notification-expansion" aria-expanded="${expanded}" aria-controls="notificationList">${expanded ? "Mostrar menos" : `Ver todas as notificações (${totalCount})`}</button>`
+    : "";
+  const readAllButton = state.kanban.unreadCount
+    ? `<button class="notification-read-all" type="button" data-action="read-all-notifications">Marcar todas como lidas</button>`
+    : "";
+  elements.notificationList.innerHTML = `<div class="notification-items">${visibleNotifications.map((notification) => `<button class="notification-item${notification.readAt ? "" : " is-unread"}" type="button" data-action="open-kanban-notification" data-id="${e(notification.id)}" data-board-id="${e(notification.boardId)}" data-card-id="${e(notification.cardId)}"><span class="notification-item-bell" aria-hidden="true">&#128276;&#65038;</span><span><strong>${e(notification.message)}</strong><small>${e(formatHistoryDate(notification.createdAt))}</small></span></button>`).join("")}</div>${expandButton || readAllButton ? `<div class="notification-actions">${expandButton}${readAllButton}</div>` : ""}`;
 }
 
 async function loadKanbanNotifications({ silent = false } = {}) {
@@ -2385,9 +2401,11 @@ async function loadKanbanNotifications({ silent = false } = {}) {
   state.kanban.notificationsLoading = true;
   if (state.kanban.notificationsOpen) renderNotificationPopover();
   try {
-    const payload = await apiRequest("/api/kanban/notifications");
+    const query = state.kanban.notificationsExpanded ? "?all=1" : "";
+    const payload = await apiRequest(`/api/kanban/notifications${query}`);
     state.kanban.notifications = Array.isArray(payload.notifications) ? payload.notifications : [];
     state.kanban.unreadCount = Number(payload.unreadCount) || 0;
+    state.kanban.notificationTotalCount = Number(payload.totalCount) || state.kanban.notifications.length;
     updateNotificationBell();
   } catch (error) {
     if (!silent) showToast(error.message);
@@ -2411,8 +2429,16 @@ async function toggleNotificationPopover() {
 
 function closeNotificationPopover() {
   state.kanban.notificationsOpen = false;
+  state.kanban.notificationsExpanded = false;
   elements.notificationPopover.classList.add("is-hidden");
+  elements.notificationPopover.classList.remove("is-expanded");
   elements.notificationButton.setAttribute("aria-expanded", "false");
+}
+
+async function toggleNotificationExpansion() {
+  state.kanban.notificationsExpanded = !state.kanban.notificationsExpanded;
+  renderNotificationPopover();
+  if (state.kanban.notificationsExpanded) await loadKanbanNotifications({ silent: true });
 }
 
 async function openKanbanNotification(notificationId, boardId, cardId) {
@@ -5624,6 +5650,7 @@ async function handleAction(action, target) {
   if (action === "toggle-notifications") return toggleNotificationPopover();
   if (action === "close-notifications") return closeNotificationPopover();
   if (action === "open-kanban-notification") return openKanbanNotification(target.dataset.id, target.dataset.boardId, target.dataset.cardId);
+  if (action === "toggle-notification-expansion") return toggleNotificationExpansion();
   if (action === "read-all-notifications") return markAllNotificationsRead();
   if (action === "refresh-history") return loadDocumentHistory();
   if (action === "download-history") return triggerHistoryDownload(target.dataset.id);

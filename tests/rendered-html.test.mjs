@@ -738,6 +738,14 @@ test("adds private Kanban boards with member permissions, files, comments, histo
   assert.match(styles, /overflow-wrap:\s*anywhere/);
   assert.match(styles, /\.notification-button/);
   assert.match(styles, /\.notification-badge/);
+  assert.match(styles, /\.notification-popover\.is-expanded/);
+  assert.match(styles, /\.notification-actions/);
+  assert.match(app, /notificationTotalCount: 0/);
+  assert.match(app, /notificationsExpanded: false/);
+  assert.match(app, /notifications\.slice\(0, 5\)/);
+  assert.match(app, /Ver todas as notificações/);
+  assert.match(app, /toggleNotificationExpansion/);
+  assert.match(app, /\?all=1/);
 
   assert.match(worker, /url\.pathname === "\/api\/kanban"/);
   assert.match(worker, /url\.pathname === "\/api\/kanban\/boards"/);
@@ -761,12 +769,19 @@ test("adds private Kanban boards with member permissions, files, comments, histo
   assert.match(kanbanWorker, /env\.DOCUMENTS\.get/);
   assert.match(kanbanWorker, /removeStoredAttachments/);
   assert.match(kanbanWorker, /Content-Disposition/);
+  assert.match(kanbanWorker, /searchParams\.get\("all"\) === "1"/);
   assert.match(kanbanDb, /WHERE status = 'approved'/);
   assert.match(kanbanDb, /listAccessibleKanbanBoards/);
   assert.match(kanbanDb, /listKanbanActivity/);
   assert.match(kanbanDb, /activityStatement/);
   assert.match(kanbanDb, /const newlyAssigned = values\.assigneeIds\.filter/);
-  assert.match(kanbanDb, /marcou você no cartão/);
+  assert.match(kanbanDb, /listKanbanNotificationRecipientIds/);
+  assert.match(kanbanDb, /WHERE board_id = \? AND user_id <> \?/);
+  assert.match(kanbanDb, /appendKanbanNotifications/);
+  assert.match(kanbanDb, /criou o cartão/);
+  assert.match(kanbanDb, /atualizou o cartão/);
+  assert.match(kanbanDb, /adicionou uma atualização no cartão/);
+  assert.match(kanbanDb, /totalCount: Number\(total\?\.count \|\| 0\)/);
   assert.match(kanbanDb, /createKanbanCardComment/);
   assert.match(kanbanDb, /createKanbanCardAttachments/);
   assert.match(kanbanDb, /listKanbanCardActivity/);

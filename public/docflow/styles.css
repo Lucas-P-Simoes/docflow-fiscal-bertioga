@@ -487,6 +487,10 @@ select:focus-visible,
   box-shadow: 0 20px 55px rgba(23, 33, 29, 0.2);
 }
 
+.notification-popover.is-expanded {
+  width: min(520px, calc(100vw - 28px));
+}
+
 .notification-popover-heading {
   display: flex;
   align-items: center;
@@ -507,6 +511,10 @@ select:focus-visible,
 .notification-list {
   max-height: min(490px, calc(100vh - 110px));
   overflow-y: auto;
+}
+
+.notification-popover.is-expanded .notification-list {
+  max-height: min(70vh, 720px);
 }
 
 .notification-items {
@@ -564,7 +572,17 @@ select:focus-visible,
   font-size: 9.5px;
 }
 
-.notification-read-all {
+.notification-actions {
+  position: sticky;
+  bottom: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  border-top: 1px solid var(--line);
+  background: #f6f9f7;
+}
+
+.notification-read-all,
+.notification-expand-button {
   width: 100%;
   min-height: 42px;
   border: 0;
@@ -575,7 +593,13 @@ select:focus-visible,
   cursor: pointer;
 }
 
-.notification-read-all:hover {
+.notification-expand-button {
+  color: #28577f;
+  background: #edf4fa;
+}
+
+.notification-read-all:hover,
+.notification-expand-button:hover {
   background: var(--forest-soft);
 }
 

@@ -434,7 +434,8 @@ export async function handleKanbanNotifications(
   if (request.method !== "GET") return authError(405, "Método não permitido.");
   const authenticated = await requireKanbanAccount(request, env);
   if (authenticated instanceof Response) return authenticated;
-  return authJson(200, await listKanbanNotifications(env.DB, authenticated.account.id));
+  const includeAll = new URL(request.url).searchParams.get("all") === "1";
+  return authJson(200, await listKanbanNotifications(env.DB, authenticated.account.id, includeAll));
 }
 
 export async function handleKanbanNotificationMutation(

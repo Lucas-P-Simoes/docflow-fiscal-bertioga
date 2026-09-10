@@ -560,7 +560,11 @@ export async function createKanbanCardComment(
     now: number;
   },
 ): Promise<KanbanCardComment> {
-  await db.batch([
+  const [recipientIds, cardTitle] = await Promise.all([
+    listKanbanNotificationRecipientIds(db, values.boardId, values.actor.id),
+    getKanbanCardTitle(db, values.cardId, values.boardId),
+  ]);
+  const statements: D1PreparedStatement[] = [
     db
       .prepare(
         `INSERT INTO kanban_card_comments (id, card_id, author_user_id, body, created_at)
@@ -569,7 +573,15 @@ export async function createKanbanCardComment(
       .bind(values.id, values.cardId, values.actor.id, values.body, values.now),
     db.prepare("UPDATE kanban_cards SET updated_at = ? WHERE id = ?").bind(values.now, values.cardId),
     db.prepare("UPDATE kanban_boards SET updated_at = ? WHERE id = ?").bind(values.now, values.boardId),
-  ]);
+  ];
+  appendKanbanNotifications(db, statements, {
+    recipientIds,
+    cardId: values.cardId,
+    actorUserId: values.actor.id,
+    message: `${values.actor.name} adicionou uma atualização no cartão “${cardTitle || "Cartão"}”.`,
+    now: values.now,
+  });
+  await db.batch(statements);
   return {
     id: values.id,
     cardId: values.cardId,
@@ -640,6 +652,10 @@ export async function createKanbanCardAttachments(
     now: number;
   },
 ): Promise<KanbanCardAttachment[]> {
+  const [recipientIds, cardTitle] = await Promise.all([
+    listKanbanNotificationRecipientIds(db, values.boardId, values.actor.id),
+    getKanbanCardTitle(db, values.cardId, values.boardId),
+  ]);
   const statements: D1PreparedStatement[] = [];
   for (const attachment of values.attachments) {
     statements.push(
@@ -673,6 +689,13 @@ export async function createKanbanCardAttachments(
     db.prepare("UPDATE kanban_cards SET updated_at = ? WHERE id = ?").bind(values.now, values.cardId),
     db.prepare("UPDATE kanban_boards SET updated_at = ? WHERE id = ?").bind(values.now, values.boardId),
   );
+  appendKanbanNotifications(db, statements, {
+    recipientIds,
+    cardId: values.cardId,
+    actorUserId: values.actor.id,
+    message: `${values.actor.name} anexou ${values.attachments.length} ${values.attachments.length === 1 ? "arquivo" : "arquivos"} ao cartão “${cardTitle || "Cartão"}”.`,
+    now: values.now,
+  });
   await db.batch(statements);
   return listKanbanCardAttachments(db, values.cardId);
 }
@@ -689,7 +712,11 @@ export async function deleteKanbanCardAttachment(
 ): Promise<KanbanCardAttachmentRecord | null> {
   const attachment = await getKanbanCardAttachment(db, values.cardId, values.attachmentId);
   if (!attachment) return null;
-  await db.batch([
+  const [recipientIds, cardTitle] = await Promise.all([
+    listKanbanNotificationRecipientIds(db, values.boardId, values.actor.id),
+    getKanbanCardTitle(db, values.cardId, values.boardId),
+  ]);
+  const statements: D1PreparedStatement[] = [
     db.prepare("DELETE FROM kanban_card_attachments WHERE id = ? AND card_id = ?").bind(values.attachmentId, values.cardId),
     activityStatement(db, {
       boardId: values.boardId,
@@ -701,7 +728,15 @@ export async function deleteKanbanCardAttachment(
     }),
     db.prepare("UPDATE kanban_cards SET updated_at = ? WHERE id = ?").bind(values.now, values.cardId),
     db.prepare("UPDATE kanban_boards SET updated_at = ? WHERE id = ?").bind(values.now, values.boardId),
-  ]);
+  ];
+  appendKanbanNotifications(db, statements, {
+    recipientIds,
+    cardId: values.cardId,
+    actorUserId: values.actor.id,
+    message: `${values.actor.name} removeu um arquivo do cartão “${cardTitle || "Cartão"}”.`,
+    now: values.now,
+  });
+  await db.batch(statements);
   return attachment;
 }
 
@@ -799,6 +834,11 @@ export async function createKanbanCard(
     now: number;
   },
 ): Promise<KanbanCard> {
+  const notificationRecipientIds = await listKanbanNotificationRecipientIds(
+    db,
+    values.boardId,
+    values.actor.id,
+  );
   const statements: D1PreparedStatement[] = [
     db
       .prepare(
@@ -840,17 +880,14 @@ export async function createKanbanCard(
         )
         .bind(values.id, userId, values.actor.id, values.now),
     );
-    if (userId !== values.actor.id) {
-      statements.push(notificationStatement(db, {
-        userId,
-        cardId: values.id,
-        actorUserId: values.actor.id,
-        actorName: values.actor.name,
-        cardTitle: values.title,
-        now: values.now,
-      }));
-    }
   }
+  appendKanbanNotifications(db, statements, {
+    recipientIds: notificationRecipientIds,
+    cardId: values.id,
+    actorUserId: values.actor.id,
+    message: `${values.actor.name} criou o cartão “${values.title}”.`,
+    now: values.now,
+  });
 
   await db.batch(statements);
   const card = (await listKanbanCards(db, values.boardId)).find((item) => item.id === values.id);
@@ -879,10 +916,13 @@ export async function updateKanbanCard(
     .first<{ id: string; title: string; description: string; start_date: string | null; duration_days: number | null; status: KanbanStatus; position: number }>();
   if (!existing) return null;
 
-  const currentAssignees = await db
-    .prepare("SELECT user_id FROM kanban_card_assignees WHERE card_id = ?")
-    .bind(values.id)
-    .all<{ user_id: string }>();
+  const [currentAssignees, notificationRecipientIds] = await Promise.all([
+    db
+      .prepare("SELECT user_id FROM kanban_card_assignees WHERE card_id = ?")
+      .bind(values.id)
+      .all<{ user_id: string }>(),
+    listKanbanNotificationRecipientIds(db, values.boardId, values.actor.id),
+  ]);
   const currentIds = new Set(currentAssignees.results.map((row) => row.user_id));
   const nextIds = new Set(values.assigneeIds);
   const newlyAssigned = values.assigneeIds.filter((userId) => !currentIds.has(userId));
@@ -926,18 +966,6 @@ export async function updateKanbanCard(
         )
         .bind(values.id, userId, values.actor.id, values.now),
     );
-  }
-  for (const userId of newlyAssigned) {
-    if (userId !== values.actor.id) {
-      statements.push(notificationStatement(db, {
-        userId,
-        cardId: values.id,
-        actorUserId: values.actor.id,
-        actorName: values.actor.name,
-        cardTitle: values.title,
-        now: values.now,
-      }));
-    }
   }
   if (contentChanged) {
     const changes: string[] = [];
@@ -983,6 +1011,20 @@ export async function updateKanbanCard(
       now: values.now,
     }));
   }
+  if (contentChanged || statusChanged) {
+    const action = contentChanged && statusChanged
+      ? `atualizou e moveu o cartão “${values.title}” para ${statusLabel(values.status)}`
+      : statusChanged
+        ? `moveu o cartão “${values.title}” para ${statusLabel(values.status)}`
+        : `atualizou o cartão “${values.title}”`;
+    appendKanbanNotifications(db, statements, {
+      recipientIds: notificationRecipientIds,
+      cardId: values.id,
+      actorUserId: values.actor.id,
+      message: `${values.actor.name} ${action}.`,
+      now: values.now,
+    });
+  }
 
   await db.batch(statements);
   return (await listKanbanCards(db, values.boardId)).find((item) => item.id === values.id) || null;
@@ -1015,12 +1057,14 @@ export async function deleteKanbanCard(
 export async function listKanbanNotifications(
   db: D1Database,
   userId: string,
-): Promise<{ notifications: KanbanNotification[]; unreadCount: number }> {
+  includeAll = false,
+): Promise<{ notifications: KanbanNotification[]; unreadCount: number; totalCount: number }> {
   const accessSql = `(b.created_by = ? OR EXISTS (
     SELECT 1 FROM kanban_board_members AS access
     WHERE access.board_id = b.id AND access.user_id = ?
   ))`;
-  const [notifications, unread] = await Promise.all([
+  const limitSql = includeAll ? "" : "LIMIT 40";
+  const [notifications, unread, total] = await Promise.all([
     db
       .prepare(
         `SELECT n.id, c.board_id, n.card_id, n.message, n.read_at, n.created_at
@@ -1029,7 +1073,7 @@ export async function listKanbanNotifications(
          INNER JOIN kanban_boards AS b ON b.id = c.board_id
          WHERE n.user_id = ? AND ${accessSql}
          ORDER BY n.created_at DESC
-         LIMIT 40`,
+         ${limitSql}`,
       )
       .bind(userId, userId, userId)
       .all<NotificationRow>(),
@@ -1040,6 +1084,16 @@ export async function listKanbanNotifications(
          INNER JOIN kanban_cards AS c ON c.id = n.card_id
          INNER JOIN kanban_boards AS b ON b.id = c.board_id
          WHERE n.user_id = ? AND n.read_at IS NULL AND ${accessSql}`,
+      )
+      .bind(userId, userId, userId)
+      .first<{ count: number }>(),
+    db
+      .prepare(
+        `SELECT COUNT(*) AS count
+         FROM kanban_notifications AS n
+         INNER JOIN kanban_cards AS c ON c.id = n.card_id
+         INNER JOIN kanban_boards AS b ON b.id = c.board_id
+         WHERE n.user_id = ? AND ${accessSql}`,
       )
       .bind(userId, userId, userId)
       .first<{ count: number }>(),
@@ -1055,6 +1109,7 @@ export async function listKanbanNotifications(
       createdAt: row.created_at,
     })),
     unreadCount: Number(unread?.count || 0),
+    totalCount: Number(total?.count || 0),
   };
 }
 
@@ -1137,12 +1192,10 @@ function notificationStatement(
     userId: string;
     cardId: string;
     actorUserId: string;
-    actorName: string;
-    cardTitle: string;
+    message: string;
     now: number;
   },
 ): D1PreparedStatement {
-  const message = `${values.actorName} marcou você no cartão “${values.cardTitle}”.`;
   return db
     .prepare(
       `INSERT INTO kanban_notifications (
@@ -1154,7 +1207,57 @@ function notificationStatement(
       values.userId,
       values.cardId,
       values.actorUserId,
-      message,
+      values.message,
       values.now,
     );
+}
+
+async function listKanbanNotificationRecipientIds(
+  db: D1Database,
+  boardId: string,
+  actorUserId: string,
+): Promise<string[]> {
+  const result = await db
+    .prepare(
+      `SELECT user_id
+       FROM kanban_board_members
+       WHERE board_id = ? AND user_id <> ?`,
+    )
+    .bind(boardId, actorUserId)
+    .all<{ user_id: string }>();
+  return result.results.map((row) => row.user_id);
+}
+
+async function getKanbanCardTitle(
+  db: D1Database,
+  cardId: string,
+  boardId: string,
+): Promise<string | null> {
+  const row = await db
+    .prepare("SELECT title FROM kanban_cards WHERE id = ? AND board_id = ? LIMIT 1")
+    .bind(cardId, boardId)
+    .first<{ title: string }>();
+  return row?.title || null;
+}
+
+function appendKanbanNotifications(
+  db: D1Database,
+  statements: D1PreparedStatement[],
+  values: {
+    recipientIds: string[];
+    cardId: string;
+    actorUserId: string;
+    message: string;
+    now: number;
+  },
+): void {
+  for (const userId of values.recipientIds) {
+    statements.push(notificationStatement(db, {
+      userId,
+      cardId: values.cardId,
+      actorUserId: values.actorUserId,
+      message: values.message,
+      now: values.now,
+    }));
+  }
 }
