@@ -158,6 +158,10 @@ test("keeps the editable and deployable DocFlow assets synchronized", async () =
     builtMemorandumTemplate,
     sourceLoginImage,
     builtLoginImage,
+    sourceDrainageSystemImage,
+    builtDrainageSystemImage,
+    sourceDrainageBlockImage,
+    builtDrainageBlockImage,
   ] = await Promise.all([
     readFile(new URL("public/docflow/app.js", siteRoot)),
     readFile(new URL("dist/client/docflow/app.js", siteRoot)),
@@ -179,6 +183,10 @@ test("keeps the editable and deployable DocFlow assets synchronized", async () =
     ),
     readFile(new URL("public/docflow/assets/bertioga-praia-login.png", siteRoot)),
     readFile(new URL("dist/client/docflow/assets/bertioga-praia-login.png", siteRoot)),
+    readFile(new URL("public/docflow/images/drenagem-sistema-v1.png", siteRoot)),
+    readFile(new URL("dist/client/docflow/images/drenagem-sistema-v1.png", siteRoot)),
+    readFile(new URL("public/docflow/images/drenagem-bloco-v1.png", siteRoot)),
+    readFile(new URL("dist/client/docflow/images/drenagem-bloco-v1.png", siteRoot)),
   ]);
 
   assert.deepEqual(builtApp, sourceApp);
@@ -187,6 +195,8 @@ test("keeps the editable and deployable DocFlow assets synchronized", async () =
   assert.deepEqual(builtNotificationTemplate, sourceNotificationTemplate);
   assert.deepEqual(builtMemorandumTemplate, sourceMemorandumTemplate);
   assert.deepEqual(builtLoginImage, sourceLoginImage);
+  assert.deepEqual(builtDrainageSystemImage, sourceDrainageSystemImage);
+  assert.deepEqual(builtDrainageBlockImage, sourceDrainageBlockImage);
 });
 
 
@@ -317,7 +327,7 @@ test("labels every available document, including the technical opinion, as ready
     readFile(new URL("public/docflow/styles.css", siteRoot), "utf8"),
   ]);
 
-  assert.equal((app.match(/card-status is-ready/g) || []).length, 6);
+  assert.equal((app.match(/card-status is-ready/g) || []).length, 7);
   assert.equal((app.match(/card-status is-development/g) || []).length, 0);
   assert.match(app, /data-action="start-report">[\s\S]*?card-status is-ready">Pronto<\/span>[\s\S]*?<h3>Parecer técnico<\/h3>/);
   assert.match(app, /card-status is-ready">Pronto<\/span>[\s\S]*?<h3>Folha de cota<\/h3>/);
@@ -325,8 +335,36 @@ test("labels every available document, including the technical opinion, as ready
   assert.match(app, /data-kind="oficio">[\s\S]*?card-status is-ready">Pronto<\/span>[\s\S]*?<h3>Ofício<\/h3>/);
   assert.match(app, /data-action="start-notification">[\s\S]*?card-status is-ready">Pronto<\/span>[\s\S]*?<h3>Notificação<\/h3>/);
   assert.match(app, /data-action="start-warning">[\s\S]*?card-status is-ready">Pronto<\/span>[\s\S]*?<h3>Advertência<\/h3>/);
+  assert.match(app, /data-action="start-drainage">[\s\S]*?card-status is-ready">Pronto<\/span>[\s\S]*?<h3>Quantitativo de drenagem<\/h3>/);
   assert.match(styles, /\.card-status\s*\{/);
   assert.match(styles, /\.card-status\.is-ready\s*\{/);
+});
+
+
+test("builds a guided drainage quantity survey with traceable formulas and Excel export", async () => {
+  const [app, styles, systemImage, blockImage] = await Promise.all([
+    readFile(new URL("public/docflow/app.js", siteRoot), "utf8"),
+    readFile(new URL("public/docflow/styles.css", siteRoot), "utf8"),
+    readFile(new URL("public/docflow/images/drenagem-sistema-v1.png", siteRoot)),
+    readFile(new URL("public/docflow/images/drenagem-bloco-v1.png", siteRoot)),
+  ]);
+
+  assert.ok(systemImage.byteLength > 100_000);
+  assert.ok(blockImage.byteLength > 100_000);
+  assert.match(app, /DRAINAGE_STEPS\s*=\s*\["Dados da obra", "Serviços", "Parâmetros", "Quantitativos", "Memória e Excel"\]/);
+  assert.match(app, /function calculateDrainageStructure/);
+  assert.match(app, /const meanPerimeter = 2 \* \(\(internalLength \+ wall\) \+ \(internalWidth \+ wall\)\)/);
+  assert.match(app, /const modularArea = modularWidth \* modularHeight/);
+  assert.match(app, /Math\.ceil\(required \/ commercialLength\)/);
+  assert.match(app, /data-drainage-adopted=/);
+  assert.match(app, /function buildDrainageWorkbook/);
+  assert.match(app, /"01 - Resumo"/);
+  assert.match(app, /"07 - Composições"/);
+  assert.match(app, /print-drainage-memory/);
+  assert.match(app, /docflow-drainage-draft/);
+  assert.match(styles, /\.drainage-service-grid/);
+  assert.match(styles, /\.drainage-results-table/);
+  assert.match(styles, /body\.is-printing-drainage/);
 });
 
 

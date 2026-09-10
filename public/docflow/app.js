@@ -15,6 +15,29 @@ const OFFICIAL_CORRESPONDENCE_STEPS = ["Dados do documento", "Conteúdo", "Revis
 const CORRESPONDENCE_STEPS = ["Dados do documento", "Conteúdo", "Revisão e download"];
 const NOTIFICATION_STEPS = ["Dados da notificação", "Conteúdo e anexos", "Revisão e download"];
 const WARNING_STEPS = ["Dados da advertência", "Conteúdo e anexos", "Revisão e download"];
+const DRAINAGE_STEPS = ["Dados da obra", "Serviços", "Parâmetros", "Quantitativos", "Memória e Excel"];
+const DRAINAGE_IMAGES = {
+  system: "images/drenagem-sistema-v1.png",
+  block: "images/drenagem-bloco-v1.png",
+};
+const DRAINAGE_COMPOSITIONS = {
+  masonry: [
+    { material: "Cimento", coefficient: 5.5, unit: "saco/estrutura", precision: 0 },
+    { material: "Areia", coefficient: 0.417, unit: "m³/estrutura", precision: 2 },
+    { material: "Brita", coefficient: 0.333, unit: "m³/estrutura", precision: 2 },
+    { material: "Aço Ø8", coefficient: 16.67, unit: "m/estrutura", precision: 2 },
+    { material: "Arame", coefficient: 0.833, unit: "kg/estrutura", precision: 2 },
+    { material: "Compensado", coefficient: 1.333, unit: "chapa/estrutura", precision: 0 },
+    { material: "Caibro", coefficient: 4, unit: "peça/estrutura", precision: 0 },
+    { material: "Pregos", coefficient: 0.833, unit: "kg/estrutura", precision: 2 },
+  ],
+  concrete123: [
+    { material: "Cimento", coefficient: 7.576, unit: "saco/m³", precision: 0 },
+    { material: "Areia", coefficient: 0.515, unit: "m³/m³", precision: 2 },
+    { material: "Brita", coefficient: 0.773, unit: "m³/m³", precision: 2 },
+  ],
+  interlocking: { material: "Piso intertravado sextavado 30 cm", coefficient: 14.13, unit: "un/m²" },
+};
 const CORRESPONDENCE_TYPES = {
   memorando: {
     label: "Memorando",
@@ -322,6 +345,7 @@ const state = {
   correspondence: createCorrespondenceState(persisted),
   notification: createNotificationState(persisted, "notification"),
   warning: createNotificationState(persisted, "warning"),
+  drainage: createDrainageState(readStorage("docflow-drainage-draft", {})),
   analysis: { running: false, total: 0, done: 0 },
   generation: { running: false, progress: 0, message: "" },
   lastDownload: null,
@@ -432,6 +456,85 @@ function createNotificationState(saved = {}, kind = "notification") {
   };
 }
 
+function createDrainageState(saved = {}) {
+  const defaults = {
+    project: {
+      name: "Drenagem Rua 22",
+      neighborhood: "São Lourenço",
+      extension: 140,
+      roadWidth: 7,
+      standardLoss: 10,
+      responsible: "Eng. Civil",
+      date: todayInputValue(),
+    },
+    services: { bl: true, pv: true, pipes: true, pavement: true, gutter: true },
+    bl: {
+      quantity: 6,
+      internalLength: 1,
+      internalWidth: 0.6,
+      height: 1,
+      wallThickness: 0.14,
+      blockWidthCm: 14,
+      blockHeightCm: 19,
+      blockLengthCm: 39,
+      horizontalJointCm: 1,
+      verticalJointCm: 1,
+      channelLengthCm: 39,
+      channelRows: 1,
+      loss: 10,
+    },
+    pv: {
+      quantity: 3,
+      internalLength: 1,
+      internalWidth: 1,
+      height: 1,
+      wallThickness: 0.14,
+      blockWidthCm: 14,
+      blockHeightCm: 19,
+      blockLengthCm: 39,
+      horizontalJointCm: 1,
+      verticalJointCm: 1,
+      channelLengthCm: 39,
+      channelRows: 1,
+      loss: 10,
+    },
+    pipes: [
+      { diameter: "DN 400", extension: 36, commercialLength: 6, loss: 0 },
+      { diameter: "DN 600", extension: 140, commercialLength: 6, loss: 0 },
+    ],
+    pavement: {
+      length: 150,
+      width: 7,
+      effectiveArea: 150,
+      bedThicknessCm: 5,
+      baseThicknessCm: 15,
+      interlockingCoefficient: 14.13,
+    },
+    gutter: {
+      length: 100,
+      width: 0.3,
+      thickness: 0.1,
+      loss: 10,
+    },
+    adopted: {},
+    complete: false,
+  };
+  const savedPipes = Array.isArray(saved.pipes) ? saved.pipes : [];
+  return {
+    ...defaults,
+    ...saved,
+    project: { ...defaults.project, ...(saved.project || {}) },
+    services: { ...defaults.services, ...(saved.services || {}) },
+    bl: { ...defaults.bl, ...(saved.bl || {}) },
+    pv: { ...defaults.pv, ...(saved.pv || {}) },
+    pipes: defaults.pipes.map((pipe, index) => ({ ...pipe, ...(savedPipes[index] || {}) })),
+    pavement: { ...defaults.pavement, ...(saved.pavement || {}) },
+    gutter: { ...defaults.gutter, ...(saved.gutter || {}) },
+    adopted: saved.adopted && typeof saved.adopted === "object" ? saved.adopted : {},
+    complete: false,
+  };
+}
+
 function todayInputValue() {
   const now = new Date();
   const offset = now.getTimezoneOffset() * 60_000;
@@ -462,6 +565,7 @@ function scheduleSave() {
         warningCity: state.warning.city,
       };
       localStorage.setItem("docflow-preferences", JSON.stringify(preferences));
+      localStorage.setItem("docflow-drainage-draft", JSON.stringify({ ...state.drainage, complete: false }));
       elements.saveStatus.textContent = "Preferências locais";
     } catch {
       elements.saveStatus.textContent = "Preferências desta sessão";
@@ -1147,8 +1251,10 @@ function render() {
     elements.view.innerHTML = renderSuccess();
   } else {
     elements.actionBar.classList.remove("is-hidden");
-    elements.view.innerHTML = state.flow === "report"
-      ? renderReport()
+    elements.view.innerHTML = state.flow === "drainage"
+      ? renderDrainage()
+      : state.flow === "report"
+        ? renderReport()
       : state.flow === "cota"
         ? renderCota()
         : isNoticeFlow()
@@ -1162,6 +1268,7 @@ function render() {
 }
 
 function currentData() {
+  if (state.flow === "drainage") return state.drainage;
   if (state.flow === "report") return state.report;
   if (state.flow === "cota") return state.cota;
   if (isNoticeFlow()) return noticeState();
@@ -1169,6 +1276,7 @@ function currentData() {
 }
 
 function currentSteps() {
+  if (state.flow === "drainage") return DRAINAGE_STEPS;
   if (state.flow === "report") return REPORT_STEPS;
   if (state.flow === "cota") return COTA_STEPS;
   if (state.flow === "notification") return NOTIFICATION_STEPS;
@@ -1178,7 +1286,11 @@ function currentSteps() {
 }
 
 function renderSidebar() {
-  if (state.flow === "report") {
+  if (state.flow === "drainage") {
+    elements.flowEyebrow.textContent = "Engenharia de drenagem";
+    elements.flowTitle.textContent = "Monte o quantitativo";
+    elements.flowDescription.textContent = "Informe a geometria e confira cálculo, valor adotado e memória.";
+  } else if (state.flow === "report") {
     elements.flowEyebrow.textContent = "Parecer técnico";
     elements.flowTitle.textContent = "Prepare a vistoria";
     elements.flowDescription.textContent = "Preencha o modelo, anexe o mapa e organize as evidências.";
@@ -1219,9 +1331,13 @@ function configureActionBar() {
   elements.backButton.disabled = false;
   elements.nextButton.disabled = false;
   elements.nextButton.innerHTML = lastStep
-    ? `Gerar documento <span aria-hidden="true">↓</span>`
+    ? state.flow === "drainage"
+      ? `Baixar Excel <span aria-hidden="true">↓</span>`
+      : `Gerar documento <span aria-hidden="true">↓</span>`
     : `Continuar <span aria-hidden="true">→</span>`;
-  elements.actionHint.textContent = lastStep ? "Pronto para criar o arquivo" : `Etapa ${state.step + 1} de ${currentSteps().length}`;
+  elements.actionHint.textContent = lastStep
+    ? state.flow === "drainage" ? "Planilha técnica com 7 abas" : "Pronto para criar o arquivo"
+    : `Etapa ${state.step + 1} de ${currentSteps().length}`;
 }
 
 function renderHome() {
@@ -1268,6 +1384,16 @@ function renderHome() {
         <h3>Advertência</h3>
         <p>Gere a advertência no modelo oficial da Prefeitura de Bertioga, com assinaturas e fotos opcionais.</p>
         <span class="card-link">Criar advertência <span aria-hidden="true">→</span></span>
+      </article>
+      <article class="document-card is-drainage" tabindex="0" role="button" data-action="start-drainage">
+        <span class="card-status is-ready">Pronto</span>
+        <div class="drainage-card-copy">
+          <span class="card-number" aria-hidden="true">07</span><span class="card-icon" aria-hidden="true">∑</span>
+          <h3>Quantitativo de drenagem</h3>
+          <p>Calcule BL, PV, tubulações, pavimentação e sarjeta com memória técnica e planilha Excel.</p>
+          <span class="card-link">Montar quantitativo <span aria-hidden="true">→</span></span>
+        </div>
+        <img class="drainage-card-image" src="${DRAINAGE_IMAGES.system}" alt="Corte ilustrado de uma rua com boca de lobo, tubulação e poço de visita" />
       </article>
     </div>
   </section>`;
@@ -2480,6 +2606,577 @@ function stopNotificationPolling() {
   notificationPollTimer = null;
 }
 
+function renderDrainage() {
+  return [
+    renderDrainageProject,
+    renderDrainageServices,
+    renderDrainageParameters,
+    renderDrainageResults,
+    renderDrainageMemory,
+  ][state.step]();
+}
+
+function renderDrainageProject() {
+  const project = state.drainage.project;
+  return `${pageHeading("Etapa 1", "Quantitativo de obras de drenagem", "Comece pelos dados gerais do trecho. Eles identificam a memória e alimentam os parâmetros iniciais.")}
+  <section class="drainage-hero" aria-label="Visão geral do sistema de drenagem">
+    <img src="${DRAINAGE_IMAGES.system}" alt="Corte ilustrado de pavimento, boca de lobo, tubo PEAD e poço de visita" />
+    <div class="drainage-hero-copy">
+      <span class="eyebrow eyebrow-dark">Cálculo rastreável</span>
+      <h2>Da geometria ao material</h2>
+      <p>Cada resultado registra a fórmula, o valor calculado e o quantitativo adotado pelo responsável.</p>
+      <div class="drainage-flow-chips" aria-label="Etapas resumidas">
+        <span>Dados</span><span>Serviços</span><span>Parâmetros</span><span>Memória</span><span>Excel</span>
+      </div>
+    </div>
+  </section>
+  <section class="panel drainage-panel">
+    ${panelHeader("Dados da obra", "Identifique o trecho e defina a margem padrão. Os valores podem ser alterados a qualquer momento.")}
+    <div class="field-grid">
+      <label class="field"><span>Nome da obra *</span><input type="text" data-bind="drainage.project.name" value="${e(project.name)}" placeholder="Ex.: Drenagem Rua 22" /></label>
+      <label class="field"><span>Bairro *</span><input type="text" data-bind="drainage.project.neighborhood" value="${e(project.neighborhood)}" placeholder="Ex.: São Lourenço" /></label>
+    </div>
+    <div class="field-grid three">
+      ${drainageNumberField("Extensão da obra", "drainage.project.extension", project.extension, "m", { min: 0.01 })}
+      ${drainageNumberField("Largura da via", "drainage.project.roadWidth", project.roadWidth, "m", { min: 0.01 })}
+      ${drainageNumberField("Margem padrão de perdas", "drainage.project.standardLoss", project.standardLoss, "%", { min: 0, max: 100 })}
+    </div>
+    <div class="field-grid">
+      <label class="field"><span>Responsável *</span><input type="text" data-bind="drainage.project.responsible" value="${e(project.responsible)}" placeholder="Ex.: Eng. Civil" /></label>
+      <label class="field"><span>Data *</span><input type="date" data-bind="drainage.project.date" value="${e(project.date)}" /></label>
+    </div>
+  </section>`;
+}
+
+function renderDrainageServices() {
+  const services = state.drainage.services;
+  const choices = [
+    { key: "bl", icon: "BL", title: "Boca de lobo", description: "Alvenaria, canaletas e materiais por geometria." },
+    { key: "pv", icon: "PV", title: "Poço de visita", description: "Dimensões internas, paredes e composição escalonada." },
+    { key: "pipes", icon: "◉", title: "Tubulação PEAD", description: "Extensão, barras comerciais, compra e sobra." },
+    { key: "pavement", icon: "▦", title: "Pavimentação", description: "Lastro, aterro/base e piso intertravado." },
+    { key: "gutter", icon: "⌞", title: "Sarjeta", description: "Volume com perdas e concreto 1:2:3." },
+  ];
+  return `${pageHeading("Etapa 2", "Quais serviços fazem parte da obra?", "Ative somente o que existe no trecho. As próximas etapas mostrarão apenas os parâmetros necessários.")}
+  <section class="panel drainage-panel">
+    ${panelHeader("Serviços do quantitativo", "Você poderá incluir ou retirar um serviço sem refazer os demais cálculos.")}
+    <div class="drainage-service-grid" data-drainage-service-grid>
+      ${choices.map((choice) => `<label class="drainage-service-choice${services[choice.key] ? " is-selected" : ""}">
+        <input type="checkbox" data-bind="drainage.services.${choice.key}" ${services[choice.key] ? "checked" : ""} />
+        <span class="drainage-service-icon" aria-hidden="true">${choice.icon}</span>
+        <span><strong>${choice.title}</strong><small>${choice.description}</small></span>
+        <span class="drainage-service-check" aria-hidden="true">✓</span>
+      </label>`).join("")}
+    </div>
+    <div class="notice"><span aria-hidden="true">i</span><span><strong>Estrutura preparada para evoluir.</strong> Novos serviços poderão ser incluídos depois sem alterar as fórmulas já conferidas.</span></div>
+  </section>`;
+}
+
+function renderDrainageParameters() {
+  const drainage = state.drainage;
+  const sections = [];
+  if (drainage.services.bl) sections.push(renderDrainageStructureParameters("bl", "Boca de lobo — BL", "A quantidade de blocos usa a linha média das paredes e as dimensões modulares do bloco."));
+  if (drainage.services.pv) sections.push(renderDrainageStructureParameters("pv", "Poço de visita — PV", "O mesmo motor geométrico da BL é aplicado às dimensões próprias do poço de visita."));
+  if (drainage.services.pipes) sections.push(renderDrainagePipeParameters());
+  if (drainage.services.pavement) sections.push(renderDrainagePavementParameters());
+  if (drainage.services.gutter) sections.push(renderDrainageGutterParameters());
+  return `${pageHeading("Etapa 3", "Informe dimensões e composições", "As unidades aparecem ao lado de cada campo para reduzir erros de preenchimento.")}
+  <figure class="drainage-technical-figure">
+    <img src="${DRAINAGE_IMAGES.block}" alt="Bloco de concreto dimensionado ao lado de uma estrutura de drenagem em alvenaria" />
+    <figcaption><strong>O tamanho do bloco entra no cálculo.</strong><span>Comprimento e altura, somados às juntas, definem quantas peças ocupam cada metro quadrado de parede.</span></figcaption>
+  </figure>
+  <div class="drainage-parameter-stack">${sections.join("")}</div>`;
+}
+
+function renderDrainageStructureParameters(key, title, description) {
+  const structure = state.drainage[key];
+  return `<section class="panel drainage-panel drainage-parameter-section">
+    ${panelHeader(title, description)}
+    <div class="field-grid three">
+      ${drainageNumberField("Quantidade", `drainage.${key}.quantity`, structure.quantity, "un", { min: 1, step: 1 })}
+      ${drainageNumberField("Comprimento interno", `drainage.${key}.internalLength`, structure.internalLength, "m", { min: 0.01 })}
+      ${drainageNumberField("Largura interna", `drainage.${key}.internalWidth`, structure.internalWidth, "m", { min: 0.01 })}
+      ${drainageNumberField("Profundidade / altura", `drainage.${key}.height`, structure.height, "m", { min: 0.01 })}
+      ${drainageNumberField("Espessura da parede", `drainage.${key}.wallThickness`, structure.wallThickness, "m", { min: 0.01 })}
+      ${drainageNumberField("Perdas", `drainage.${key}.loss`, structure.loss, "%", { min: 0, max: 100 })}
+    </div>
+    <div class="drainage-subheading"><span class="drainage-subheading-mark" aria-hidden="true">▤</span><div><strong>Bloco e juntas</strong><small>Dimensões reais em centímetros.</small></div></div>
+    <div class="field-grid three">
+      ${drainageNumberField("Largura do bloco", `drainage.${key}.blockWidthCm`, structure.blockWidthCm, "cm", { min: 0.01 })}
+      ${drainageNumberField("Altura do bloco", `drainage.${key}.blockHeightCm`, structure.blockHeightCm, "cm", { min: 0.01 })}
+      ${drainageNumberField("Comprimento do bloco", `drainage.${key}.blockLengthCm`, structure.blockLengthCm, "cm", { min: 0.01 })}
+      ${drainageNumberField("Junta horizontal", `drainage.${key}.horizontalJointCm`, structure.horizontalJointCm, "cm", { min: 0 })}
+      ${drainageNumberField("Junta vertical", `drainage.${key}.verticalJointCm`, structure.verticalJointCm, "cm", { min: 0 })}
+      ${drainageNumberField("Comprimento da canaleta", `drainage.${key}.channelLengthCm`, structure.channelLengthCm, "cm", { min: 0.01 })}
+      ${drainageNumberField("Fiadas com canaleta", `drainage.${key}.channelRows`, structure.channelRows, "fiada", { min: 0, step: 1 })}
+    </div>
+  </section>`;
+}
+
+function renderDrainagePipeParameters() {
+  return `<section class="panel drainage-panel drainage-parameter-section">
+    ${panelHeader("Tubulação PEAD", "O sistema arredonda para barras inteiras e mostra automaticamente o comprimento comprado e a sobra.")}
+    <div class="drainage-pipe-list">
+      ${state.drainage.pipes.map((pipe, index) => `<article class="drainage-pipe-row">
+        <label class="field"><span>Diâmetro</span><input type="text" data-bind="drainage.pipes.${index}.diameter" value="${e(pipe.diameter)}" placeholder="Ex.: DN 600" /></label>
+        ${drainageNumberField("Extensão necessária", `drainage.pipes.${index}.extension`, pipe.extension, "m", { min: 0.01 })}
+        ${drainageNumberField("Comprimento comercial", `drainage.pipes.${index}.commercialLength`, pipe.commercialLength, "m", { min: 0.01 })}
+        ${drainageNumberField("Perda adicional", `drainage.pipes.${index}.loss`, pipe.loss, "%", { min: 0, max: 100 })}
+      </article>`).join("")}
+    </div>
+  </section>`;
+}
+
+function renderDrainagePavementParameters() {
+  const pavement = state.drainage.pavement;
+  return `<section class="panel drainage-panel drainage-parameter-section">
+    ${panelHeader("Pavimentação e intertravado", "Área da caixa, volumes de lastro e base, e consumo de peças da área recomposta.")}
+    <div class="field-grid three">
+      ${drainageNumberField("Comprimento", "drainage.pavement.length", pavement.length, "m", { min: 0.01 })}
+      ${drainageNumberField("Largura", "drainage.pavement.width", pavement.width, "m", { min: 0.01 })}
+      ${drainageNumberField("Área recomposta", "drainage.pavement.effectiveArea", pavement.effectiveArea, "m²", { min: 0.01 })}
+      ${drainageNumberField("Espessura do lastro", "drainage.pavement.bedThicknessCm", pavement.bedThicknessCm, "cm", { min: 0.01 })}
+      ${drainageNumberField("Espessura do aterro/base", "drainage.pavement.baseThicknessCm", pavement.baseThicknessCm, "cm", { min: 0.01 })}
+      ${drainageNumberField("Consumo do intertravado", "drainage.pavement.interlockingCoefficient", pavement.interlockingCoefficient, "un/m²", { min: 0.01 })}
+    </div>
+  </section>`;
+}
+
+function renderDrainageGutterParameters() {
+  const gutter = state.drainage.gutter;
+  return `<section class="panel drainage-panel drainage-parameter-section">
+    ${panelHeader("Sarjeta e concreto 1:2:3", "O volume geométrico recebe a perda e alimenta automaticamente cimento, areia e brita.")}
+    <div class="field-grid three">
+      ${drainageNumberField("Comprimento", "drainage.gutter.length", gutter.length, "m", { min: 0.01 })}
+      ${drainageNumberField("Largura", "drainage.gutter.width", gutter.width, "m", { min: 0.01 })}
+      ${drainageNumberField("Espessura", "drainage.gutter.thickness", gutter.thickness, "m", { min: 0.01 })}
+      ${drainageNumberField("Perdas", "drainage.gutter.loss", gutter.loss, "%", { min: 0, max: 100 })}
+    </div>
+    <div class="drainage-composition-strip"><span>Concreto 1:2:3</span><strong>7,576 sacos</strong><small>cimento/m³</small><strong>0,515 m³</strong><small>areia/m³</small><strong>0,773 m³</strong><small>brita/m³</small></div>
+  </section>`;
+}
+
+function drainageNumberField(label, path, value, unit, options = {}) {
+  const min = options.min ?? 0;
+  const max = options.max ?? "";
+  const step = options.step ?? "any";
+  return `<label class="field"><span>${e(label)}</span><span class="unit-field"><input type="number" data-bind="${e(path)}" value="${e(value)}" min="${e(min)}" ${max === "" ? "" : `max="${e(max)}"`} step="${e(step)}" inputmode="decimal" /><small>${e(unit)}</small></span></label>`;
+}
+
+function renderDrainageResults() {
+  const results = calculateDrainageResults();
+  const project = state.drainage.project;
+  return `${pageHeading("Etapa 4", "Quantitativo consolidado", "Compare o cálculo automático com o valor que será adotado pelo responsável técnico.")}
+  <section class="drainage-result-summary">
+    <article><span>Obra</span><strong>${e(project.name)}</strong><small>${e(project.neighborhood)}</small></article>
+    <article><span>Serviços ativos</span><strong>${drainageActiveServiceCount()}</strong><small>${results.rows.length} itens calculados</small></article>
+    <article><span>Trecho</span><strong>${drainageFormat(project.extension)} m</strong><small>via com ${drainageFormat(project.roadWidth)} m</small></article>
+  </section>
+  <section class="panel drainage-panel">
+    ${panelHeader("Materiais e serviços", "Edite somente a coluna adotada quando houver arredondamento ou margem operacional de engenharia.")}
+    <div class="drainage-table-scroll">
+      <table class="drainage-results-table">
+        <thead><tr><th>Serviço</th><th>Material</th><th>Calculado</th><th>Adotado</th><th>Observação</th></tr></thead>
+        <tbody>${results.rows.map((row) => `<tr>
+          <td><span class="drainage-service-tag">${e(row.service)}</span></td>
+          <td><strong>${e(row.material)}</strong></td>
+          <td>${drainageFormat(row.calculated, row.precision)} <small>${e(row.unit)}</small></td>
+          <td><span class="drainage-adopted-field"><input type="number" min="0" step="${row.precision === 0 ? 1 : 0.01}" data-drainage-adopted="${e(row.id)}" value="${e(drainageAdoptedValue(row))}" aria-label="Quantidade adotada de ${e(row.material)}" /><small>${e(row.unit)}</small></span></td>
+          <td>${e(row.note || "Conforme memória de cálculo")}</td>
+        </tr>`).join("")}</tbody>
+      </table>
+    </div>
+    <div class="notice"><span aria-hidden="true">✓</span><span><strong>O calculado permanece preservado.</strong> Alterar o adotado não apaga a fórmula que justificou o quantitativo.</span></div>
+  </section>`;
+}
+
+function renderDrainageMemory() {
+  const results = calculateDrainageResults();
+  const groups = [...new Set(results.rows.map((row) => row.service))];
+  return `${pageHeading("Etapa 5", "Memória de cálculo e Excel", "Revise as fórmulas. A planilha terá sete abas com os mesmos números apresentados na tela.")}
+  <section class="drainage-memory-actions">
+    <div><strong>${results.rows.length} itens prontos</strong><span>Cálculo, valor adotado e composição no mesmo arquivo.</span></div>
+    <button class="button button-secondary" type="button" data-action="print-drainage-memory">Imprimir / salvar PDF</button>
+    <button class="button button-primary" type="button" data-action="download-drainage-excel">Baixar Excel</button>
+  </section>
+  <section class="drainage-memory-print" aria-label="Memória de cálculo de drenagem">
+    <div class="drainage-memory-cover">
+      <span class="eyebrow eyebrow-dark">Memória de cálculo</span>
+      <h2>${e(state.drainage.project.name)}</h2>
+      <p>${e(state.drainage.project.neighborhood)} • ${e(state.drainage.project.responsible)} • ${e(formatDrainageDate(state.drainage.project.date))}</p>
+    </div>
+    <div class="drainage-memory-grid">
+      ${groups.map((group) => `<article class="drainage-memory-card">
+        <div class="drainage-memory-card-heading"><span>${e(group)}</span><strong>${results.rows.filter((row) => row.service === group).length} itens</strong></div>
+        ${results.rows.filter((row) => row.service === group).map((row) => `<div class="drainage-formula-row">
+          <div><strong>${e(row.material)}</strong><span>${e(row.formula)}</span></div>
+          <div><small>Calculado</small><strong>${drainageFormat(row.calculated, row.precision)} ${e(row.unit)}</strong></div>
+          <div><small>Adotado</small><strong>${drainageFormat(drainageAdoptedValue(row), row.precision)} ${e(row.unit)}</strong></div>
+        </div>`).join("")}
+      </article>`).join("")}
+    </div>
+  </section>`;
+}
+
+function calculateDrainageResults() {
+  const rows = [];
+  if (state.drainage.services.bl) rows.push(...calculateDrainageStructure("bl", "BL"));
+  if (state.drainage.services.pv) rows.push(...calculateDrainageStructure("pv", "PV"));
+  if (state.drainage.services.pipes) rows.push(...calculateDrainagePipes());
+  if (state.drainage.services.pavement) rows.push(...calculateDrainagePavement());
+  if (state.drainage.services.gutter) rows.push(...calculateDrainageGutter());
+  return { rows };
+}
+
+function calculateDrainageStructure(key, service) {
+  const value = state.drainage[key];
+  const quantity = drainageNumber(value.quantity);
+  const internalLength = drainageNumber(value.internalLength);
+  const internalWidth = drainageNumber(value.internalWidth);
+  const height = drainageNumber(value.height);
+  const wall = drainageNumber(value.wallThickness);
+  const lossFactor = 1 + drainageNumber(value.loss) / 100;
+  const meanPerimeter = 2 * ((internalLength + wall) + (internalWidth + wall));
+  const wallArea = meanPerimeter * height * quantity;
+  const modularWidth = (drainageNumber(value.blockLengthCm) + drainageNumber(value.verticalJointCm)) / 100;
+  const modularHeight = (drainageNumber(value.blockHeightCm) + drainageNumber(value.horizontalJointCm)) / 100;
+  const modularArea = modularWidth * modularHeight;
+  const blocks = modularArea > 0 ? wallArea / modularArea * lossFactor : 0;
+  const channelModule = (drainageNumber(value.channelLengthCm) + drainageNumber(value.verticalJointCm)) / 100;
+  const channels = channelModule > 0
+    ? meanPerimeter * quantity * drainageNumber(value.channelRows) / channelModule * lossFactor
+    : 0;
+  const internalPerimeter = 2 * (internalLength + internalWidth);
+  const compositionFactor = internalPerimeter / 3.2;
+  const result = [
+    drainageResult({
+      id: `${key}-blocks`, service, material: `Bloco ${drainageFormat(value.blockWidthCm, 0)} × ${drainageFormat(value.blockHeightCm, 0)} × ${drainageFormat(value.blockLengthCm, 0)} cm`,
+      unit: "un", calculated: blocks, defaultAdopted: Math.ceil(blocks), precision: 0,
+      formula: `${drainageFormat(wallArea)} m² ÷ ${drainageFormat(modularArea, 3)} m²/bloco × ${drainageFormat(lossFactor, 2)}`,
+      note: `${drainageFormat(meanPerimeter)} m de perímetro médio`,
+    }),
+    drainageResult({
+      id: `${key}-channels`, service, material: "Canaleta de concreto", unit: "un", calculated: channels,
+      defaultAdopted: Math.ceil(channels), precision: 0,
+      formula: `${drainageFormat(meanPerimeter)} m × ${drainageFormat(quantity, 0)} × ${drainageFormat(value.channelRows, 0)} fiada(s) ÷ ${drainageFormat(channelModule)} m × ${drainageFormat(lossFactor, 2)}`,
+      note: "Cinta superior calculada pelo comprimento modular",
+    }),
+  ];
+  DRAINAGE_COMPOSITIONS.masonry.forEach((composition) => {
+    const calculated = quantity * composition.coefficient * compositionFactor;
+    const unit = composition.unit.split("/")[0];
+    result.push(drainageResult({
+      id: `${key}-${slugify(composition.material)}`,
+      service,
+      material: composition.material,
+      unit,
+      calculated,
+      defaultAdopted: composition.precision === 0 ? Math.ceil(calculated) : drainageRound(calculated),
+      precision: composition.precision,
+      formula: `${drainageFormat(quantity, 0)} × ${drainageFormat(composition.coefficient, 3)} × fator geométrico ${drainageFormat(compositionFactor, 3)}`,
+      note: `Composição-base ajustada ao perímetro interno (${drainageFormat(internalPerimeter)} m)`,
+    }));
+  });
+  return result;
+}
+
+function calculateDrainagePipes() {
+  return state.drainage.pipes.map((pipe, index) => {
+    const extension = drainageNumber(pipe.extension);
+    const lossFactor = 1 + drainageNumber(pipe.loss) / 100;
+    const required = extension * lossFactor;
+    const commercialLength = drainageNumber(pipe.commercialLength);
+    const bars = commercialLength > 0 ? Math.ceil(required / commercialLength) : 0;
+    const purchased = bars * commercialLength;
+    const leftover = Math.max(0, purchased - required);
+    return drainageResult({
+      id: `pipe-${index}`,
+      service: "Tubulação",
+      material: `Tubo PEAD ${pipe.diameter || `Linha ${index + 1}`}`,
+      unit: "m",
+      calculated: required,
+      defaultAdopted: purchased,
+      precision: 2,
+      formula: `ceil(${drainageFormat(required)} ÷ ${drainageFormat(commercialLength)}) = ${bars} barras; ${bars} × ${drainageFormat(commercialLength)} = ${drainageFormat(purchased)} m`,
+      note: `${bars} barras • sobra de ${drainageFormat(leftover)} m`,
+    });
+  });
+}
+
+function calculateDrainagePavement() {
+  const value = state.drainage.pavement;
+  const area = drainageNumber(value.length) * drainageNumber(value.width);
+  const bed = area * drainageNumber(value.bedThicknessCm) / 100;
+  const base = area * drainageNumber(value.baseThicknessCm) / 100;
+  const interlocking = drainageNumber(value.effectiveArea) * drainageNumber(value.interlockingCoefficient);
+  return [
+    drainageResult({ id: "pavement-bed", service: "Pavimentação", material: "Lastro de brita", unit: "m³", calculated: bed, defaultAdopted: Math.ceil(bed), precision: 2, formula: `${drainageFormat(value.length)} × ${drainageFormat(value.width)} × ${drainageFormat(drainageNumber(value.bedThicknessCm) / 100, 3)}`, note: `Área da caixa: ${drainageFormat(area)} m²` }),
+    drainageResult({ id: "pavement-base", service: "Pavimentação", material: "Aterro / base", unit: "m³", calculated: base, defaultAdopted: Math.ceil(base), precision: 2, formula: `${drainageFormat(value.length)} × ${drainageFormat(value.width)} × ${drainageFormat(drainageNumber(value.baseThicknessCm) / 100, 3)}`, note: `Área da caixa: ${drainageFormat(area)} m²` }),
+    drainageResult({ id: "pavement-interlocking", service: "Pavimentação", material: DRAINAGE_COMPOSITIONS.interlocking.material, unit: "un", calculated: interlocking, defaultAdopted: Math.ceil(interlocking), precision: 0, formula: `${drainageFormat(value.effectiveArea)} m² × ${drainageFormat(value.interlockingCoefficient)} un/m²`, note: "Aplicado somente à área efetivamente recomposta" }),
+  ];
+}
+
+function calculateDrainageGutter() {
+  const value = state.drainage.gutter;
+  const geometric = drainageNumber(value.length) * drainageNumber(value.width) * drainageNumber(value.thickness);
+  const lossFactor = 1 + drainageNumber(value.loss) / 100;
+  const concrete = geometric * lossFactor;
+  const result = [drainageResult({
+    id: "gutter-concrete", service: "Sarjeta", material: "Concreto", unit: "m³", calculated: concrete,
+    defaultAdopted: drainageRound(concrete), precision: 2,
+    formula: `${drainageFormat(value.length)} × ${drainageFormat(value.width)} × ${drainageFormat(value.thickness)} × ${drainageFormat(lossFactor, 2)}`,
+    note: `Volume geométrico: ${drainageFormat(geometric)} m³`,
+  })];
+  DRAINAGE_COMPOSITIONS.concrete123.forEach((composition) => {
+    const calculated = concrete * composition.coefficient;
+    result.push(drainageResult({
+      id: `gutter-${slugify(composition.material)}`, service: "Sarjeta", material: composition.material,
+      unit: composition.unit.split("/")[0], calculated,
+      defaultAdopted: composition.precision === 0 ? Math.ceil(calculated) : drainageRound(calculated),
+      precision: composition.precision,
+      formula: `${drainageFormat(concrete)} m³ × ${drainageFormat(composition.coefficient, 3)} ${composition.unit}`,
+      note: "Composição de concreto 1:2:3",
+    }));
+  });
+  return result;
+}
+
+function drainageResult(result) {
+  return result;
+}
+
+function drainageActiveServiceCount() {
+  return Object.values(state.drainage.services).filter(Boolean).length;
+}
+
+function drainageNumber(value) {
+  const parsed = Number(String(value ?? "").replace(",", "."));
+  return Number.isFinite(parsed) ? parsed : 0;
+}
+
+function drainageRound(value, precision = 2) {
+  const factor = 10 ** precision;
+  return Math.round((value + Number.EPSILON) * factor) / factor;
+}
+
+function drainageFormat(value, precision = 2) {
+  return new Intl.NumberFormat("pt-BR", {
+    minimumFractionDigits: 0,
+    maximumFractionDigits: precision,
+  }).format(drainageNumber(value));
+}
+
+function drainageAdoptedValue(row) {
+  return Object.prototype.hasOwnProperty.call(state.drainage.adopted, row.id)
+    ? drainageNumber(state.drainage.adopted[row.id])
+    : row.defaultAdopted;
+}
+
+function formatDrainageDate(value) {
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(String(value || ""))) return "Data não informada";
+  const [year, month, day] = value.split("-");
+  return `${day}/${month}/${year}`;
+}
+
+function printDrainageMemory() {
+  document.body.classList.add("is-printing-drainage");
+  const cleanup = () => document.body.classList.remove("is-printing-drainage");
+  window.addEventListener("afterprint", cleanup, { once: true });
+  window.print();
+  setTimeout(cleanup, 1_500);
+}
+
+async function generateDrainageSpreadsheet() {
+  if (!validateCurrentStep()) return;
+  if (!window.JSZip) {
+    showMessage({ title: "Gerador indisponível", text: "O componente de criação do Excel não foi carregado. Atualize a página e tente novamente.", kind: "error" });
+    return;
+  }
+  state.generation = { running: true, progress: 12, message: "Organizando as sete abas do quantitativo…" };
+  render();
+  try {
+    const blob = await buildDrainageWorkbook((progress, message) => setGenerationProgress(progress, message));
+    const filename = `quantitativo-drenagem-${slugify(state.drainage.project.name, "obra")}.xlsx`;
+    if (state.lastDownload?.url) URL.revokeObjectURL(state.lastDownload.url);
+    const url = URL.createObjectURL(blob);
+    state.lastDownload = { blob, filename, url, saved: false, localOnly: true };
+    triggerDownload(url, filename);
+    state.drainage.complete = true;
+    state.generation.running = false;
+    render();
+  } catch (error) {
+    state.generation.running = false;
+    render();
+    showMessage({ title: "Não foi possível gerar o Excel", text: error.message, kind: "error" });
+  }
+}
+
+async function buildDrainageWorkbook(onProgress) {
+  const sheets = drainageWorkbookSheets();
+  const zip = new window.JSZip();
+  const createdAt = new Date().toISOString();
+  onProgress(24, "Montando o resumo e a memória de cálculo…");
+  zip.file("[Content_Types].xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Types xmlns="http://schemas.openxmlformats.org/package/2006/content-types">
+  <Default Extension="rels" ContentType="application/vnd.openxmlformats-package.relationships+xml"/>
+  <Default Extension="xml" ContentType="application/xml"/>
+  <Override PartName="/xl/workbook.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet.main+xml"/>
+  <Override PartName="/xl/styles.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.styles+xml"/>
+  <Override PartName="/docProps/core.xml" ContentType="application/vnd.openxmlformats-package.core-properties+xml"/>
+  <Override PartName="/docProps/app.xml" ContentType="application/vnd.openxmlformats-officedocument.extended-properties+xml"/>
+  ${sheets.map((_, index) => `<Override PartName="/xl/worksheets/sheet${index + 1}.xml" ContentType="application/vnd.openxmlformats-officedocument.spreadsheetml.worksheet+xml"/>`).join("\n  ")}
+</Types>`);
+  zip.folder("_rels").file(".rels", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  <Relationship Id="rId1" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/officeDocument" Target="xl/workbook.xml"/>
+  <Relationship Id="rId2" Type="http://schemas.openxmlformats.org/package/2006/relationships/metadata/core-properties" Target="docProps/core.xml"/>
+  <Relationship Id="rId3" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/extended-properties" Target="docProps/app.xml"/>
+</Relationships>`);
+  zip.folder("docProps").file("core.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<cp:coreProperties xmlns:cp="http://schemas.openxmlformats.org/package/2006/metadata/core-properties" xmlns:dc="http://purl.org/dc/elements/1.1/" xmlns:dcterms="http://purl.org/dc/terms/" xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance">
+  <dc:title>${xlsxXmlEscape(`Quantitativo de drenagem — ${state.drainage.project.name}`)}</dc:title>
+  <dc:creator>Fiscal Bertioga</dc:creator>
+  <cp:lastModifiedBy>Fiscal Bertioga</cp:lastModifiedBy>
+  <dcterms:created xsi:type="dcterms:W3CDTF">${createdAt}</dcterms:created>
+  <dcterms:modified xsi:type="dcterms:W3CDTF">${createdAt}</dcterms:modified>
+</cp:coreProperties>`);
+  zip.folder("docProps").file("app.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Properties xmlns="http://schemas.openxmlformats.org/officeDocument/2006/extended-properties" xmlns:vt="http://schemas.openxmlformats.org/officeDocument/2006/docPropsVTypes">
+  <Application>Fiscal Bertioga</Application><DocSecurity>0</DocSecurity><ScaleCrop>false</ScaleCrop>
+  <HeadingPairs><vt:vector size="2" baseType="variant"><vt:variant><vt:lpstr>Planilhas</vt:lpstr></vt:variant><vt:variant><vt:i4>${sheets.length}</vt:i4></vt:variant></vt:vector></HeadingPairs>
+  <TitlesOfParts><vt:vector size="${sheets.length}" baseType="lpstr">${sheets.map((sheet) => `<vt:lpstr>${xlsxXmlEscape(sheet.name)}</vt:lpstr>`).join("")}</vt:vector></TitlesOfParts>
+</Properties>`);
+  const xl = zip.folder("xl");
+  xl.file("workbook.xml", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<workbook xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main" xmlns:r="http://schemas.openxmlformats.org/officeDocument/2006/relationships">
+  <bookViews><workbookView xWindow="0" yWindow="0" windowWidth="24000" windowHeight="12000"/></bookViews>
+  <sheets>${sheets.map((sheet, index) => `<sheet name="${xlsxXmlEscape(sheet.name)}" sheetId="${index + 1}" r:id="rId${index + 1}"/>`).join("")}</sheets>
+  <calcPr calcId="191029"/>
+</workbook>`);
+  xl.folder("_rels").file("workbook.xml.rels", `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<Relationships xmlns="http://schemas.openxmlformats.org/package/2006/relationships">
+  ${sheets.map((_, index) => `<Relationship Id="rId${index + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/worksheet" Target="worksheets/sheet${index + 1}.xml"/>`).join("\n  ")}
+  <Relationship Id="rId${sheets.length + 1}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/styles" Target="styles.xml"/>
+</Relationships>`);
+  xl.file("styles.xml", drainageWorkbookStyles());
+  const worksheets = xl.folder("worksheets");
+  sheets.forEach((sheet, index) => worksheets.file(`sheet${index + 1}.xml`, drainageWorksheetXml(sheet)));
+  onProgress(72, "Aplicando títulos, colunas e valores adotados…");
+  const blob = await zip.generateAsync({
+    type: "blob",
+    compression: "DEFLATE",
+    compressionOptions: { level: 6 },
+    mimeType: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+  });
+  onProgress(100, "Planilha concluída.");
+  return blob;
+}
+
+function drainageWorkbookSheets() {
+  const results = calculateDrainageResults().rows;
+  const project = state.drainage.project;
+  const calculationRows = (rows) => rows.map((row) => [
+    row.service,
+    row.material,
+    row.unit,
+    drainageRound(row.calculated, Math.max(2, row.precision)),
+    drainageAdoptedValue(row),
+    row.formula,
+    row.note || "",
+  ]);
+  const titledSheet = (name, title, headers, rows) => ({
+    name,
+    rows: [[title], [], headers, ...rows],
+    styledRows: new Map([[1, 2], [3, 1]]),
+  });
+  const compositionRows = [
+    ...DRAINAGE_COMPOSITIONS.masonry.map((item) => ["ALV001", "Alvenaria BL/PV", item.material, item.coefficient, item.unit]),
+    ...DRAINAGE_COMPOSITIONS.concrete123.map((item) => ["CONC123", "Concreto 1:2:3", item.material, item.coefficient, item.unit]),
+    ["PAV001", "Intertravado 30 cm", DRAINAGE_COMPOSITIONS.interlocking.material, DRAINAGE_COMPOSITIONS.interlocking.coefficient, DRAINAGE_COMPOSITIONS.interlocking.unit],
+  ];
+  return [
+    titledSheet("01 - Resumo", `QUANTITATIVO CONSOLIDADO — ${project.name}`, ["Serviço", "Material", "Unidade", "Calculado", "Adotado", "Fórmula", "Observação"], calculationRows(results)),
+    titledSheet("02 - Dados da Obra", "DADOS DA OBRA", ["Campo", "Valor", "Unidade"], [
+      ["Nome da obra", project.name, ""], ["Bairro", project.neighborhood, ""], ["Extensão", drainageNumber(project.extension), "m"], ["Largura da via", drainageNumber(project.roadWidth), "m"], ["Margem padrão de perdas", drainageNumber(project.standardLoss), "%"], ["Responsável", project.responsible, ""], ["Data", formatDrainageDate(project.date), ""],
+    ]),
+    titledSheet("03 - BL e PV", "MEMÓRIA DE CÁLCULO — BL E PV", ["Serviço", "Material", "Unidade", "Calculado", "Adotado", "Fórmula", "Observação"], calculationRows(results.filter((row) => row.service === "BL" || row.service === "PV"))),
+    titledSheet("04 - Tubulação", "TUBULAÇÃO — BARRAS E SOBRAS", ["Serviço", "Material", "Unidade", "Necessário", "Adquirido", "Fórmula", "Barras e sobra"], calculationRows(results.filter((row) => row.service === "Tubulação"))),
+    titledSheet("05 - Pavimentação", "PAVIMENTAÇÃO, LASTRO E INTERTRAVADO", ["Serviço", "Material", "Unidade", "Calculado", "Adotado", "Fórmula", "Observação"], calculationRows(results.filter((row) => row.service === "Pavimentação"))),
+    titledSheet("06 - Sarjeta", "SARJETA E COMPOSIÇÃO DO CONCRETO", ["Serviço", "Material", "Unidade", "Calculado", "Adotado", "Fórmula", "Observação"], calculationRows(results.filter((row) => row.service === "Sarjeta"))),
+    titledSheet("07 - Composições", "BIBLIOTECA DE COMPOSIÇÕES UTILIZADA", ["Código", "Serviço", "Material", "Coeficiente", "Unidade"], compositionRows),
+  ];
+}
+
+function drainageWorksheetXml(sheet) {
+  const maxColumns = Math.max(1, ...sheet.rows.map((row) => row.length));
+  const widths = Array.from({ length: maxColumns }, (_, columnIndex) => {
+    const longest = Math.max(10, ...sheet.rows.map((row) => String(row[columnIndex] ?? "").length));
+    return Math.min(62, Math.max(12, longest + 2));
+  });
+  const rowsXml = sheet.rows.map((row, rowIndex) => {
+    const rowNumber = rowIndex + 1;
+    const style = sheet.styledRows.get(rowNumber) || 0;
+    const cells = row.map((value, columnIndex) => drainageCellXml(value, columnIndex, rowNumber, style)).join("");
+    return `<row r="${rowNumber}"${rowNumber === 1 ? ' ht="24" customHeight="1"' : ""}>${cells}</row>`;
+  }).join("");
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<worksheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <sheetViews><sheetView workbookViewId="0"><pane ySplit="3" topLeftCell="A4" activePane="bottomLeft" state="frozen"/></sheetView></sheetViews>
+  <sheetFormatPr defaultRowHeight="18"/>
+  <cols>${widths.map((width, index) => `<col min="${index + 1}" max="${index + 1}" width="${width}" customWidth="1"/>`).join("")}</cols>
+  <sheetData>${rowsXml}</sheetData>
+</worksheet>`;
+}
+
+function drainageCellXml(value, columnIndex, rowNumber, style) {
+  const reference = `${xlsxColumnName(columnIndex + 1)}${rowNumber}`;
+  const styleAttribute = style ? ` s="${style}"` : "";
+  if (typeof value === "number" && Number.isFinite(value)) {
+    return `<c r="${reference}"${styleAttribute} t="n"><v>${value}</v></c>`;
+  }
+  return `<c r="${reference}"${styleAttribute} t="inlineStr"><is><t xml:space="preserve">${xlsxXmlEscape(String(value ?? ""))}</t></is></c>`;
+}
+
+function xlsxColumnName(index) {
+  let value = index;
+  let result = "";
+  while (value > 0) {
+    value -= 1;
+    result = String.fromCharCode(65 + (value % 26)) + result;
+    value = Math.floor(value / 26);
+  }
+  return result;
+}
+
+function xlsxXmlEscape(value) {
+  return String(value)
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+function drainageWorkbookStyles() {
+  return `<?xml version="1.0" encoding="UTF-8" standalone="yes"?>
+<styleSheet xmlns="http://schemas.openxmlformats.org/spreadsheetml/2006/main">
+  <fonts count="3">
+    <font><sz val="11"/><name val="Aptos"/><family val="2"/></font>
+    <font><b/><color rgb="FFFFFFFF"/><sz val="11"/><name val="Aptos"/><family val="2"/></font>
+    <font><b/><color rgb="FF163B31"/><sz val="15"/><name val="Aptos Display"/><family val="2"/></font>
+  </fonts>
+  <fills count="3"><fill><patternFill patternType="none"/></fill><fill><patternFill patternType="gray125"/></fill><fill><patternFill patternType="solid"><fgColor rgb="FF1F6F59"/><bgColor indexed="64"/></patternFill></fill></fills>
+  <borders count="1"><border><left/><right/><top/><bottom/><diagonal/></border></borders>
+  <cellStyleXfs count="1"><xf numFmtId="0" fontId="0" fillId="0" borderId="0"/></cellStyleXfs>
+  <cellXfs count="3">
+    <xf numFmtId="0" fontId="0" fillId="0" borderId="0" xfId="0"><alignment vertical="top" wrapText="1"/></xf>
+    <xf numFmtId="0" fontId="1" fillId="2" borderId="0" xfId="0" applyFont="1" applyFill="1"><alignment vertical="center" wrapText="1"/></xf>
+    <xf numFmtId="0" fontId="2" fillId="0" borderId="0" xfId="0" applyFont="1"><alignment vertical="center"/></xf>
+  </cellXfs>
+  <cellStyles count="1"><cellStyle name="Normal" xfId="0" builtinId="0"/></cellStyles>
+</styleSheet>`;
+}
+
 function renderReport() {
   const renders = [renderReportInfo, renderReportMap, renderReportPhotos, renderReportContent, renderReportReview];
   return renders[state.step]();
@@ -3163,15 +3860,28 @@ function renderCorrespondenceReview() {
 }
 
 function renderProgress() {
+  const drainage = state.flow === "drainage";
   return `<section class="panel progress-card">
     <div class="progress-orbit"><div class="progress-mark">D</div></div>
-    <h2>Preparando o documento</h2>
+    <h2>${drainage ? "Preparando a planilha" : "Preparando o documento"}</h2>
     <p id="progressMessage">${e(state.generation.message || "Organizando o conteúdo…")}</p>
     <div class="progress-line"><span id="progressBar" style="width:${state.generation.progress}%"></span></div>
   </section>`;
 }
 
 function renderSuccess() {
+  if (state.flow === "drainage") {
+    return `<section class="panel success-card drainage-success-card">
+      <div class="success-mark">✓</div>
+      <h2>Quantitativo criado</h2>
+      <p>A planilha Excel com sete abas foi gerada com os valores calculados, adotados e a memória de cada serviço.</p>
+      <div class="success-actions">
+        <button class="button button-secondary" type="button" data-action="home">Voltar ao início</button>
+        <button class="button button-secondary" type="button" data-action="new-document">Novo quantitativo</button>
+        <button class="button button-primary" type="button" data-action="download-again">Baixar novamente</button>
+      </div>
+    </section>`;
+  }
   const documentLabel = state.flow === "report"
     ? "O parecer técnico"
     : state.flow === "cota"
@@ -3325,7 +4035,8 @@ async function nextStep() {
     focusMain();
     return;
   }
-  if (state.flow === "report") generateReport();
+  if (state.flow === "drainage") generateDrainageSpreadsheet();
+  else if (state.flow === "report") generateReport();
   else if (state.flow === "cota") generateCota();
   else if (isNoticeFlow()) generateNotification();
   else generateCorrespondence();
@@ -3404,6 +4115,7 @@ function applyValidationHighlights() {
 
 function validateCurrentStep() {
   clearValidationHighlights();
+  if (state.flow === "drainage") return validateDrainageStep();
   if (state.flow === "report") {
     const r = state.report;
     if (state.step === 0) {
@@ -3674,6 +4386,104 @@ function validateCurrentStep() {
     return false;
   }
   return true;
+}
+
+function validateDrainageStep() {
+  const drainage = state.drainage;
+  if (state.step === 0) {
+    const invalidFields = [
+      !String(drainage.project.name || "").trim() && '[data-bind="drainage.project.name"]',
+      !String(drainage.project.neighborhood || "").trim() && '[data-bind="drainage.project.neighborhood"]',
+      drainageNumber(drainage.project.extension) <= 0 && '[data-bind="drainage.project.extension"]',
+      drainageNumber(drainage.project.roadWidth) <= 0 && '[data-bind="drainage.project.roadWidth"]',
+      !String(drainage.project.responsible || "").trim() && '[data-bind="drainage.project.responsible"]',
+      !String(drainage.project.date || "").trim() && '[data-bind="drainage.project.date"]',
+      (drainageNumber(drainage.project.standardLoss) < 0 || drainageNumber(drainage.project.standardLoss) > 100) && '[data-bind="drainage.project.standardLoss"]',
+    ].filter(Boolean);
+    if (invalidFields.length) {
+      showFieldValidationMessage({
+        title: "Complete os dados da obra",
+        text: "Informe obra, bairro, extensão, largura, responsável, data e uma perda entre 0% e 100%.",
+        fields: invalidFields,
+      });
+      return false;
+    }
+  }
+  if (state.step === 1 && !drainageActiveServiceCount()) {
+    showFieldValidationMessage({
+      title: "Selecione um serviço",
+      text: "Ative pelo menos um serviço para montar o quantitativo.",
+      fields: ["[data-drainage-service-grid]"],
+    });
+    return false;
+  }
+  if (state.step === 2) {
+    const positivePaths = [];
+    const percentagePaths = [];
+    if (drainage.services.bl) {
+      positivePaths.push(...drainageStructurePositivePaths("bl"));
+      percentagePaths.push("drainage.bl.loss");
+    }
+    if (drainage.services.pv) {
+      positivePaths.push(...drainageStructurePositivePaths("pv"));
+      percentagePaths.push("drainage.pv.loss");
+    }
+    if (drainage.services.pipes) {
+      drainage.pipes.forEach((pipe, index) => {
+        positivePaths.push(`drainage.pipes.${index}.extension`, `drainage.pipes.${index}.commercialLength`);
+        percentagePaths.push(`drainage.pipes.${index}.loss`);
+        if (!String(pipe.diameter || "").trim()) positivePaths.push(`drainage.pipes.${index}.diameter`);
+      });
+    }
+    if (drainage.services.pavement) {
+      positivePaths.push("drainage.pavement.length", "drainage.pavement.width", "drainage.pavement.effectiveArea", "drainage.pavement.bedThicknessCm", "drainage.pavement.baseThicknessCm", "drainage.pavement.interlockingCoefficient");
+    }
+    if (drainage.services.gutter) {
+      positivePaths.push("drainage.gutter.length", "drainage.gutter.width", "drainage.gutter.thickness");
+      percentagePaths.push("drainage.gutter.loss");
+    }
+    const invalidFields = [
+      ...positivePaths.filter((path) => path.endsWith(".diameter")
+        ? !String(drainageValueAtPath(path) || "").trim()
+        : drainageNumber(drainageValueAtPath(path)) <= 0),
+      ...percentagePaths.filter((path) => {
+        const value = drainageNumber(drainageValueAtPath(path));
+        return value < 0 || value > 100;
+      }),
+    ].map((path) => `[data-bind="${path}"]`);
+    if (invalidFields.length) {
+      showFieldValidationMessage({
+        title: "Revise os parâmetros",
+        text: "Preencha dimensões e quantidades maiores que zero e mantenha as perdas entre 0% e 100%.",
+        fields: invalidFields,
+      });
+      return false;
+    }
+  }
+  if (state.step === 3) {
+    const results = calculateDrainageResults().rows;
+    const invalid = results.filter((row) => drainageAdoptedValue(row) < 0);
+    if (!results.length || invalid.length) {
+      showFieldValidationMessage({
+        title: "Revise os quantitativos adotados",
+        text: "Os valores adotados precisam ser iguais ou maiores que zero.",
+        fields: invalid.map((row) => `[data-drainage-adopted="${row.id}"]`),
+      });
+      return false;
+    }
+  }
+  return true;
+}
+
+function drainageStructurePositivePaths(key) {
+  return [
+    "quantity", "internalLength", "internalWidth", "height", "wallThickness",
+    "blockWidthCm", "blockHeightCm", "blockLengthCm", "channelLengthCm", "channelRows",
+  ].map((field) => `drainage.${key}.${field}`);
+}
+
+function drainageValueAtPath(path) {
+  return path.split(".").reduce((value, key) => value?.[key], state);
 }
 
 function setPath(path, value) {
@@ -5597,7 +6407,10 @@ async function buildCorrespondenceDocument(onProgress) {
 }
 
 function resetCurrentDocument() {
-  if (state.flow === "report") {
+  if (state.flow === "drainage") {
+    state.drainage = createDrainageState();
+    localStorage.removeItem("docflow-drainage-draft");
+  } else if (state.flow === "report") {
     state.report.photos.forEach((photo) => URL.revokeObjectURL(photo.url));
     if (state.report.map?.url) URL.revokeObjectURL(state.report.map.url);
     state.report = createReportState(readStorage("docflow-preferences", {}));
@@ -5665,6 +6478,7 @@ async function handleAction(action, target) {
   if (action === "start-cota") return startFlow("cota");
   if (action === "start-notification") return startFlow("notification");
   if (action === "start-warning") return startFlow("warning");
+  if (action === "start-drainage") return startFlow("drainage");
   if (action === "start-correspondence") return startFlow("correspondence", target.dataset.kind);
   if (action === "previous-step") return previousStep();
   if (action === "next-step") return nextStep();
@@ -5725,6 +6539,8 @@ async function handleAction(action, target) {
   }
   if (action === "improve-cota") return improveCota();
   if (action === "improve-correspondence") return improveCorrespondence();
+  if (action === "print-drainage-memory") return printDrainageMemory();
+  if (action === "download-drainage-excel") return generateDrainageSpreadsheet();
   if (action === "download-again" && state.lastDownload) return triggerDownload(state.lastDownload.url, state.lastDownload.filename);
   if (action === "new-document") return resetCurrentDocument();
 }
@@ -5819,6 +6635,12 @@ document.addEventListener("keydown", (event) => {
 document.addEventListener("input", (event) => {
   const target = event.target;
   clearValidationHighlight(target);
+  if (target.dataset.drainageAdopted) {
+    state.drainage.adopted[target.dataset.drainageAdopted] = target.value;
+    state.drainage.complete = false;
+    scheduleSave();
+    return;
+  }
   if (target === elements.kanbanCardStartDate || target === elements.kanbanCardDurationDays) {
     renderKanbanSchedulePreview();
   }
@@ -5828,6 +6650,15 @@ document.addEventListener("input", (event) => {
   }
   if (target.dataset.bind) {
     setPath(target.dataset.bind, getBoundValue(target));
+    if (target.dataset.bind.startsWith("drainage.")) {
+      state.drainage.complete = false;
+      if (target.dataset.bind === "drainage.project.standardLoss") {
+        state.drainage.bl.loss = target.value;
+        state.drainage.pv.loss = target.value;
+        state.drainage.gutter.loss = target.value;
+      }
+      target.closest(".drainage-service-choice")?.classList.toggle("is-selected", Boolean(target.checked));
+    }
     updateCounter(target);
     scheduleSave();
   }
