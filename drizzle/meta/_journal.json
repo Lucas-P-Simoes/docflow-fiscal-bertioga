@@ -64,6 +64,13 @@
       "when": 1788966011764,
       "tag": "0008_flaky_king_bedlam",
       "breakpoints": true
+    },
+    {
+      "idx": 9,
+      "version": "6",
+      "when": 1789132091745,
+      "tag": "0009_nostalgic_thanos",
+      "breakpoints": true
     }
   ]
 }

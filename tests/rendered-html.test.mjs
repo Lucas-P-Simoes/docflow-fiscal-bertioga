@@ -261,7 +261,7 @@ test("requires an account and keeps registrations and encrypted API keys in D1",
 
 
 test("keeps new registrations pending and limits user approval to the configured administrator", async () => {
-  const [app, page, styles, worker, authWorker, adminWorker, constants, dbAuth, dbAdmin, schema, migration] = await Promise.all([
+  const [app, page, styles, worker, authWorker, adminWorker, constants, dbAuth, dbAdmin, dbCardAccess, schema, migration, cardMigration] = await Promise.all([
     readFile(new URL("public/docflow/app.js", siteRoot), "utf8"),
     readFile(new URL("public/docflow/index.html", siteRoot), "utf8"),
     readFile(new URL("public/docflow/styles.css", siteRoot), "utf8"),
@@ -271,8 +271,10 @@ test("keeps new registrations pending and limits user approval to the configured
     readFile(new URL("worker/constants.ts", siteRoot), "utf8"),
     readFile(new URL("db/auth.ts", siteRoot), "utf8"),
     readFile(new URL("db/admin.ts", siteRoot), "utf8"),
+    readFile(new URL("db/card-access.ts", siteRoot), "utf8"),
     readFile(new URL("db/schema.ts", siteRoot), "utf8"),
     readFile(new URL("drizzle/0003_free_thor.sql", siteRoot), "utf8"),
+    readFile(new URL("drizzle/0009_nostalgic_thanos.sql", siteRoot), "utf8"),
   ]);
 
   assert.match(page, /id="adminButton"[^>]*is-hidden/);
@@ -290,21 +292,32 @@ test("keeps new registrations pending and limits user approval to the configured
   assert.match(app, /Excluir usuário definitivamente/);
   assert.match(app, /method: "DELETE"/);
   assert.match(app, /Último acesso/);
+  assert.match(app, /HOME_CARD_OPTIONS/);
+  assert.match(app, /data-admin-card-user=/);
+  assert.match(app, /role="switch"/);
+  assert.match(app, /apiRequest\(`\/api\/admin\/users\/\$\{encodeURIComponent\(userId\)\}\/cards`/);
+  assert.match(app, /homeCardVisibilityAttribute\("drainage"\)/);
+  assert.match(app, /Este card não está liberado para a sua conta/);
+  assert.match(app, /Nenhum card está liberado para sua conta/);
   assert.match(styles, /\.admin-button/);
   assert.match(styles, /\.admin-button\.has-pending \.admin-bell-icon/);
   assert.match(styles, /color:\s*#b42318/);
   assert.match(styles, /\.admin-user-item/);
+  assert.match(styles, /\.admin-card-toggle input:checked \+ \.admin-card-switch/);
   assert.match(worker, /url\.pathname === "\/api\/admin\/users"/);
   assert.match(worker, /handleAdminUserMutation/);
+  assert.match(worker, /handleAdminUserCardAccess/);
   assert.match(constants, /ADMIN_EMAIL = "lucaspsimoes22@gmail\.com"/);
   assert.match(adminWorker, /authenticated\.account\.isAdmin/);
   assert.match(adminWorker, /authenticated\.account\.email !== ADMIN_EMAIL/);
   assert.match(adminWorker, /status !== "approved" && status !== "rejected"/);
   assert.match(adminWorker, /request\.method !== "PATCH" && request\.method !== "DELETE"/);
   assert.match(adminWorker, /env\.DOCUMENTS\.delete/);
+  assert.match(adminWorker, /updateUserCardAccess\(env\.DB/);
   assert.match(authWorker, /authJson\(\s*202,/);
   assert.match(authWorker, /Seu cadastro aguarda aprovação do administrador/);
   assert.match(authWorker, /Seu cadastro foi recusado/);
+  assert.match(authWorker, /cards: account\.cardAccess/);
   assert.match(dbAuth, /SET last_login_at = \?, updated_at = \?/);
   assert.match(dbAuth, /u\.status = 'approved'/);
   assert.match(dbAdmin, /CASE status/);
@@ -312,12 +325,19 @@ test("keeps new registrations pending and limits user approval to the configured
   assert.match(dbAdmin, /DELETE FROM sessions WHERE user_id = \?/);
   assert.match(dbAdmin, /DELETE FROM users WHERE id = \? AND is_admin = 0/);
   assert.match(dbAdmin, /FROM generated_documents/);
+  assert.match(dbAdmin, /FROM user_card_permissions/);
+  assert.match(dbCardAccess, /HOME_CARD_KEYS/);
+  assert.match(dbCardAccess, /ON CONFLICT\(user_id, card_key\) DO UPDATE SET/);
+  assert.match(dbCardAccess, /WHERE id = \? AND is_admin = 0/);
   assert.match(schema, /status:\s*text\("status"/);
   assert.match(schema, /isAdmin:\s*integer\("is_admin"/);
   assert.match(schema, /lastLoginAt:\s*integer\("last_login_at"/);
+  assert.match(schema, /userCardPermissions/);
   assert.match(migration, /lucaspsimoes22@gmail\.com/);
   assert.match(migration, /SET `last_login_at`/);
   assert.match(migration, /PRAGMA optimize/);
+  assert.match(cardMigration, /CREATE TABLE `user_card_permissions`/);
+  assert.match(cardMigration, /PRIMARY KEY\(`user_id`, `card_key`\)/);
 });
 
 

@@ -4,6 +4,7 @@ import {
   listManagedUsers,
   updateManagedUserStatus,
 } from "../db/admin";
+import { isHomeCardKey, updateUserCardAccess } from "../db/card-access";
 import { authenticateRequest, authError, authJson } from "./auth";
 import { ADMIN_EMAIL } from "./constants";
 
@@ -72,6 +73,40 @@ export async function handleAdminUserMutation(
   if (!user) return authError(404, "Usuário não encontrado ou não pode ser alterado.");
 
   return authJson(200, { user });
+}
+
+export async function handleAdminUserCardAccess(
+  request: Request,
+  env: Env,
+  userId: string,
+): Promise<Response> {
+  if (request.method !== "PATCH") return authError(405, "Método não permitido.");
+  const authenticated = await authenticateAdmin(request, env);
+  if (authenticated instanceof Response) return authenticated;
+
+  let body: JsonObject;
+  try {
+    body = await readAdminBody(request);
+  } catch (error) {
+    return authError(400, error instanceof Error ? error.message : "Dados inválidos.");
+  }
+
+  if (!isHomeCardKey(body.cardKey) || typeof body.enabled !== "boolean") {
+    return authError(400, "Escolha um card válido e informe se ele deve ficar liberado.");
+  }
+
+  const cardAccess = await updateUserCardAccess(env.DB, {
+    userId,
+    cardKey: body.cardKey,
+    enabled: body.enabled,
+    updatedBy: authenticated.account.id,
+    now: Math.floor(Date.now() / 1000),
+  });
+  if (!cardAccess) {
+    return authError(404, "Usuário não encontrado ou não pode ter o acesso alterado.");
+  }
+
+  return authJson(200, { cardAccess });
 }
 
 async function authenticateAdmin(

@@ -302,6 +302,7 @@ function accountPayload(account: AccountSummary): JsonObject {
       model: account.apiModel,
       lastFour: account.apiKeyLastFour,
     },
+    cards: account.cardAccess,
   };
 }
 

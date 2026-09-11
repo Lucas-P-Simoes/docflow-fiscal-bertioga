@@ -15,7 +15,11 @@ import {
   handleSession,
   openAICredentialForUser,
 } from "./auth";
-import { handleAdminUserMutation, handleAdminUsers } from "./admin";
+import {
+  handleAdminUserCardAccess,
+  handleAdminUserMutation,
+  handleAdminUsers,
+} from "./admin";
 import { handleDocumentDownload, handleDocumentMutation, handleDocuments } from "./documents";
 import { handleSignatureMutation, handleSignatures } from "./signatures";
 import {
@@ -218,6 +222,10 @@ const worker = {
       }
       if (url.pathname === "/api/admin/users") {
         return await handleAdminUsers(request, env);
+      }
+      const adminUserCardAccess = url.pathname.match(/^\/api\/admin\/users\/([0-9a-f-]{36})\/cards$/i);
+      if (adminUserCardAccess) {
+        return await handleAdminUserCardAccess(request, env, adminUserCardAccess[1]);
       }
       const adminUserMutation = url.pathname.match(/^\/api\/admin\/users\/([0-9a-f-]{36})$/i);
       if (adminUserMutation) {

@@ -38,6 +38,15 @@ const DRAINAGE_COMPOSITIONS = {
   ],
   interlocking: { material: "Piso intertravado sextavado 30 cm", coefficient: 14.13, unit: "un/m²" },
 };
+const HOME_CARD_OPTIONS = [
+  { key: "report", label: "Parecer técnico", mark: "PT" },
+  { key: "cota", label: "Folha de cota", mark: "FC" },
+  { key: "memorando", label: "Memorando", mark: "M" },
+  { key: "oficio", label: "Ofício", mark: "O" },
+  { key: "notification", label: "Notificação", mark: "N" },
+  { key: "warning", label: "Advertência", mark: "A" },
+  { key: "drainage", label: "Quantitativo de drenagem", mark: "QD" },
+];
 const CORRESPONDENCE_TYPES = {
   memorando: {
     label: "Memorando",
@@ -330,6 +339,7 @@ function createKanbanState() {
 const state = {
   auth: {
     user: null,
+    cardAccess: normalizeCardAccess(),
   },
   flow: null,
   step: 0,
@@ -1024,6 +1034,7 @@ function setFormBusy(form, busy, busyLabel) {
 
 function applyAccount(payload) {
   state.auth.user = payload.user;
+  state.auth.cardAccess = normalizeCardAccess(payload.cards);
   state.signatures = createSignatureConfigurationState();
   state.admin = createAdminState();
   state.kanban = createKanbanState();
@@ -1052,6 +1063,7 @@ function applyAccount(payload) {
 
 function showAuthGate(view = "login") {
   state.auth.user = null;
+  state.auth.cardAccess = normalizeCardAccess();
   state.signatures = createSignatureConfigurationState();
   state.admin = createAdminState();
   state.kanban = createKanbanState();
@@ -1084,6 +1096,22 @@ async function bootstrapAuth() {
     if (error.status && error.status !== 401) {
       setAuthFeedback(elements.loginFeedback, error.message);
     }
+  }
+}
+
+async function refreshCurrentCardAccess() {
+  if (!state.auth.user) return;
+  try {
+    const account = await apiRequest("/api/auth/session");
+    const nextAccess = normalizeCardAccess(account.cards);
+    const changed = HOME_CARD_OPTIONS.some(
+      (card) => nextAccess[card.key] !== state.auth.cardAccess?.[card.key],
+    );
+    if (!changed) return;
+    state.auth.cardAccess = nextAccess;
+    if (!state.flow && !state.admin.open && !state.history.open && !state.kanban.open) render();
+  } catch {
+    // A próxima navegação ou atualização da página repetirá a verificação da sessão.
   }
 }
 
@@ -1340,52 +1368,68 @@ function configureActionBar() {
     : `Etapa ${state.step + 1} de ${currentSteps().length}`;
 }
 
+function normalizeCardAccess(value = {}) {
+  return Object.fromEntries(
+    HOME_CARD_OPTIONS.map((card) => [card.key, value?.[card.key] !== false]),
+  );
+}
+
+function canAccessHomeCard(cardKey) {
+  if (state.auth.user?.isAdmin) return true;
+  return HOME_CARD_OPTIONS.some((card) => card.key === cardKey)
+    && state.auth.cardAccess?.[cardKey] !== false;
+}
+
+function homeCardVisibilityAttribute(cardKey) {
+  return canAccessHomeCard(cardKey) ? "" : 'hidden aria-hidden="true"';
+}
+
 function renderHome() {
   return `<section class="document-section">
     <div class="document-grid">
-      <article class="document-card" tabindex="0" role="button" data-action="start-report">
+      <article class="document-card" tabindex="0" role="button" ${homeCardVisibilityAttribute("report")} data-action="start-report">
         <span class="card-status is-ready">Pronto</span>
         <span class="card-number" aria-hidden="true">01</span><span class="card-icon" aria-hidden="true">▧</span>
         <h3>Parecer técnico</h3>
         <p>Preencha a vistoria, informe as vias, anexe o mapa e as fotos e gere o Word no modelo oficial.</p>
         <span class="card-link">Criar parecer <span aria-hidden="true">→</span></span>
       </article>
-      <article class="document-card is-cota" tabindex="0" role="button" data-action="start-cota">
+      <article class="document-card is-cota" tabindex="0" role="button" ${homeCardVisibilityAttribute("cota")} data-action="start-cota">
         <span class="card-status is-ready">Pronto</span>
         <span class="card-number" aria-hidden="true">02</span><span class="card-icon" aria-hidden="true">≡</span>
         <h3>Folha de cota</h3>
         <p>Transforme uma anotação em redação administrativa e distribua o texto em uma folha pautada.</p>
         <span class="card-link">Preparar folha <span aria-hidden="true">→</span></span>
       </article>
-      <article class="document-card is-admin" tabindex="0" role="button" data-action="start-correspondence" data-kind="memorando">
+      <article class="document-card is-admin" tabindex="0" role="button" ${homeCardVisibilityAttribute("memorando")} data-action="start-correspondence" data-kind="memorando">
         <span class="card-status is-ready">Pronto</span>
         <span class="card-number" aria-hidden="true">03</span><span class="card-icon" aria-hidden="true">M</span>
         <h3>Memorando</h3>
         <p>Gere o memorando no modelo oficial da Prefeitura de Bertioga, com assinatura e fotos opcionais.</p>
         <span class="card-link">Criar memorando <span aria-hidden="true">→</span></span>
       </article>
-      <article class="document-card is-admin" tabindex="0" role="button" data-action="start-correspondence" data-kind="oficio">
+      <article class="document-card is-admin" tabindex="0" role="button" ${homeCardVisibilityAttribute("oficio")} data-action="start-correspondence" data-kind="oficio">
         <span class="card-status is-ready">Pronto</span>
         <span class="card-number" aria-hidden="true">04</span><span class="card-icon" aria-hidden="true">O</span>
         <h3>Ofício</h3>
         <p>Gere o ofício no modelo oficial da Prefeitura de Bertioga, com assinatura e fotos opcionais.</p>
         <span class="card-link">Criar ofício <span aria-hidden="true">→</span></span>
       </article>
-      <article class="document-card is-alert" tabindex="0" role="button" data-action="start-notification">
+      <article class="document-card is-alert" tabindex="0" role="button" ${homeCardVisibilityAttribute("notification")} data-action="start-notification">
         <span class="card-status is-ready">Pronto</span>
         <span class="card-number" aria-hidden="true">05</span><span class="card-icon" aria-hidden="true">N</span>
         <h3>Notificação</h3>
         <p>Gere a notificação no modelo oficial da Prefeitura de Bertioga, com assinaturas e fotos opcionais.</p>
         <span class="card-link">Criar notificação <span aria-hidden="true">→</span></span>
       </article>
-      <article class="document-card is-alert" tabindex="0" role="button" data-action="start-warning">
+      <article class="document-card is-alert" tabindex="0" role="button" ${homeCardVisibilityAttribute("warning")} data-action="start-warning">
         <span class="card-status is-ready">Pronto</span>
         <span class="card-number" aria-hidden="true">06</span><span class="card-icon" aria-hidden="true">A</span>
         <h3>Advertência</h3>
         <p>Gere a advertência no modelo oficial da Prefeitura de Bertioga, com assinaturas e fotos opcionais.</p>
         <span class="card-link">Criar advertência <span aria-hidden="true">→</span></span>
       </article>
-      <article class="document-card is-drainage" tabindex="0" role="button" data-action="start-drainage">
+      <article class="document-card is-drainage" tabindex="0" role="button" ${homeCardVisibilityAttribute("drainage")} data-action="start-drainage">
         <span class="card-status is-ready">Pronto</span>
         <div class="drainage-card-copy">
           <span class="card-number" aria-hidden="true">07</span><span class="card-icon" aria-hidden="true">∑</span>
@@ -1396,6 +1440,11 @@ function renderHome() {
         <img class="drainage-card-image" src="${DRAINAGE_IMAGES.system}" alt="Corte ilustrado de uma rua com boca de lobo, tubulação e poço de visita" />
       </article>
     </div>
+    ${HOME_CARD_OPTIONS.some((card) => canAccessHomeCard(card.key)) ? "" : `<div class="home-access-empty">
+      <span aria-hidden="true">○</span>
+      <strong>Nenhum card está liberado para sua conta</strong>
+      <p>Solicite ao administrador a liberação das ferramentas que você precisa utilizar.</p>
+    </div>`}
   </section>`;
 }
 
@@ -1423,7 +1472,7 @@ function renderAdminPanel() {
 
   return `<section class="document-section admin-section">
     <div class="admin-heading">
-      <div><span class="eyebrow eyebrow-dark">Acesso restrito</span><h2>Administração de usuários</h2><p>Revise solicitações de cadastro e acompanhe o último acesso registrado de cada pessoa.</p></div>
+      <div><span class="eyebrow eyebrow-dark">Acesso restrito</span><h2>Administração de usuários</h2><p>Revise cadastros, acompanhe o último acesso e escolha quais cards cada pessoa poderá utilizar.</p></div>
       <div class="admin-heading-actions">
         <button class="button button-secondary" type="button" data-action="home">← Voltar</button>
         <button class="button button-secondary" type="button" data-action="refresh-admin" ${state.admin.loading ? "disabled" : ""}>Atualizar</button>
@@ -1467,6 +1516,24 @@ function renderAdminUser(user) {
         ${user.status !== "rejected" ? `<button class="button button-secondary button-danger" type="button" data-action="reject-admin-user" data-id="${e(user.id)}" ${disabled}>${busyAction === "rejected" ? "Recusando…" : "Recusar"}</button>` : ""}
         <button class="button button-secondary button-danger" type="button" data-action="delete-admin-user" data-id="${e(user.id)}" ${disabled}>${busyAction === "delete" ? "Excluindo…" : "Excluir"}</button>
       </div>`;
+  const cardAccess = normalizeCardAccess(user.cardAccess);
+  const enabledCards = HOME_CARD_OPTIONS.filter((card) => cardAccess[card.key]).length;
+  const accessPanel = user.status === "approved" && !user.isAdmin
+    ? `<div class="admin-card-access">
+        <div class="admin-card-access-heading">
+          <div><strong>Cards visíveis para este usuário</strong><span>Ative ou desative cada ferramenta da página inicial.</span></div>
+          <b>${enabledCards} de ${HOME_CARD_OPTIONS.length} liberados</b>
+        </div>
+        <div class="admin-card-access-options">
+          ${HOME_CARD_OPTIONS.map((card) => `<label class="admin-card-toggle">
+            <span class="admin-card-mark" aria-hidden="true">${e(card.mark)}</span>
+            <span class="admin-card-label">${e(card.label)}</span>
+            <input type="checkbox" role="switch" data-admin-card-user="${e(user.id)}" data-admin-card-key="${e(card.key)}" ${cardAccess[card.key] ? "checked" : ""} ${disabled} aria-label="Liberar ${e(card.label)} para ${e(user.name)}" />
+            <span class="admin-card-switch" aria-hidden="true"></span>
+          </label>`).join("")}
+        </div>
+      </div>`
+    : "";
   return `<article class="admin-user-item">
     <span class="admin-user-avatar" aria-hidden="true">${e(String(user.name || user.email || "U").slice(0, 1).toUpperCase())}</span>
     <div class="admin-user-copy">
@@ -1475,6 +1542,7 @@ function renderAdminUser(user) {
       <small>Solicitação: ${e(formatHistoryDate(user.createdAt))} • Último acesso: ${e(user.lastLoginAt ? formatHistoryDate(user.lastLoginAt) : "Ainda não acessou")}</small>
     </div>
     ${actions}
+    ${accessPanel}
   </article>`;
 }
 
@@ -1535,6 +1603,40 @@ async function setAdminUserStatus(userId, status) {
     updateAdminBadge();
     showToast(status === "approved" ? "Acesso aprovado." : "Acesso recusado.");
   } catch (error) {
+    state.admin.error = error.message;
+  } finally {
+    state.admin.busy.delete(userId);
+    if (state.admin.open) render();
+  }
+}
+
+async function setAdminUserCardAccess(userId, cardKey, enabled) {
+  const user = state.admin.users.find((item) => item.id === userId);
+  if (!state.auth.user?.isAdmin || !user || user.isAdmin || user.status !== "approved" || state.admin.busy.has(userId)) return;
+  if (!HOME_CARD_OPTIONS.some((card) => card.key === cardKey)) return;
+
+  const previousAccess = normalizeCardAccess(user.cardAccess);
+  state.admin.busy.set(userId, `card:${cardKey}`);
+  state.admin.error = "";
+  state.admin.users = state.admin.users.map((item) => item.id === userId
+    ? { ...item, cardAccess: { ...previousAccess, [cardKey]: enabled } }
+    : item);
+  if (state.admin.open) render();
+
+  try {
+    const payload = await apiRequest(`/api/admin/users/${encodeURIComponent(userId)}/cards`, {
+      method: "PATCH",
+      body: { cardKey, enabled },
+    });
+    state.admin.users = state.admin.users.map((item) => item.id === userId
+      ? { ...item, cardAccess: normalizeCardAccess(payload.cardAccess) }
+      : item);
+    const card = HOME_CARD_OPTIONS.find((item) => item.key === cardKey);
+    showToast(`${card?.label || "Card"} ${enabled ? "liberado" : "ocultado"} para ${user.name}.`);
+  } catch (error) {
+    state.admin.users = state.admin.users.map((item) => item.id === userId
+      ? { ...item, cardAccess: previousAccess }
+      : item);
     state.admin.error = error.message;
   } finally {
     state.admin.busy.delete(userId);
@@ -3973,6 +4075,11 @@ function justifyCotaLine(text) {
 }
 
 function startFlow(flow, kind = "") {
+  const cardKey = flow === "correspondence" ? kind : flow;
+  if (!canAccessHomeCard(cardKey)) {
+    showToast("Este card não está liberado para a sua conta.");
+    return;
+  }
   state.admin.open = false;
   state.history.open = false;
   state.kanban.open = false;
@@ -6682,6 +6789,14 @@ document.addEventListener("input", (event) => {
 document.addEventListener("change", (event) => {
   const target = event.target;
   clearValidationHighlight(target);
+  if (target.dataset.adminCardKey && target.dataset.adminCardUser) {
+    void setAdminUserCardAccess(
+      target.dataset.adminCardUser,
+      target.dataset.adminCardKey,
+      target.checked,
+    );
+    return;
+  }
   if (target === elements.kanbanAttachmentInput) {
     void uploadKanbanAttachments(target.files);
     return;
@@ -6871,6 +6986,7 @@ window.addEventListener("beforeunload", () => {
 document.addEventListener("visibilitychange", () => {
   if (document.visibilityState === "visible" && state.auth.user) {
     void loadKanbanNotifications({ silent: true });
+    void refreshCurrentCardAccess();
   }
 });
 

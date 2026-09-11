@@ -1,3 +1,10 @@
+import {
+  defaultUserCardAccess,
+  getUserCardAccess,
+  isHomeCardKey,
+  type UserCardAccess,
+} from "./card-access";
+
 export type ManagedUserStatus = "pending" | "approved" | "rejected";
 
 export type ManagedUser = {
@@ -9,6 +16,7 @@ export type ManagedUser = {
   createdAt: number;
   lastLoginAt: number | null;
   reviewedAt: number | null;
+  cardAccess: UserCardAccess;
 };
 
 type ManagedUserRow = {
@@ -26,12 +34,21 @@ type DocumentObjectKeyRow = {
   object_key: string;
 };
 
+type ManagedUserCardPermissionRow = {
+  user_id: string;
+  card_key: string;
+  enabled: number;
+};
+
 const MANAGED_USER_COLUMNS = `
   id, name, email, status, is_admin,
   created_at, last_login_at, reviewed_at
 `;
 
-function managedUser(row: ManagedUserRow): ManagedUser {
+function managedUser(
+  row: ManagedUserRow,
+  cardAccess: UserCardAccess = defaultUserCardAccess(),
+): ManagedUser {
   return {
     id: row.id,
     name: row.name,
@@ -41,25 +58,43 @@ function managedUser(row: ManagedUserRow): ManagedUser {
     createdAt: row.created_at,
     lastLoginAt: row.last_login_at,
     reviewedAt: row.reviewed_at,
+    cardAccess,
   };
 }
 
 export async function listManagedUsers(db: D1Database): Promise<ManagedUser[]> {
-  const result = await db
-    .prepare(
-      `SELECT ${MANAGED_USER_COLUMNS}
-       FROM users
-       ORDER BY
-         CASE status
-           WHEN 'pending' THEN 0
-           WHEN 'approved' THEN 1
-           ELSE 2
-         END,
-         created_at DESC`,
-    )
-    .all<ManagedUserRow>();
+  const [usersResult, permissionsResult] = await Promise.all([
+    db
+      .prepare(
+        `SELECT ${MANAGED_USER_COLUMNS}
+         FROM users
+         ORDER BY
+           CASE status
+             WHEN 'pending' THEN 0
+             WHEN 'approved' THEN 1
+             ELSE 2
+           END,
+           created_at DESC`,
+      )
+      .all<ManagedUserRow>(),
+    db
+      .prepare(
+        `SELECT user_id, card_key, enabled
+         FROM user_card_permissions`,
+      )
+      .all<ManagedUserCardPermissionRow>(),
+  ]);
 
-  return result.results.map(managedUser);
+  const accessByUser = new Map<string, UserCardAccess>();
+  for (const row of usersResult.results) accessByUser.set(row.id, defaultUserCardAccess());
+  for (const permission of permissionsResult.results) {
+    const access = accessByUser.get(permission.user_id);
+    if (access && isHomeCardKey(permission.card_key)) {
+      access[permission.card_key] = Boolean(permission.enabled);
+    }
+  }
+
+  return usersResult.results.map((row) => managedUser(row, accessByUser.get(row.id)));
 }
 
 export async function updateManagedUserStatus(
@@ -106,7 +141,7 @@ export async function updateManagedUserStatus(
     .bind(values.userId)
     .first<ManagedUserRow>();
 
-  return row ? managedUser(row) : null;
+  return row ? managedUser(row, await getUserCardAccess(db, row.id)) : null;
 }
 
 export async function getManagedUserDeletion(

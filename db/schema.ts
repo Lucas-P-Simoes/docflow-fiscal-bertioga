@@ -60,6 +60,22 @@ export const loginAttempts = sqliteTable("login_attempts", {
   blockedUntil: integer("blocked_until").notNull(),
 });
 
+export const userCardPermissions = sqliteTable(
+  "user_card_permissions",
+  {
+    userId: text("user_id")
+      .notNull()
+      .references(() => users.id, { onDelete: "cascade" }),
+    cardKey: text("card_key", {
+      enum: ["report", "cota", "memorando", "oficio", "notification", "warning", "drainage"],
+    }).notNull(),
+    enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
+    updatedAt: integer("updated_at").notNull(),
+    updatedBy: text("updated_by").references(() => users.id, { onDelete: "set null" }),
+  },
+  (table) => [primaryKey({ columns: [table.userId, table.cardKey] })],
+);
+
 export const generatedDocuments = sqliteTable(
   "generated_documents",
   {

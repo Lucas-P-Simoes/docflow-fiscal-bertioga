@@ -1,3 +1,5 @@
+import { getUserCardAccess, type UserCardAccess } from "./card-access";
+
 export type AccountSummary = {
   id: string;
   name: string;
@@ -8,6 +10,7 @@ export type AccountSummary = {
   hasApiKey: boolean;
   apiModel: string | null;
   apiKeyLastFour: string | null;
+  cardAccess: UserCardAccess;
 };
 
 export type PasswordUser = {
@@ -189,6 +192,7 @@ export async function getAccountBySession(
     hasApiKey: Boolean(row.api_model && row.api_key_last_four),
     apiModel: row.api_model,
     apiKeyLastFour: row.api_key_last_four,
+    cardAccess: await getUserCardAccess(db, row.id),
   };
 }
 
