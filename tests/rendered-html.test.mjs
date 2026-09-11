@@ -298,6 +298,7 @@ test("keeps new registrations pending and limits user approval to the configured
   assert.match(app, /apiRequest\(`\/api\/admin\/users\/\$\{encodeURIComponent\(userId\)\}\/cards`/);
   assert.match(app, /homeCardVisibilityAttribute\("drainage"\)/);
   assert.match(app, /Este card não está liberado para a sua conta/);
+  assert.match(app, /key: "drainage", label: "Drenagem", mark: "QD"/);
   assert.match(app, /Nenhum card está liberado para sua conta/);
   assert.match(styles, /\.admin-button/);
   assert.match(styles, /\.admin-button\.has-pending \.admin-bell-icon/);

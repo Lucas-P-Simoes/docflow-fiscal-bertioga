@@ -45,7 +45,7 @@ const HOME_CARD_OPTIONS = [
   { key: "oficio", label: "Ofício", mark: "O" },
   { key: "notification", label: "Notificação", mark: "N" },
   { key: "warning", label: "Advertência", mark: "A" },
-  { key: "drainage", label: "Quantitativo de drenagem", mark: "QD" },
+  { key: "drainage", label: "Drenagem", mark: "QD" },
 ];
 const CORRESPONDENCE_TYPES = {
   memorando: {
