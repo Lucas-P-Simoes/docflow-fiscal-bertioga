@@ -19,7 +19,7 @@
     <meta name="twitter:card" content="summary_large_image" />
     <title>Fiscal Bertioga — Assistente de Documentos</title>
     <link rel="manifest" href="manifest.webmanifest" />
-    <link rel="stylesheet" href="styles.css?v=20260914-processes" />
+    <link rel="stylesheet" href="styles.css?v=20260914-processes-modal" />
   </head>
   <body>
     <section id="authGate" class="auth-gate" aria-labelledby="authTitle">
@@ -413,24 +413,26 @@
         <h2 id="processGuideFormTitle">Novo processo</h2>
         <p class="dialog-lead">Organize o que deve ser solicitado e inclua links oficiais para consulta.</p>
         <input id="processGuideId" type="hidden" />
-        <label class="field">
-          <span>Nome do processo *</span>
-          <input id="processGuideTitle" type="text" maxlength="120" autocomplete="off" placeholder="Ex.: Aditivo de prazo" required />
-        </label>
-        <label class="field">
-          <span>Resumo *</span>
-          <textarea id="processGuideSummary" maxlength="600" placeholder="Explique para que serve esta cartilha." required></textarea>
-        </label>
-        <label class="field">
-          <span>Documentos e orientações *</span>
-          <textarea id="processGuideChecklist" class="process-guide-list-input" maxlength="20000" placeholder="Digite um item por linha.&#10;Ex.: Anexar certidão vigente." required></textarea>
-          <small>Use uma linha para cada documento ou providência.</small>
-        </label>
-        <label class="field">
-          <span>Links úteis</span>
-          <textarea id="processGuideLinks" class="process-guide-links-input" maxlength="22000" placeholder="Nome do site | https://exemplo.gov.br"></textarea>
-          <small>Use uma linha por link, no formato: Nome do site | endereço.</small>
-        </label>
+        <div class="process-guide-form-grid">
+          <label class="field process-guide-title-field">
+            <span>Nome do processo *</span>
+            <input id="processGuideTitle" type="text" maxlength="120" autocomplete="off" placeholder="Ex.: Aditivo de prazo" required />
+          </label>
+          <label class="field process-guide-summary-field">
+            <span>Resumo *</span>
+            <textarea id="processGuideSummary" maxlength="600" placeholder="Explique para que serve esta cartilha." required></textarea>
+          </label>
+          <label class="field">
+            <span>Documentos e orientações *</span>
+            <textarea id="processGuideChecklist" class="process-guide-list-input" maxlength="20000" placeholder="Digite um item por linha.&#10;Ex.: Anexar certidão vigente." required></textarea>
+            <small>Use uma linha para cada documento ou providência.</small>
+          </label>
+          <label class="field">
+            <span>Links úteis</span>
+            <textarea id="processGuideLinks" class="process-guide-links-input" maxlength="22000" placeholder="Nome do site | https://exemplo.gov.br"></textarea>
+            <small>Use uma linha por link, no formato: Nome do site | endereço.</small>
+          </label>
+        </div>
         <div id="processGuideFeedback" class="inline-feedback is-hidden" role="status"></div>
         <div class="dialog-actions">
           <button class="button button-secondary" type="button" data-action="close-process-guide">Cancelar</button>

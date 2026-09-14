@@ -918,6 +918,7 @@ test("publishes a shared process guide that only the administrator can manage", 
   assert.match(page, /id="processGuideDialog"/);
   assert.match(page, /id="processGuideChecklist"/);
   assert.match(page, /id="processGuideLinks"/);
+  assert.match(page, /class="process-guide-form-grid"/);
   assert.match(app, /function renderProcesses\(\)/);
   assert.match(app, /apiRequest\("\/api\/processes"\)/);
   assert.match(app, /data-action="add-process-guide"/);
@@ -927,6 +928,9 @@ test("publishes a shared process guide that only the administrator can manage", 
   assert.match(styles, /\.processes-button/);
   assert.match(styles, /\.process-guide-checklist/);
   assert.match(styles, /\.process-guide-links/);
+  assert.match(styles, /\.process-guide-dialog\s*\{[^}]*1040px[^}]*overflow:\s*hidden/s);
+  assert.match(styles, /\.process-guide-dialog \.dialog-card\s*\{[^}]*width:\s*100%[^}]*overflow-x:\s*hidden/s);
+  assert.match(styles, /\.process-guide-form-grid\s*\{[^}]*grid-template-columns:\s*repeat\(2,/s);
   assert.match(worker, /url\.pathname === "\/api\/processes"/);
   assert.match(worker, /handleProcessMutation/);
   assert.match(processWorker, /authenticateRequest\(request, env\)/);

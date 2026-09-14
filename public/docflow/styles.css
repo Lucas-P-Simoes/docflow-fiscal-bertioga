@@ -1454,16 +1454,49 @@ select:focus-visible,
   font-size: 34px;
 }
 
+.process-guide-dialog {
+  width: min(calc(100% - 32px), 1040px);
+  max-height: calc(100vh - 32px);
+  max-height: calc(100dvh - 32px);
+  overflow: hidden;
+}
+
 .process-guide-dialog .dialog-card {
-  width: min(760px, calc(100vw - 32px));
+  width: 100%;
+  max-height: calc(100vh - 32px);
+  max-height: calc(100dvh - 32px);
+  padding: 32px;
+  overflow-x: hidden;
+  overflow-y: auto;
+  scrollbar-gutter: stable;
+}
+
+.process-guide-form-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px 22px;
+}
+
+.process-guide-dialog .process-guide-form-grid .field {
+  min-width: 0;
+  margin-top: 0;
+}
+
+.process-guide-title-field,
+.process-guide-summary-field {
+  grid-column: 1 / -1;
+}
+
+.process-guide-summary-field textarea {
+  min-height: 96px;
 }
 
 .process-guide-list-input {
-  min-height: 170px;
+  min-height: 220px;
 }
 
 .process-guide-links-input {
-  min-height: 120px;
+  min-height: 220px;
 }
 
 .kanban-workspace {
@@ -6106,6 +6139,24 @@ textarea::placeholder {
 
   .process-guide-links > div {
     grid-template-columns: 1fr;
+  }
+
+  .process-guide-dialog .dialog-card {
+    padding: 22px;
+  }
+
+  .process-guide-form-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .process-guide-title-field,
+  .process-guide-summary-field {
+    grid-column: auto;
+  }
+
+  .process-guide-list-input,
+  .process-guide-links-input {
+    min-height: 150px;
   }
 
   .kanban-heading-actions {
