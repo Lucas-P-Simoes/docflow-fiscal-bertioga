@@ -5,7 +5,6 @@ export const HOME_CARD_KEYS = [
   "oficio",
   "notification",
   "warning",
-  "drainage",
 ] as const;
 
 export type HomeCardKey = (typeof HOME_CARD_KEYS)[number];

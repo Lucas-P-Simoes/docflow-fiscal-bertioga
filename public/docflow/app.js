@@ -45,7 +45,6 @@ const HOME_CARD_OPTIONS = [
   { key: "oficio", label: "Ofício", mark: "O" },
   { key: "notification", label: "Notificação", mark: "N" },
   { key: "warning", label: "Advertência", mark: "A" },
-  { key: "drainage", label: "Drenagem", mark: "QD" },
 ];
 const CORRESPONDENCE_TYPES = {
   memorando: {
@@ -1463,16 +1462,6 @@ function renderHome() {
         <h3>Advertência</h3>
         <p>Gere a advertência no modelo oficial da Prefeitura de Bertioga, com assinaturas e fotos opcionais.</p>
         <span class="card-link">Criar advertência <span aria-hidden="true">→</span></span>
-      </article>
-      <article class="document-card is-drainage" tabindex="0" role="button" ${homeCardVisibilityAttribute("drainage")} data-action="start-drainage">
-        <span class="card-status is-ready">Pronto</span>
-        <div class="drainage-card-copy">
-          <span class="card-number" aria-hidden="true">07</span><span class="card-icon" aria-hidden="true">∑</span>
-          <h3>Quantitativo de drenagem</h3>
-          <p>Calcule BL, PV, tubulações, pavimentação e sarjeta com memória técnica e planilha Excel.</p>
-          <span class="card-link">Montar quantitativo <span aria-hidden="true">→</span></span>
-        </div>
-        <img class="drainage-card-image" src="${DRAINAGE_IMAGES.system}" alt="Corte ilustrado de uma rua com boca de lobo, tubulação e poço de visita" />
       </article>
     </div>
     ${HOME_CARD_OPTIONS.some((card) => canAccessHomeCard(card.key)) ? "" : `<div class="home-access-empty">
@@ -6914,7 +6903,6 @@ async function handleAction(action, target) {
   if (action === "start-cota") return startFlow("cota");
   if (action === "start-notification") return startFlow("notification");
   if (action === "start-warning") return startFlow("warning");
-  if (action === "start-drainage") return startFlow("drainage");
   if (action === "start-correspondence") return startFlow("correspondence", target.dataset.kind);
   if (action === "previous-step") return previousStep();
   if (action === "next-step") return nextStep();

@@ -296,9 +296,9 @@ test("keeps new registrations pending and limits user approval to the configured
   assert.match(app, /data-admin-card-user=/);
   assert.match(app, /role="switch"/);
   assert.match(app, /apiRequest\(`\/api\/admin\/users\/\$\{encodeURIComponent\(userId\)\}\/cards`/);
-  assert.match(app, /homeCardVisibilityAttribute\("drainage"\)/);
+  assert.doesNotMatch(app, /homeCardVisibilityAttribute\("drainage"\)/);
   assert.match(app, /Este card não está liberado para a sua conta/);
-  assert.match(app, /key: "drainage", label: "Drenagem", mark: "QD"/);
+  assert.doesNotMatch(app, /key: "drainage", label: "Drenagem", mark: "QD"/);
   assert.match(app, /Nenhum card está liberado para sua conta/);
   assert.match(styles, /\.admin-button/);
   assert.match(styles, /\.admin-button\.has-pending \.admin-bell-icon/);
@@ -348,7 +348,7 @@ test("labels every available document, including the technical opinion, as ready
     readFile(new URL("public/docflow/styles.css", siteRoot), "utf8"),
   ]);
 
-  assert.equal((app.match(/card-status is-ready/g) || []).length, 7);
+  assert.equal((app.match(/card-status is-ready/g) || []).length, 6);
   assert.equal((app.match(/card-status is-development/g) || []).length, 0);
   assert.match(app, /data-action="start-report">[\s\S]*?card-status is-ready">Pronto<\/span>[\s\S]*?<h3>Parecer técnico<\/h3>/);
   assert.match(app, /card-status is-ready">Pronto<\/span>[\s\S]*?<h3>Folha de cota<\/h3>/);
@@ -356,7 +356,7 @@ test("labels every available document, including the technical opinion, as ready
   assert.match(app, /data-kind="oficio">[\s\S]*?card-status is-ready">Pronto<\/span>[\s\S]*?<h3>Ofício<\/h3>/);
   assert.match(app, /data-action="start-notification">[\s\S]*?card-status is-ready">Pronto<\/span>[\s\S]*?<h3>Notificação<\/h3>/);
   assert.match(app, /data-action="start-warning">[\s\S]*?card-status is-ready">Pronto<\/span>[\s\S]*?<h3>Advertência<\/h3>/);
-  assert.match(app, /data-action="start-drainage">[\s\S]*?card-status is-ready">Pronto<\/span>[\s\S]*?<h3>Quantitativo de drenagem<\/h3>/);
+  assert.doesNotMatch(app, /data-action="start-drainage"/);
   assert.match(styles, /\.card-status\s*\{/);
   assert.match(styles, /\.card-status\.is-ready\s*\{/);
 });
