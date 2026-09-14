@@ -22,6 +22,7 @@ import {
 } from "./admin";
 import { handleDocumentDownload, handleDocumentMutation, handleDocuments } from "./documents";
 import { handleSignatureMutation, handleSignatures } from "./signatures";
+import { handleProcessMutation, handleProcesses } from "./processes";
 import {
   handleKanban,
   handleKanbanAttachmentMutation,
@@ -233,6 +234,13 @@ const worker = {
       }
       if (url.pathname === "/api/openai") {
         return await proxyOpenAI(request, env);
+      }
+      if (url.pathname === "/api/processes") {
+        return await handleProcesses(request, env);
+      }
+      const processMutation = url.pathname.match(/^\/api\/processes\/([0-9a-f-]{36})$/i);
+      if (processMutation) {
+        return await handleProcessMutation(request, env, processMutation[1]);
       }
       if (url.pathname === "/api/kanban") {
         return await handleKanban(request, env);

@@ -196,6 +196,7 @@ const elements = {
   adminButton: document.querySelector("#adminButton"),
   adminPendingBadge: document.querySelector("#adminPendingBadge"),
   kanbanButton: document.querySelector("#kanbanButton"),
+  processesButton: document.querySelector("#processesButton"),
   notificationButton: document.querySelector("#notificationButton"),
   notificationBadge: document.querySelector("#notificationBadge"),
   notificationPopover: document.querySelector("#notificationPopover"),
@@ -254,6 +255,16 @@ const elements = {
   kanbanBoardFeedback: document.querySelector("#kanbanBoardFeedback"),
   saveKanbanBoardButton: document.querySelector("#saveKanbanBoardButton"),
   deleteKanbanBoardButton: document.querySelector("#deleteKanbanBoardButton"),
+  processGuideDialog: document.querySelector("#processGuideDialog"),
+  processGuideForm: document.querySelector("#processGuideForm"),
+  processGuideFormTitle: document.querySelector("#processGuideFormTitle"),
+  processGuideId: document.querySelector("#processGuideId"),
+  processGuideTitle: document.querySelector("#processGuideTitle"),
+  processGuideSummary: document.querySelector("#processGuideSummary"),
+  processGuideChecklist: document.querySelector("#processGuideChecklist"),
+  processGuideLinks: document.querySelector("#processGuideLinks"),
+  processGuideFeedback: document.querySelector("#processGuideFeedback"),
+  saveProcessGuideButton: document.querySelector("#saveProcessGuideButton"),
   kanbanHistoryDialog: document.querySelector("#kanbanHistoryDialog"),
   kanbanHistoryDialogTitle: document.querySelector("#kanbanHistoryDialogTitle"),
   kanbanHistoryDialogContent: document.querySelector("#kanbanHistoryDialogContent"),
@@ -300,6 +311,18 @@ function createAdminState() {
     loading: false,
     loaded: false,
     users: [],
+    error: "",
+    busy: new Map(),
+  };
+}
+
+function createProcessesState() {
+  return {
+    open: false,
+    loading: false,
+    loaded: false,
+    saving: false,
+    items: [],
     error: "",
     busy: new Map(),
   };
@@ -361,6 +384,7 @@ const state = {
   lastDownload: null,
   history: createHistoryState(),
   admin: createAdminState(),
+  processes: createProcessesState(),
   kanban: createKanbanState(),
   messageCallbacks: new Map(),
   validationFields: [],
@@ -1037,6 +1061,7 @@ function applyAccount(payload) {
   state.auth.cardAccess = normalizeCardAccess(payload.cards);
   state.signatures = createSignatureConfigurationState();
   state.admin = createAdminState();
+  state.processes = createProcessesState();
   state.kanban = createKanbanState();
   const selectedModel = payload.api?.model || "gpt-5.6-terra";
   const knownModels = new Set(["gpt-5.6-terra", "gpt-5.6-sol", "gpt-5.6-luna"]);
@@ -1066,6 +1091,7 @@ function showAuthGate(view = "login") {
   state.auth.cardAccess = normalizeCardAccess();
   state.signatures = createSignatureConfigurationState();
   state.admin = createAdminState();
+  state.processes = createProcessesState();
   state.kanban = createKanbanState();
   stopNotificationPolling();
   state.history.pdfCache.forEach((cached) => cached.url && URL.revokeObjectURL(cached.url));
@@ -1109,7 +1135,7 @@ async function refreshCurrentCardAccess() {
     );
     if (!changed) return;
     state.auth.cardAccess = nextAccess;
-    if (!state.flow && !state.admin.open && !state.history.open && !state.kanban.open) render();
+    if (!state.flow && !state.admin.open && !state.processes.open && !state.history.open && !state.kanban.open) render();
   } catch {
     // A próxima navegação ou atualização da página repetirá a verificação da sessão.
   }
@@ -1236,8 +1262,17 @@ function panelHeader(title, description, action = "") {
 
 function render() {
   updateApiBadge();
-  elements.main.classList.toggle("is-home", !state.admin.open && !state.history.open && !state.kanban.open && !state.flow);
+  elements.processesButton.classList.toggle("is-active", state.processes.open);
+  elements.processesButton.setAttribute("aria-current", state.processes.open ? "page" : "false");
+  elements.main.classList.toggle("is-home", !state.admin.open && !state.processes.open && !state.history.open && !state.kanban.open && !state.flow);
   elements.main.classList.toggle("is-kanban", state.kanban.open);
+  if (state.processes.open) {
+    elements.sidebar.classList.add("is-hidden");
+    elements.actionBar.classList.add("is-hidden");
+    elements.view.className = "view home-view processes-view";
+    elements.view.innerHTML = renderProcesses();
+    return;
+  }
   if (state.admin.open) {
     elements.sidebar.classList.add("is-hidden");
     elements.actionBar.classList.add("is-hidden");
@@ -1582,6 +1617,7 @@ function showAdminPanel() {
   if (!state.auth.user?.isAdmin) return;
   state.flow = null;
   state.history.open = false;
+  state.processes.open = false;
   state.kanban.open = false;
   state.admin.open = true;
   render();
@@ -1691,6 +1727,207 @@ function confirmAdminUserDeletion(userId) {
   });
 }
 
+function renderProcesses() {
+  const processes = state.processes;
+  const isAdmin = Boolean(state.auth.user?.isAdmin);
+  const errorNotice = processes.error
+    ? `<div class="notice is-warning"><span aria-hidden="true">!</span><span>${e(processes.error)}</span></div>`
+    : "";
+  const content = processes.loading && !processes.loaded
+    ? `<div class="processes-state"><span class="history-spinner" aria-hidden="true"></span><strong>Carregando cartilhas…</strong></div>`
+    : processes.items.length
+      ? `<div class="process-guide-grid">${processes.items.map(renderProcessGuide).join("")}</div>`
+      : `<div class="processes-state"><span class="processes-empty-icon" aria-hidden="true">▤</span><strong>Nenhum processo cadastrado</strong><span>${isAdmin ? "Cadastre a primeira cartilha para orientar a equipe." : "O administrador ainda não publicou uma cartilha."}</span>${isAdmin ? '<button class="button button-primary" type="button" data-action="add-process-guide">+ Novo processo</button>' : ""}</div>`;
+
+  return `<section class="document-section processes-section">
+    <div class="processes-heading">
+      <div><span class="eyebrow eyebrow-dark">Cartilha de apoio</span><h2>Processos</h2><p>Consulte os documentos, justificativas e links necessários antes de formalizar uma solicitação.</p></div>
+      <div class="processes-heading-actions">
+        <button class="button button-secondary" type="button" data-action="home">← Voltar</button>
+        <button class="button button-secondary" type="button" data-action="refresh-processes" ${processes.loading ? "disabled" : ""}>Atualizar</button>
+        ${isAdmin ? '<button class="button button-primary" type="button" data-action="add-process-guide">+ Novo processo</button>' : ""}
+      </div>
+    </div>
+    <div class="processes-intro"><span aria-hidden="true">✓</span><p><strong>Informação para toda a equipe</strong>Confira cada item e abra os sites oficiais indicados. Somente o administrador pode alterar as cartilhas.</p></div>
+    ${errorNotice}
+    ${content}
+  </section>`;
+}
+
+function renderProcessGuide(process) {
+  const isAdmin = Boolean(state.auth.user?.isAdmin);
+  const busy = state.processes.busy.get(process.id) || "";
+  const links = Array.isArray(process.links) ? process.links.filter((link) => processGuideHref(link.url)) : [];
+  return `<article class="process-guide-card">
+    <header class="process-guide-header">
+      <span class="process-guide-mark" aria-hidden="true">▤</span>
+      <div><span class="eyebrow eyebrow-dark">Orientação de processo</span><h3>${e(process.title)}</h3><p>${e(process.summary)}</p></div>
+      ${isAdmin ? `<div class="process-guide-admin-actions"><button class="button button-quiet" type="button" data-action="edit-process-guide" data-id="${e(process.id)}" ${busy ? "disabled" : ""}>Editar</button><button class="button button-quiet button-danger" type="button" data-action="delete-process-guide" data-id="${e(process.id)}" ${busy ? "disabled" : ""}>${busy === "delete" ? "Excluindo…" : "Excluir"}</button></div>` : ""}
+    </header>
+    <section class="process-guide-block" aria-labelledby="process-checklist-${e(process.id)}">
+      <h4 id="process-checklist-${e(process.id)}">Documentos e orientações</h4>
+      <ol class="process-guide-checklist">${(process.checklist || []).map((item) => `<li><span aria-hidden="true">✓</span><p>${e(item)}</p></li>`).join("")}</ol>
+    </section>
+    ${links.length ? `<section class="process-guide-block process-guide-links" aria-labelledby="process-links-${e(process.id)}"><h4 id="process-links-${e(process.id)}">Links oficiais e consultas</h4><div>${links.map((link) => `<a href="${e(processGuideHref(link.url))}" target="_blank" rel="noopener noreferrer"><span>${e(link.label)}</span><strong>Abrir site ↗</strong></a>`).join("")}</div></section>` : ""}
+    <footer>Atualizado em ${e(formatHistoryDate(process.updatedAt))}</footer>
+  </article>`;
+}
+
+function processGuideHref(value) {
+  try {
+    const url = new URL(String(value || ""));
+    return url.protocol === "https:" || url.protocol === "http:" ? url.href : "";
+  } catch {
+    return "";
+  }
+}
+
+async function loadProcesses() {
+  if (!state.auth.user || state.processes.loading) return;
+  state.processes.loading = true;
+  state.processes.error = "";
+  if (state.processes.open) render();
+  try {
+    const payload = await apiRequest("/api/processes");
+    state.processes.items = Array.isArray(payload.processes) ? payload.processes : [];
+    state.processes.loaded = true;
+  } catch (error) {
+    state.processes.error = error.message;
+  } finally {
+    state.processes.loading = false;
+    if (state.processes.open) render();
+  }
+}
+
+function showProcesses() {
+  state.flow = null;
+  state.admin.open = false;
+  state.history.open = false;
+  state.kanban.open = false;
+  state.processes.open = true;
+  render();
+  focusMain();
+  if (!state.processes.loaded) loadProcesses();
+}
+
+function setProcessGuideFeedback(message, kind = "error") {
+  elements.processGuideFeedback.textContent = message;
+  elements.processGuideFeedback.className = `inline-feedback${message ? "" : " is-hidden"}${kind === "error" ? " is-error" : ""}`;
+}
+
+function openProcessGuideDialog(processId = "") {
+  if (!state.auth.user?.isAdmin) return;
+  const process = state.processes.items.find((item) => item.id === processId);
+  elements.processGuideForm.reset();
+  elements.processGuideId.value = process?.id || "";
+  elements.processGuideFormTitle.textContent = process ? "Editar processo" : "Novo processo";
+  elements.processGuideTitle.value = process?.title || "";
+  elements.processGuideSummary.value = process?.summary || "";
+  elements.processGuideChecklist.value = Array.isArray(process?.checklist) ? process.checklist.join("\n") : "";
+  elements.processGuideLinks.value = Array.isArray(process?.links)
+    ? process.links.map((link) => `${link.label} | ${link.url}`).join("\n")
+    : "";
+  elements.saveProcessGuideButton.textContent = process ? "Salvar alterações" : "Salvar processo";
+  setProcessGuideFeedback("");
+  openDialog(elements.processGuideDialog);
+  setTimeout(() => elements.processGuideTitle.focus(), 50);
+}
+
+function closeProcessGuideDialog() {
+  if (state.processes.saving) return;
+  closeDialog(elements.processGuideDialog);
+  setProcessGuideFeedback("");
+}
+
+function processGuideLinksFromInput(value) {
+  const lines = String(value || "").split(/\r?\n/).map((line) => line.trim()).filter(Boolean);
+  const links = [];
+  for (const line of lines) {
+    const separator = line.indexOf("|");
+    if (separator < 1) return null;
+    const label = line.slice(0, separator).trim();
+    const url = processGuideHref(line.slice(separator + 1).trim());
+    if (!label || !url) return null;
+    links.push({ label, url });
+  }
+  return links;
+}
+
+async function saveProcessGuide() {
+  if (!state.auth.user?.isAdmin || state.processes.saving) return;
+  const id = elements.processGuideId.value;
+  const checklist = elements.processGuideChecklist.value.split(/\r?\n/).map((item) => item.trim()).filter(Boolean);
+  const links = processGuideLinksFromInput(elements.processGuideLinks.value);
+  if (!elements.processGuideTitle.value.trim() || elements.processGuideSummary.value.trim().length < 10 || !checklist.length) {
+    setProcessGuideFeedback("Preencha o nome, o resumo e pelo menos um documento ou orientação.");
+    return;
+  }
+  if (!links) {
+    setProcessGuideFeedback("Revise os links. Use uma linha por item no formato: Nome do site | endereço.");
+    return;
+  }
+
+  state.processes.saving = true;
+  elements.saveProcessGuideButton.disabled = true;
+  elements.saveProcessGuideButton.textContent = "Salvando…";
+  setProcessGuideFeedback("");
+  try {
+    const payload = await apiRequest(id ? `/api/processes/${encodeURIComponent(id)}` : "/api/processes", {
+      method: id ? "PATCH" : "POST",
+      body: {
+        title: elements.processGuideTitle.value.trim(),
+        summary: elements.processGuideSummary.value.trim(),
+        checklist,
+        links,
+      },
+    });
+    const saved = payload.process;
+    state.processes.items = id
+      ? state.processes.items.map((item) => item.id === id ? saved : item)
+      : [...state.processes.items, saved];
+    state.processes.items.sort((left, right) => Number(right.updatedAt || 0) - Number(left.updatedAt || 0) || String(left.title).localeCompare(String(right.title), "pt-BR"));
+    closeDialog(elements.processGuideDialog);
+    render();
+    showToast(id ? "Processo atualizado." : "Processo publicado para a equipe.");
+  } catch (error) {
+    setProcessGuideFeedback(error.message);
+  } finally {
+    state.processes.saving = false;
+    elements.saveProcessGuideButton.disabled = false;
+    elements.saveProcessGuideButton.textContent = id ? "Salvar alterações" : "Salvar processo";
+  }
+}
+
+function confirmProcessGuideDeletion(processId) {
+  const process = state.processes.items.find((item) => item.id === processId);
+  if (!process || !state.auth.user?.isAdmin) return;
+  showMessage({
+    title: "Excluir esta cartilha?",
+    text: `O processo “${process.title}” deixará de aparecer para toda a equipe. Esta ação não pode ser desfeita.`,
+    kind: "error",
+    actions: [
+      { label: "Cancelar" },
+      { label: "Excluir cartilha", danger: true, onClick: () => deleteProcessGuide(processId) },
+    ],
+  });
+}
+
+async function deleteProcessGuide(processId) {
+  if (!state.auth.user?.isAdmin || state.processes.busy.has(processId)) return;
+  state.processes.busy.set(processId, "delete");
+  render();
+  try {
+    await apiRequest(`/api/processes/${encodeURIComponent(processId)}`, { method: "DELETE" });
+    state.processes.items = state.processes.items.filter((item) => item.id !== processId);
+    showToast("Processo excluído.");
+  } catch (error) {
+    state.processes.error = error.message;
+  } finally {
+    state.processes.busy.delete(processId);
+    render();
+  }
+}
+
 function renderDocumentHistory() {
   const history = state.history;
   const content = history.loading && !history.loaded
@@ -1764,6 +2001,7 @@ async function loadDocumentHistory() {
 function showDocumentHistory() {
   state.flow = null;
   state.admin.open = false;
+  state.processes.open = false;
   state.kanban.open = false;
   state.history.open = true;
   render();
@@ -2001,6 +2239,7 @@ async function showKanban({ focusCardId = "", boardId = "" } = {}) {
   state.flow = null;
   state.admin.open = false;
   state.history.open = false;
+  state.processes.open = false;
   state.kanban.open = true;
   if (boardId) state.kanban.activeBoardId = boardId;
   closeNotificationPopover();
@@ -4164,6 +4403,7 @@ function startFlow(flow, kind = "") {
   }
   state.admin.open = false;
   state.history.open = false;
+  state.processes.open = false;
   state.kanban.open = false;
   state.flow = flow;
   if (flow === "correspondence" && CORRESPONDENCE_TYPES[kind]) {
@@ -4187,6 +4427,7 @@ function goHome() {
   state.flow = null;
   state.admin.open = false;
   state.history.open = false;
+  state.processes.open = false;
   state.kanban.open = false;
   state.step = 0;
   state.validationFields = [];
@@ -6631,6 +6872,12 @@ async function handleAction(action, target) {
   }
   if (action === "home") return goHome();
   if (action === "show-admin") return showAdminPanel();
+  if (action === "show-processes") return showProcesses();
+  if (action === "refresh-processes") return loadProcesses();
+  if (action === "add-process-guide") return openProcessGuideDialog();
+  if (action === "edit-process-guide") return openProcessGuideDialog(target.dataset.id);
+  if (action === "delete-process-guide") return confirmProcessGuideDeletion(target.dataset.id);
+  if (action === "close-process-guide") return closeProcessGuideDialog();
   if (action === "refresh-admin") return loadAdminUsers();
   if (action === "approve-admin-user") return setAdminUserStatus(target.dataset.id, "approved");
   if (action === "reject-admin-user") return confirmAdminUserRejection(target.dataset.id);
@@ -7049,6 +7296,15 @@ elements.kanbanCardForm.addEventListener("submit", async (event) => {
 elements.kanbanBoardForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   await saveKanbanBoard();
+});
+
+elements.processGuideForm.addEventListener("submit", async (event) => {
+  event.preventDefault();
+  await saveProcessGuide();
+});
+
+elements.processGuideDialog.addEventListener("click", (event) => {
+  if (event.target === elements.processGuideDialog) closeProcessGuideDialog();
 });
 
 elements.kanbanBoardDialog.addEventListener("click", (event) => {

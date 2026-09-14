@@ -899,3 +899,50 @@ test("adds private Kanban boards with member permissions, files, comments, histo
   assert.match(priorityMigration, /ALTER TABLE `kanban_cards` ADD `priority` text DEFAULT 'medium' NOT NULL/);
   assert.match(priorityMigration, /idx_kanban_cards_board_status_priority_position/);
 });
+
+
+test("publishes a shared process guide that only the administrator can manage", async () => {
+  const [app, page, styles, worker, processWorker, processDb, schema, migration] = await Promise.all([
+    readFile(new URL("public/docflow/app.js", siteRoot), "utf8"),
+    readFile(new URL("public/docflow/index.html", siteRoot), "utf8"),
+    readFile(new URL("public/docflow/styles.css", siteRoot), "utf8"),
+    readFile(new URL("worker/index.ts", siteRoot), "utf8"),
+    readFile(new URL("worker/processes.ts", siteRoot), "utf8"),
+    readFile(new URL("db/processes.ts", siteRoot), "utf8"),
+    readFile(new URL("db/schema.ts", siteRoot), "utf8"),
+    readFile(new URL("drizzle/0011_stale_wither.sql", siteRoot), "utf8"),
+  ]);
+
+  assert.match(page, /id="processesButton"/);
+  assert.match(page, /data-action="show-processes"/);
+  assert.match(page, /id="processGuideDialog"/);
+  assert.match(page, /id="processGuideChecklist"/);
+  assert.match(page, /id="processGuideLinks"/);
+  assert.match(app, /function renderProcesses\(\)/);
+  assert.match(app, /apiRequest\("\/api\/processes"\)/);
+  assert.match(app, /data-action="add-process-guide"/);
+  assert.match(app, /data-action="edit-process-guide"/);
+  assert.match(app, /data-action="delete-process-guide"/);
+  assert.match(app, /rel="noopener noreferrer"/);
+  assert.match(styles, /\.processes-button/);
+  assert.match(styles, /\.process-guide-checklist/);
+  assert.match(styles, /\.process-guide-links/);
+  assert.match(worker, /url\.pathname === "\/api\/processes"/);
+  assert.match(worker, /handleProcessMutation/);
+  assert.match(processWorker, /authenticateRequest\(request, env\)/);
+  assert.match(processWorker, /authenticated\.account\.isAdmin && authenticated\.account\.email === ADMIN_EMAIL/);
+  assert.match(processWorker, /url\.protocol !== "https:" && url\.protocol !== "http:"/);
+  assert.match(processDb, /title: "Aditivo de prazo"/);
+  assert.match(processDb, /índice pluviométrico a partir de 13\/08\/2026/);
+  assert.match(processDb, /Ordem de Serviço foi assinada somente em 13\/08\/2026/);
+  assert.match(processDb, /apps\.spaguas\.sp\.gov\.br/);
+  assert.match(processDb, /servicos\.receitafederal\.gov\.br/);
+  assert.match(processDb, /www10\.fazenda\.sp\.gov\.br/);
+  assert.match(processDb, /www\.dividaativa\.pge\.sp\.gov\.br/);
+  assert.match(schema, /export const processGuides/);
+  assert.match(schema, /export const contentSeeds/);
+  assert.match(migration, /CREATE TABLE `process_guides`/);
+  assert.match(migration, /CREATE TABLE `content_seeds`/);
+  assert.match(migration, /idx_process_guides_updated_at/);
+  assert.match(migration, /PRAGMA optimize/);
+});

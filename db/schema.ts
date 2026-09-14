@@ -113,6 +113,29 @@ export const signatureProfiles = sqliteTable(
   ],
 );
 
+export const contentSeeds = sqliteTable("content_seeds", {
+  id: text("id").primaryKey(),
+  appliedAt: integer("applied_at").notNull(),
+});
+
+export const processGuides = sqliteTable(
+  "process_guides",
+  {
+    id: text("id").primaryKey(),
+    title: text("title").notNull(),
+    summary: text("summary").notNull(),
+    checklistJson: text("checklist_json").notNull(),
+    linksJson: text("links_json").notNull(),
+    createdBy: text("created_by").references(() => users.id, { onDelete: "set null" }),
+    updatedBy: text("updated_by").references(() => users.id, { onDelete: "set null" }),
+    createdAt: integer("created_at").notNull(),
+    updatedAt: integer("updated_at").notNull(),
+  },
+  (table) => [
+    index("idx_process_guides_updated_at").on(table.updatedAt),
+  ],
+);
+
 export const kanbanBoards = sqliteTable(
   "kanban_boards",
   {

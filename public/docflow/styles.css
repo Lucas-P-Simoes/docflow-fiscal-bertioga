@@ -388,6 +388,7 @@ select:focus-visible,
 
 .history-button,
 .kanban-button,
+.processes-button,
 .signature-button,
 .admin-button {
   display: inline-flex;
@@ -406,6 +407,7 @@ select:focus-visible,
 
 .history-button:hover,
 .kanban-button:hover,
+.processes-button:hover,
 .signature-button:hover,
 .admin-button:hover {
   border-color: var(--line);
@@ -417,6 +419,18 @@ select:focus-visible,
   border-color: #cad8e5;
   color: #28577f;
   background: #edf4fa;
+}
+
+.processes-button {
+  border-color: #d8d1bd;
+  color: #61542f;
+  background: #f7f3e7;
+}
+
+.processes-button.is-active {
+  border-color: #b7cdbf;
+  color: var(--forest-dark);
+  background: var(--forest-soft);
 }
 
 .notification-center {
@@ -1179,6 +1193,277 @@ select:focus-visible,
 .kanban-section {
   width: 100%;
   padding-top: 0;
+}
+
+.processes-section {
+  padding-top: 8px;
+}
+
+.processes-heading {
+  display: flex;
+  align-items: flex-end;
+  justify-content: space-between;
+  gap: 24px;
+  margin-bottom: 22px;
+}
+
+.processes-heading h2 {
+  margin: 7px 0;
+  font-family: var(--serif);
+  font-size: 36px;
+  font-weight: 500;
+  letter-spacing: -0.03em;
+}
+
+.processes-heading p {
+  max-width: 690px;
+  margin: 0;
+  color: var(--muted);
+  font-size: 16px;
+  line-height: 1.55;
+}
+
+.processes-heading-actions {
+  display: flex;
+  flex: 0 0 auto;
+  gap: 9px;
+}
+
+.processes-intro {
+  display: flex;
+  gap: 14px;
+  align-items: flex-start;
+  margin-bottom: 22px;
+  padding: 16px 18px;
+  border: 1px solid #c8dbd1;
+  border-radius: 15px;
+  color: var(--forest-dark);
+  background: #edf5f0;
+}
+
+.processes-intro > span {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 50%;
+  color: #ffffff;
+  background: var(--forest);
+  font-size: 14px;
+  font-weight: 900;
+}
+
+.processes-intro p {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.processes-intro strong {
+  display: block;
+  margin-bottom: 2px;
+  font-size: 14px;
+}
+
+.process-guide-grid {
+  display: grid;
+  gap: 18px;
+}
+
+.process-guide-card {
+  overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: var(--paper);
+  box-shadow: var(--shadow-sm);
+}
+
+.process-guide-header {
+  display: grid;
+  grid-template-columns: 52px minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: start;
+  padding: 24px;
+  border-bottom: 1px solid var(--line);
+  background: linear-gradient(135deg, #fbfcfb, #f1f6f3);
+}
+
+.process-guide-mark {
+  display: grid;
+  place-items: center;
+  width: 52px;
+  height: 52px;
+  border-radius: 15px;
+  color: #ffffff;
+  background: var(--forest);
+  font-size: 22px;
+  box-shadow: 0 8px 20px rgba(31, 111, 89, 0.18);
+}
+
+.process-guide-header h3 {
+  margin: 6px 0 8px;
+  font-family: var(--serif);
+  font-size: 28px;
+  font-weight: 600;
+  letter-spacing: -0.025em;
+}
+
+.process-guide-header p {
+  max-width: 720px;
+  margin: 0;
+  color: var(--ink-soft);
+  font-size: 16px;
+  line-height: 1.55;
+}
+
+.process-guide-admin-actions {
+  display: flex;
+  gap: 2px;
+}
+
+.process-guide-block {
+  padding: 22px 24px;
+}
+
+.process-guide-block + .process-guide-block {
+  border-top: 1px solid var(--line);
+}
+
+.process-guide-block h4 {
+  margin: 0 0 14px;
+  color: var(--forest-dark);
+  font-size: 14px;
+  letter-spacing: 0.02em;
+}
+
+.process-guide-checklist {
+  display: grid;
+  gap: 10px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.process-guide-checklist li {
+  display: grid;
+  grid-template-columns: 28px minmax(0, 1fr);
+  gap: 11px;
+  align-items: start;
+  padding: 13px 14px;
+  border: 1px solid #e0e8e3;
+  border-radius: 12px;
+  background: #fafcfb;
+}
+
+.process-guide-checklist li > span {
+  display: grid;
+  place-items: center;
+  width: 26px;
+  height: 26px;
+  border-radius: 50%;
+  color: var(--forest-dark);
+  background: var(--forest-soft);
+  font-size: 13px;
+  font-weight: 900;
+}
+
+.process-guide-checklist p {
+  margin: 2px 0 0;
+  font-size: 15px;
+  line-height: 1.55;
+}
+
+.process-guide-links > div {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 9px;
+}
+
+.process-guide-links a {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  min-height: 50px;
+  padding: 11px 14px;
+  border: 1px solid #d6e2dc;
+  border-radius: 12px;
+  color: var(--ink-soft);
+  background: #ffffff;
+  font-size: 14px;
+  text-decoration: none;
+  transition: border-color 160ms ease, color 160ms ease, transform 160ms ease;
+}
+
+.process-guide-links a:hover,
+.process-guide-links a:focus-visible {
+  border-color: var(--forest);
+  color: var(--forest-dark);
+  transform: translateY(-1px);
+}
+
+.process-guide-links a strong {
+  flex: 0 0 auto;
+  color: var(--forest);
+  font-size: 12px;
+}
+
+.process-guide-card > footer {
+  padding: 12px 24px;
+  border-top: 1px solid var(--line);
+  color: var(--muted);
+  background: #fbfcfb;
+  font-size: 12px;
+}
+
+.processes-state {
+  display: grid;
+  place-items: center;
+  min-height: 280px;
+  padding: 36px;
+  border: 1px dashed var(--line-strong);
+  border-radius: var(--radius-lg);
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.64);
+  text-align: center;
+}
+
+.processes-state strong,
+.processes-state span {
+  display: block;
+}
+
+.processes-state strong {
+  color: var(--ink-soft);
+  font-family: var(--serif);
+  font-size: 24px;
+  font-weight: 500;
+}
+
+.processes-state span:not(.history-spinner):not(.processes-empty-icon) {
+  max-width: 430px;
+  margin: 8px 0 18px;
+  font-size: 14px;
+  line-height: 1.55;
+}
+
+.processes-empty-icon {
+  margin-bottom: 14px;
+  color: var(--forest);
+  font-size: 34px;
+}
+
+.process-guide-dialog .dialog-card {
+  width: min(760px, calc(100vw - 32px));
+}
+
+.process-guide-list-input {
+  min-height: 170px;
+}
+
+.process-guide-links-input {
+  min-height: 120px;
 }
 
 .kanban-workspace {
@@ -5379,6 +5664,7 @@ textarea::placeholder {
 
   .api-button span:not(.api-dot),
   .kanban-button span:last-child,
+  .processes-button span:last-child,
   .history-button span:last-child,
   .signature-button span:last-child,
   .admin-button-label,
@@ -5388,6 +5674,7 @@ textarea::placeholder {
 
   .history-button,
   .kanban-button,
+  .processes-button,
   .signature-button,
   .admin-button {
     width: 40px;
@@ -5537,6 +5824,7 @@ textarea::placeholder {
 
   .history-heading,
   .admin-heading,
+  .processes-heading,
   .kanban-heading {
     align-items: flex-start;
     flex-direction: column;
@@ -5628,6 +5916,7 @@ textarea::placeholder {
   .brand-copy small,
   .api-button span:not(.api-dot),
   .kanban-button span:last-child,
+  .processes-button span:last-child,
   .history-button span:last-child,
   .signature-button span:last-child,
   .admin-button-label {
@@ -5636,6 +5925,7 @@ textarea::placeholder {
 
   .history-button,
   .kanban-button,
+  .processes-button,
   .signature-button,
   .admin-button {
     width: 40px;
@@ -5768,6 +6058,8 @@ textarea::placeholder {
   .history-heading-actions .button,
   .admin-heading-actions,
   .admin-heading-actions .button,
+  .processes-heading-actions,
+  .processes-heading-actions .button,
   .kanban-heading-actions,
   .kanban-heading-actions .button {
     width: 100%;
@@ -5786,6 +6078,34 @@ textarea::placeholder {
   .admin-heading-actions {
     display: grid;
     grid-template-columns: 1fr 1fr;
+  }
+
+  .processes-heading-actions {
+    display: grid;
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .processes-heading-actions .button:last-child:nth-child(3) {
+    grid-column: 1 / -1;
+  }
+
+  .process-guide-header {
+    grid-template-columns: 46px minmax(0, 1fr);
+    padding: 20px;
+  }
+
+  .process-guide-mark {
+    width: 46px;
+    height: 46px;
+  }
+
+  .process-guide-admin-actions {
+    grid-column: 1 / -1;
+    justify-content: flex-end;
+  }
+
+  .process-guide-links > div {
+    grid-template-columns: 1fr;
   }
 
   .kanban-heading-actions {
@@ -6031,6 +6351,7 @@ textarea::placeholder {
 
   .history-button,
   .kanban-button,
+  .processes-button,
   .signature-button,
   .admin-button,
   .notification-button,
