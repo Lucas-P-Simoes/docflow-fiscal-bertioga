@@ -157,6 +157,7 @@ export const kanbanCards = sqliteTable(
     startDate: text("start_date"),
     durationDays: integer("duration_days"),
     status: text("status", { enum: ["todo", "doing", "done"] }).notNull().default("todo"),
+    priority: text("priority", { enum: ["low", "medium", "high"] }).notNull().default("medium"),
     position: integer("position").notNull(),
     createdBy: text("created_by").references(() => users.id, { onDelete: "set null" }),
     createdAt: integer("created_at").notNull(),
@@ -164,6 +165,7 @@ export const kanbanCards = sqliteTable(
   },
   (table) => [
     index("idx_kanban_cards_board_status_position").on(table.boardId, table.status, table.position),
+    index("idx_kanban_cards_board_status_priority_position").on(table.boardId, table.status, table.priority, table.position),
     index("idx_kanban_cards_status_position").on(table.status, table.position),
     index("idx_kanban_cards_updated_at").on(table.updatedAt),
   ],

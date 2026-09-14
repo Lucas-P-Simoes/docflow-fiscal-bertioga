@@ -1,0 +1,2 @@
+ALTER TABLE `kanban_cards` ADD `priority` text DEFAULT 'medium' NOT NULL;--> statement-breakpoint
+CREATE INDEX `idx_kanban_cards_board_status_priority_position` ON `kanban_cards` (`board_id`,`status`,`priority`,`position`);

@@ -25,6 +25,7 @@ import {
   updateKanbanBoard,
   updateKanbanCard,
   type KanbanPerson,
+  type KanbanPriority,
   type KanbanStatus,
 } from "../db/kanban";
 import { authenticateRequest, authError, authJson } from "./auth";
@@ -39,6 +40,7 @@ const MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
 const MAX_ATTACHMENT_REQUEST_BYTES = MAX_FILES_PER_UPLOAD * MAX_ATTACHMENT_BYTES + 512 * 1024;
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[1-5][0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
 const KANBAN_STATUSES = new Set<KanbanStatus>(["todo", "doing", "done"]);
+const KANBAN_PRIORITIES = new Set<KanbanPriority>(["low", "medium", "high"]);
 
 type JsonObject = Record<string, unknown>;
 type Authenticated = NonNullable<Awaited<ReturnType<typeof authenticateRequest>>>;
@@ -184,6 +186,10 @@ export async function handleKanbanCardMutation(
   if (!board) return authError(404, "Quadro não encontrado ou sem acesso.");
   const body = await readBodyOrResponse(request);
   if (body instanceof Response) return body;
+  if (body.priority === undefined) {
+    const existingCard = (await listKanbanCards(env.DB, access.boardId)).find((item) => item.id === cardId);
+    body.priority = existingCard?.priority || "medium";
+  }
   const parsed = parseCardBody(body, new Set(board.members.map((item) => item.id)));
   if (parsed instanceof Response) return parsed;
   const card = await updateKanbanCard(env.DB, {
@@ -533,6 +539,7 @@ function parseCardBody(
   startDate: string | null;
   durationDays: number | null;
   status: KanbanStatus;
+  priority: KanbanPriority;
   assigneeIds: string[];
 } | Response {
   const title = cleanSingleLine(body.title, 160);
@@ -541,6 +548,7 @@ function parseCardBody(
   const hasDuration = body.durationDays !== null && body.durationDays !== undefined && body.durationDays !== "";
   const durationDays = hasDuration ? Number(body.durationDays) : null;
   const status = body.status;
+  const priority = typeof body.priority === "string" ? body.priority : "medium";
   if (!title) return authError(400, "Informe o título do cartão.");
   if (requireSchedule && (!startDate || durationDays === null)) {
     return authError(400, "Informe a data de início e os dias de vigência da tarefa.");
@@ -555,6 +563,9 @@ function parseCardBody(
   if (typeof status !== "string" || !KANBAN_STATUSES.has(status as KanbanStatus)) {
     return authError(400, "Escolha uma coluna válida para o cartão.");
   }
+  if (!KANBAN_PRIORITIES.has(priority as KanbanPriority)) {
+    return authError(400, "Escolha uma prioridade válida para o cartão.");
+  }
   if (!Array.isArray(body.assigneeIds)) {
     return authError(400, "Informe os responsáveis no formato correto.");
   }
@@ -567,7 +578,7 @@ function parseCardBody(
     return authError(400, "Selecione somente participantes deste quadro.");
   }
 
-  return { title, description, startDate, durationDays, status: status as KanbanStatus, assigneeIds };
+  return { title, description, startDate, durationDays, status: status as KanbanStatus, priority: priority as KanbanPriority, assigneeIds };
 }
 
 function isValidIsoDate(value: string): boolean {

@@ -1,4 +1,5 @@
 export type KanbanStatus = "todo" | "doing" | "done";
+export type KanbanPriority = "low" | "medium" | "high";
 
 export type KanbanPerson = {
   id: string;
@@ -31,6 +32,7 @@ export type KanbanCard = {
   startDate: string | null;
   durationDays: number | null;
   status: KanbanStatus;
+  priority: KanbanPriority;
   position: number;
   createdBy: KanbanPerson | null;
   assignees: KanbanPerson[];
@@ -111,6 +113,7 @@ type CardRow = {
   start_date: string | null;
   duration_days: number | null;
   status: KanbanStatus;
+  priority: KanbanPriority;
   position: number;
   created_by: string | null;
   creator_name: string | null;
@@ -414,7 +417,7 @@ export async function listKanbanCards(db: D1Database, boardId: string): Promise<
   const cardResult = await db
     .prepare(
       `SELECT
-         c.id, c.board_id, c.title, c.description, c.start_date, c.duration_days, c.status, c.position,
+         c.id, c.board_id, c.title, c.description, c.start_date, c.duration_days, c.status, c.priority, c.position,
          c.created_by, creator.name AS creator_name, creator.email AS creator_email,
          c.created_at, c.updated_at
        FROM kanban_cards AS c
@@ -422,6 +425,7 @@ export async function listKanbanCards(db: D1Database, boardId: string): Promise<
        WHERE c.board_id = ?
        ORDER BY
          CASE c.status WHEN 'todo' THEN 0 WHEN 'doing' THEN 1 ELSE 2 END,
+         CASE c.priority WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END,
          c.position DESC,
          c.created_at DESC`,
     )
@@ -457,6 +461,7 @@ export async function listKanbanCards(db: D1Database, boardId: string): Promise<
     startDate: row.start_date,
     durationDays: row.duration_days,
     status: row.status,
+    priority: row.priority,
     position: row.position,
     createdBy: nullablePerson(row.created_by, row.creator_name, row.creator_email),
     assignees: assigneesByCard.get(row.id) || [],
@@ -829,6 +834,7 @@ export async function createKanbanCard(
     startDate: string;
     durationDays: number;
     status: KanbanStatus;
+    priority: KanbanPriority;
     assigneeIds: string[];
     actor: KanbanPerson;
     now: number;
@@ -843,8 +849,8 @@ export async function createKanbanCard(
     db
       .prepare(
         `INSERT INTO kanban_cards (
-           id, board_id, title, description, start_date, duration_days, status, position, created_by, created_at, updated_at
-         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+           id, board_id, title, description, start_date, duration_days, status, priority, position, created_by, created_at, updated_at
+         ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
       )
       .bind(
         values.id,
@@ -854,6 +860,7 @@ export async function createKanbanCard(
         values.startDate,
         values.durationDays,
         values.status,
+        values.priority,
         values.now,
         values.actor.id,
         values.now,
@@ -905,15 +912,16 @@ export async function updateKanbanCard(
     startDate: string | null;
     durationDays: number | null;
     status: KanbanStatus;
+    priority: KanbanPriority;
     assigneeIds: string[];
     actor: KanbanPerson;
     now: number;
   },
 ): Promise<KanbanCard | null> {
   const existing = await db
-    .prepare("SELECT id, title, description, start_date, duration_days, status, position FROM kanban_cards WHERE id = ? AND board_id = ? LIMIT 1")
+    .prepare("SELECT id, title, description, start_date, duration_days, status, priority, position FROM kanban_cards WHERE id = ? AND board_id = ? LIMIT 1")
     .bind(values.id, values.boardId)
-    .first<{ id: string; title: string; description: string; start_date: string | null; duration_days: number | null; status: KanbanStatus; position: number }>();
+    .first<{ id: string; title: string; description: string; start_date: string | null; duration_days: number | null; status: KanbanStatus; priority: KanbanPriority; position: number }>();
   if (!existing) return null;
 
   const [currentAssignees, notificationRecipientIds] = await Promise.all([
@@ -931,7 +939,8 @@ export async function updateKanbanCard(
   const titleChanged = existing.title !== values.title;
   const descriptionChanged = existing.description !== values.description;
   const scheduleChanged = existing.start_date !== values.startDate || existing.duration_days !== values.durationDays;
-  const contentChanged = titleChanged || descriptionChanged || scheduleChanged || assigneesChanged;
+  const priorityChanged = existing.priority !== values.priority;
+  const contentChanged = titleChanged || descriptionChanged || scheduleChanged || priorityChanged || assigneesChanged;
   const statusChanged = existing.status !== values.status;
   const nextPosition = statusChanged ? values.now : existing.position;
 
@@ -939,7 +948,7 @@ export async function updateKanbanCard(
     db
       .prepare(
         `UPDATE kanban_cards
-         SET title = ?, description = ?, start_date = ?, duration_days = ?, status = ?, position = ?, updated_at = ?
+         SET title = ?, description = ?, start_date = ?, duration_days = ?, status = ?, priority = ?, position = ?, updated_at = ?
          WHERE id = ? AND board_id = ?`,
       )
       .bind(
@@ -948,6 +957,7 @@ export async function updateKanbanCard(
         values.startDate,
         values.durationDays,
         values.status,
+        values.priority,
         nextPosition,
         values.now,
         values.id,
@@ -984,6 +994,9 @@ export async function updateKanbanCard(
         if (existing.start_date !== values.startDate) changes.push(`alterou a data de início do cartão “${values.title}” para ${formatKanbanDate(values.startDate)}`);
         if (existing.duration_days !== values.durationDays) changes.push(`alterou a vigência do cartão “${values.title}” para ${values.durationDays} ${values.durationDays === 1 ? "dia" : "dias"}`);
       }
+    }
+    if (priorityChanged) {
+      changes.push(`alterou a prioridade do cartão “${values.title}” de ${priorityLabel(existing.priority)} para ${priorityLabel(values.priority)}`);
     }
     if (newlyAssigned.length) {
       changes.push(`adicionou ${newlyAssigned.length} ${newlyAssigned.length === 1 ? "responsável" : "responsáveis"} ao cartão “${values.title}”`);
@@ -1149,6 +1162,12 @@ function statusLabel(status: KanbanStatus): string {
   if (status === "doing") return "Em andamento";
   if (status === "done") return "Concluído";
   return "A fazer";
+}
+
+function priorityLabel(priority: KanbanPriority): string {
+  if (priority === "high") return "Alta";
+  if (priority === "low") return "Baixa";
+  return "Média";
 }
 
 function formatKanbanDate(value: string): string {

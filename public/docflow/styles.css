@@ -1774,13 +1774,14 @@ select:focus-visible,
 }
 
 .kanban-card-topline {
-  display: flex;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
   align-items: center;
-  justify-content: space-between;
   gap: 10px;
 }
 
 .kanban-card-topline > span {
+  justify-self: start;
   padding: 4px 7px;
   border-radius: 999px;
   color: #54635c;
@@ -1792,8 +1793,75 @@ select:focus-visible,
 }
 
 .kanban-card-topline small {
+  justify-self: end;
   color: var(--muted);
   font-size: 8.5px;
+  text-align: right;
+}
+
+.kanban-priority-control {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  justify-self: center;
+}
+
+.kanban-priority-dot {
+  position: absolute;
+  z-index: 1;
+  left: 8px;
+  width: 7px;
+  height: 7px;
+  border-radius: 50%;
+  background: currentColor;
+  pointer-events: none;
+}
+
+.kanban-priority-control select {
+  width: 88px;
+  min-height: 26px;
+  padding: 3px 20px 3px 20px;
+  border-radius: 999px;
+  font-size: 9px;
+  font-weight: 850;
+}
+
+.kanban-priority-control.is-high,
+.kanban-priority-control option.is-high {
+  color: #a62b23;
+}
+
+.kanban-priority-control.is-high select {
+  border-color: #e7aaa5;
+  color: #a62b23;
+  background-color: #fff1f0;
+}
+
+.kanban-priority-control.is-medium,
+.kanban-priority-control option.is-medium {
+  color: #8a5a00;
+}
+
+.kanban-priority-control.is-medium select {
+  border-color: #dfbd67;
+  color: #8a5a00;
+  background-color: #fff7df;
+}
+
+.kanban-priority-control.is-low,
+.kanban-priority-control option.is-low {
+  color: #176b48;
+}
+
+.kanban-priority-control.is-low select {
+  border-color: #9fcfb8;
+  color: #176b48;
+  background-color: #eef8f3;
+}
+
+.kanban-priority-control select:hover,
+.kanban-priority-control select:focus {
+  border-color: currentColor;
 }
 
 .kanban-card h4 {

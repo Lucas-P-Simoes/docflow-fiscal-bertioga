@@ -1777,6 +1777,14 @@ const KANBAN_COLUMNS = [
   { id: "done", label: "Concluído", description: "Atividades finalizadas" },
 ];
 
+const KANBAN_PRIORITIES = [
+  { id: "high", label: "Alta", className: "is-high" },
+  { id: "medium", label: "Média", className: "is-medium" },
+  { id: "low", label: "Baixa", className: "is-low" },
+];
+
+const KANBAN_PRIORITY_RANK = { high: 0, medium: 1, low: 2 };
+
 function renderKanban() {
   const kanban = state.kanban;
   const loading = kanban.loading && !kanban.loaded;
@@ -1857,7 +1865,9 @@ function renderKanbanActivity(items = []) {
 }
 
 function renderKanbanColumn(column) {
-  const cards = state.kanban.cards.filter((card) => card.status === column.id);
+  const cards = state.kanban.cards
+    .filter((card) => card.status === column.id)
+    .sort(compareKanbanCardsByPriority);
   return `<section class="kanban-column" data-kanban-column="${e(column.id)}" aria-labelledby="kanban-${e(column.id)}-title">
     <div class="kanban-column-heading">
       <div><h3 id="kanban-${e(column.id)}-title">${e(column.label)}</h3><p>${e(column.description)}</p></div>
@@ -1877,13 +1887,19 @@ function renderKanbanCard(card) {
   const busy = state.kanban.busy.get(card.id) || "";
   const canEdit = Boolean(state.kanban.board?.canEdit);
   const disabled = busy || !canEdit ? "disabled" : "";
-  const busyClass = busy === "move" ? " is-syncing" : busy ? " is-busy" : "";
+  const syncing = busy === "move" || busy === "priority";
+  const busyClass = syncing ? " is-syncing" : busy ? " is-busy" : "";
+  const priority = kanbanPriority(card.priority);
   const assignees = card.assignees.length
     ? `<div class="kanban-card-assignees" aria-label="Responsáveis">${card.assignees.map((person) => `<span class="kanban-person-chip" title="${e(person.name)} — ${e(person.email)}"><span aria-hidden="true">${e(personInitials(person.name))}</span>${e(person.name)}</span>`).join("")}</div>`
     : `<span class="kanban-unassigned">Sem responsável</span>`;
   const schedule = renderKanbanCardSchedule(card);
-  return `<article class="kanban-card${busyClass}" draggable="${busy || !canEdit ? "false" : "true"}" data-kanban-card-id="${e(card.id)}" tabindex="0"${busy === "move" ? ' aria-busy="true"' : ""}>
-    <div class="kanban-card-topline"><span>${e(kanbanStatusLabel(card.status))}</span><small>${e(formatHistoryDate(card.updatedAt))}</small></div>
+  return `<article class="kanban-card${busyClass}" draggable="${busy || !canEdit ? "false" : "true"}" data-kanban-card-id="${e(card.id)}" tabindex="0"${syncing ? ' aria-busy="true"' : ""}>
+    <div class="kanban-card-topline">
+      <span>${e(kanbanStatusLabel(card.status))}</span>
+      <label class="kanban-priority-control ${e(priority.className)}"><span class="sr-only">Prioridade de ${e(card.title)}</span><span class="kanban-priority-dot" aria-hidden="true"></span><select data-kanban-priority data-id="${e(card.id)}" aria-label="Prioridade de ${e(card.title)}" ${disabled}>${KANBAN_PRIORITIES.map((item) => `<option class="${e(item.className)}" value="${e(item.id)}" ${priority.id === item.id ? "selected" : ""}>${e(item.label)}</option>`).join("")}</select></label>
+      <small>${e(formatHistoryDate(card.updatedAt))}</small>
+    </div>
     <h4>${e(card.title)}</h4>
     ${card.description ? `<p>${e(card.description).replace(/\n/g, "<br>")}</p>` : ""}
     ${schedule}
@@ -1896,6 +1912,16 @@ function renderKanbanCard(card) {
       </div>
     </div>
   </article>`;
+}
+
+function kanbanPriority(value) {
+  return KANBAN_PRIORITIES.find((priority) => priority.id === value) || KANBAN_PRIORITIES[1];
+}
+
+function compareKanbanCardsByPriority(first, second) {
+  const priorityDifference = KANBAN_PRIORITY_RANK[kanbanPriority(first.priority).id] - KANBAN_PRIORITY_RANK[kanbanPriority(second.priority).id];
+  if (priorityDifference) return priorityDifference;
+  return Number(second.position || 0) - Number(first.position || 0) || Number(second.createdAt || 0) - Number(first.createdAt || 0);
 }
 
 function renderKanbanCardSchedule(card) {
@@ -2391,6 +2417,7 @@ async function saveKanbanCard() {
     startDate,
     durationDays,
     status: elements.kanbanCardStatus.value,
+    priority: state.kanban.cards.find((item) => item.id === cardId)?.priority || "medium",
     assigneeIds: Array.from(elements.kanbanAssigneeList.querySelectorAll("[data-kanban-assignee]:checked")).map((input) => input.value),
   };
   elements.saveKanbanCardButton.disabled = true;
@@ -2457,6 +2484,7 @@ async function moveKanbanCard(cardId, status) {
         startDate: card.startDate,
         durationDays: card.durationDays,
         status,
+        priority: card.priority || "medium",
         assigneeIds: card.assignees.map((person) => person.id),
       },
     });
@@ -2478,6 +2506,46 @@ async function moveKanbanCard(cardId, status) {
   }
 }
 
+async function changeKanbanCardPriority(cardId, priority) {
+  const card = state.kanban.cards.find((item) => item.id === cardId);
+  if (!card || kanbanPriority(card.priority).id === priority || state.kanban.busy.has(cardId)) return;
+  const selectedPriority = kanbanPriority(priority).id;
+  const boardId = state.kanban.activeBoardId;
+  const previousCard = card;
+  const optimisticCard = { ...card, priority: selectedPriority, updatedAt: Math.floor(Date.now() / 1000) };
+  state.kanban.busy.set(cardId, "priority");
+  state.kanban.error = "";
+  state.kanban.cards = state.kanban.cards.map((item) => item.id === cardId ? optimisticCard : item);
+  settleKanbanCardInView(cardId, optimisticCard);
+  try {
+    const payload = await apiRequest(`/api/kanban/cards/${encodeURIComponent(cardId)}`, {
+      method: "PATCH",
+      body: {
+        title: card.title,
+        description: card.description,
+        startDate: card.startDate,
+        durationDays: card.durationDays,
+        status: card.status,
+        priority: selectedPriority,
+        assigneeIds: card.assignees.map((person) => person.id),
+      },
+    });
+    const savedCard = payload.card || optimisticCard;
+    state.kanban.cards = state.kanban.cards.map((item) => item.id === cardId ? savedCard : item);
+    state.kanban.busy.delete(cardId);
+    if (state.kanban.open && state.kanban.activeBoardId === boardId) settleKanbanCardInView(cardId, savedCard);
+    showToast(`Prioridade alterada para ${kanbanPriority(selectedPriority).label}.`);
+  } catch (error) {
+    state.kanban.cards = state.kanban.cards.map((item) => item.id === cardId ? previousCard : item);
+    state.kanban.busy.delete(cardId);
+    if (state.kanban.open && state.kanban.activeBoardId === boardId) {
+      state.kanban.error = error.message;
+      settleKanbanCardInView(cardId, previousCard);
+      showToast("Não foi possível alterar a prioridade. A alteração foi desfeita.");
+    }
+  }
+}
+
 function moveKanbanCardInView(cardId, status) {
   if (!state.kanban.open) return;
   const cardElement = document.querySelector(`[data-kanban-card-id="${cardId}"]`);
@@ -2492,6 +2560,7 @@ function moveKanbanCardInView(cardId, status) {
   const previousRect = cardElement.getBoundingClientRect();
   targetCards.querySelector(".kanban-column-empty")?.remove();
   targetCards.append(cardElement);
+  sortKanbanColumnInView(status);
   syncKanbanColumnInView(sourceColumn);
   syncKanbanColumnInView(targetColumn);
   syncKanbanSummaryInView();
@@ -2560,6 +2629,19 @@ function settleKanbanCardInView(cardId, card) {
     return;
   }
   cardElement.outerHTML = renderKanbanCard(card);
+  sortKanbanColumnInView(card.status);
+}
+
+function sortKanbanColumnInView(status) {
+  const cardsContainer = document.querySelector(`[data-kanban-column="${status}"] .kanban-column-cards`);
+  if (!cardsContainer) return;
+  state.kanban.cards
+    .filter((card) => card.status === status)
+    .sort(compareKanbanCardsByPriority)
+    .forEach((card) => {
+      const cardElement = cardsContainer.querySelector(`[data-kanban-card-id="${card.id}"]`);
+      if (cardElement) cardsContainer.append(cardElement);
+    });
 }
 
 function confirmKanbanCardDeletion(cardId) {
@@ -6814,6 +6896,10 @@ document.addEventListener("change", (event) => {
   }
   if (target.dataset.kanbanStatus !== undefined) {
     moveKanbanCard(target.dataset.id, target.value);
+    return;
+  }
+  if (target.dataset.kanbanPriority !== undefined) {
+    changeKanbanCardPriority(target.dataset.id, target.value);
     return;
   }
   if (target.dataset.richBlock !== undefined) {
