@@ -6,7 +6,7 @@ export const metadata: Metadata = {
   description:
     "Crie pareceres técnicos e documentos oficiais em Word direto do navegador.",
   icons: {
-    icon: "/docflow/assets/og.png",
+    icon: "/favicon.svg",
   },
 };
 
