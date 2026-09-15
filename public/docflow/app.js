@@ -196,6 +196,8 @@ const elements = {
   adminPendingBadge: document.querySelector("#adminPendingBadge"),
   kanbanButton: document.querySelector("#kanbanButton"),
   processesButton: document.querySelector("#processesButton"),
+  documentsButton: document.querySelector("#documentsButton"),
+  historyButton: document.querySelector(".history-button"),
   notificationButton: document.querySelector("#notificationButton"),
   notificationBadge: document.querySelector("#notificationBadge"),
   notificationPopover: document.querySelector("#notificationPopover"),
@@ -1262,12 +1264,17 @@ function panelHeader(title, description, action = "") {
 
 function render() {
   updateApiBadge();
-  const onDocuments = !state.admin.open && !state.processes.open && !state.history.open && !state.kanban.open && !state.flow;
-  const documentsButton = document.querySelector("#documentsButton");
-  documentsButton.classList.toggle("is-active", onDocuments);
-  documentsButton.setAttribute("aria-current", onDocuments ? "page" : "false");
-  elements.processesButton.classList.toggle("is-active", state.processes.open);
-  elements.processesButton.setAttribute("aria-current", state.processes.open ? "page" : "false");
+  const onDocuments = !state.admin.open && !state.processes.open && !state.history.open && !state.kanban.open;
+  [
+    [elements.kanbanButton, state.kanban.open],
+    [elements.processesButton, state.processes.open],
+    [elements.documentsButton, onDocuments],
+    [elements.adminButton, state.admin.open],
+    [elements.historyButton, state.history.open],
+  ].forEach(([button, active]) => {
+    button.classList.toggle("is-active", active);
+    button.setAttribute("aria-current", active ? "page" : "false");
+  });
   elements.main.classList.toggle("is-home", !state.admin.open && !state.processes.open && !state.history.open && !state.kanban.open && !state.flow);
   elements.main.classList.toggle("is-kanban", state.kanban.open);
   if (state.processes.open) {

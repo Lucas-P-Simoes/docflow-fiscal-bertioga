@@ -6485,12 +6485,6 @@ textarea::placeholder {
   background: #edf5f0;
 }
 
-.documents-button.is-active {
-  color: #0c593f;
-  background: #eaf5ef;
-  font-weight: 800;
-}
-
 .topbar .kanban-button,
 .topbar .processes-button,
 .topbar .admin-button {
@@ -6498,9 +6492,14 @@ textarea::placeholder {
   background: transparent;
 }
 
+.topbar .kanban-button.is-active,
 .topbar .processes-button.is-active,
-.topbar .admin-button.has-pending {
+.topbar .documents-button.is-active,
+.topbar .admin-button.is-active,
+.topbar .history-button.is-active {
+  color: #0c593f;
   background: #eaf5ef;
+  font-weight: 800;
 }
 
 .sidebar {
