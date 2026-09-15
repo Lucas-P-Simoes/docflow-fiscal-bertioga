@@ -399,6 +399,7 @@ let technicalOpinionTemplatePromise = null;
 let pendingSignatureTarget = null;
 let notificationPollTimer = null;
 let draggedKanbanCardId = "";
+let homeSearchQuery = "";
 
 function createSignatureConfigurationState() {
   return {
@@ -1261,6 +1262,10 @@ function panelHeader(title, description, action = "") {
 
 function render() {
   updateApiBadge();
+  const onDocuments = !state.admin.open && !state.processes.open && !state.history.open && !state.kanban.open && !state.flow;
+  const documentsButton = document.querySelector("#documentsButton");
+  documentsButton.classList.toggle("is-active", onDocuments);
+  documentsButton.setAttribute("aria-current", onDocuments ? "page" : "false");
   elements.processesButton.classList.toggle("is-active", state.processes.open);
   elements.processesButton.setAttribute("aria-current", state.processes.open ? "page" : "false");
   elements.main.classList.toggle("is-home", !state.admin.open && !state.processes.open && !state.history.open && !state.kanban.open && !state.flow);
@@ -1298,6 +1303,7 @@ function render() {
     elements.actionBar.classList.add("is-hidden");
     elements.view.className = "view home-view";
     elements.view.innerHTML = renderHome();
+    filterHomeDocuments();
     return;
   }
 
@@ -1418,52 +1424,110 @@ function homeCardVisibilityAttribute(cardKey) {
   return canAccessHomeCard(cardKey) ? "" : 'hidden aria-hidden="true"';
 }
 
+function recentDocumentDate(unixSeconds) {
+  const date = new Date(Number(unixSeconds) * 1000);
+  if (Number.isNaN(date.getTime())) return "Data não informada";
+  const today = new Date();
+  const startOfToday = new Date(today.getFullYear(), today.getMonth(), today.getDate());
+  const startOfYesterday = new Date(startOfToday);
+  startOfYesterday.setDate(startOfToday.getDate() - 1);
+  if (date >= startOfToday) return "Hoje";
+  if (date >= startOfYesterday) return "Ontem";
+  return new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit" }).format(date);
+}
+
+function renderRecentDocuments() {
+  const history = state.history;
+  const content = history.error
+    ? `<p class="recent-state">Não foi possível carregar os documentos recentes.</p>`
+    : !history.loaded
+      ? `<p class="recent-state">Carregando documentos recentes…</p>`
+      : history.items.length
+        ? `<div class="recent-list">${history.items.slice(0, 3).map((item, index) => `
+          <button class="recent-item recent-tone-${index + 1}" type="button" data-action="preview-history-pdf" data-id="${e(item.id)}" title="Visualizar ${e(item.filename)}">
+            <span class="recent-icon" aria-hidden="true">▧</span>
+            <span class="recent-copy"><strong>${e(item.filename.replace(/\.(docx|doc)$/i, ""))}</strong><small>${e(recentDocumentDate(item.createdAt))}</small></span>
+          </button>`).join("")}</div>`
+        : `<p class="recent-state">Os documentos que você gerar aparecerão aqui.</p>`;
+  return `<aside class="recent-panel" aria-label="Documentos recentes">
+    <div class="recent-heading"><h2><span aria-hidden="true">◷</span> Recentes</h2><button type="button" data-action="show-history">Ver todos <span aria-hidden="true">→</span></button></div>
+    ${content}
+  </aside>`;
+}
+
+function filterHomeDocuments() {
+  const query = homeSearchQuery.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("pt-BR").trim();
+  const cards = [...document.querySelectorAll(".document-grid [data-card-key]")];
+  let visible = 0;
+  cards.forEach((card) => {
+    const searchableText = card.textContent.normalize("NFD").replace(/[\u0300-\u036f]/g, "").toLocaleLowerCase("pt-BR");
+    card.hidden = !canAccessHomeCard(card.dataset.cardKey) || (query && !searchableText.includes(query));
+    if (!card.hidden) visible += 1;
+  });
+  const empty = document.querySelector("#homeSearchEmpty");
+  if (empty) empty.hidden = !query || visible > 0;
+}
+
 function renderHome() {
   return `<section class="document-section">
+    <div class="documents-overview">
+      <div class="documents-intro">
+        <span class="eyebrow eyebrow-dark">Documentos</span>
+        <h1>Documentos</h1>
+        <p>Gere documentos técnicos e administrativos utilizando os modelos oficiais.</p>
+      </div>
+      ${renderRecentDocuments()}
+    </div>
+    <label class="document-search" for="homeDocumentSearch">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.7"/><path d="m16 16 5 5"/></svg>
+      <input id="homeDocumentSearch" type="search" autocomplete="off" placeholder="Buscar documento..." value="${e(homeSearchQuery)}" aria-label="Buscar tipos de documento" />
+      <kbd aria-hidden="true">Ctrl K</kbd>
+    </label>
     <div class="document-grid">
-      <article class="document-card" tabindex="0" role="button" ${homeCardVisibilityAttribute("report")} data-action="start-report">
+      <article class="document-card" tabindex="0" role="button" ${homeCardVisibilityAttribute("report")} data-card-key="report" data-action="start-report">
         <span class="card-status is-ready">Pronto</span>
         <span class="card-number" aria-hidden="true">01</span><span class="card-icon" aria-hidden="true">▧</span>
         <h3>Parecer técnico</h3>
-        <p>Preencha a vistoria, informe as vias, anexe o mapa e as fotos e gere o Word no modelo oficial.</p>
+        <p>Registre uma vistoria e gere o parecer oficial.</p>
         <span class="card-link">Criar parecer <span aria-hidden="true">→</span></span>
       </article>
-      <article class="document-card is-cota" tabindex="0" role="button" ${homeCardVisibilityAttribute("cota")} data-action="start-cota">
+      <article class="document-card is-cota" tabindex="0" role="button" ${homeCardVisibilityAttribute("cota")} data-card-key="cota" data-action="start-cota">
         <span class="card-status is-ready">Pronto</span>
         <span class="card-number" aria-hidden="true">02</span><span class="card-icon" aria-hidden="true">≡</span>
         <h3>Folha de cota</h3>
-        <p>Transforme uma anotação em redação administrativa e distribua o texto em uma folha pautada.</p>
+        <p>Converta anotações em folha pautada.</p>
         <span class="card-link">Preparar folha <span aria-hidden="true">→</span></span>
       </article>
-      <article class="document-card is-admin" tabindex="0" role="button" ${homeCardVisibilityAttribute("memorando")} data-action="start-correspondence" data-kind="memorando">
+      <article class="document-card is-admin" tabindex="0" role="button" ${homeCardVisibilityAttribute("memorando")} data-card-key="memorando" data-action="start-correspondence" data-kind="memorando">
         <span class="card-status is-ready">Pronto</span>
         <span class="card-number" aria-hidden="true">03</span><span class="card-icon" aria-hidden="true">M</span>
         <h3>Memorando</h3>
-        <p>Gere o memorando no modelo oficial da Prefeitura de Bertioga, com assinatura e fotos opcionais.</p>
+        <p>Gere memorandos no padrão oficial.</p>
         <span class="card-link">Criar memorando <span aria-hidden="true">→</span></span>
       </article>
-      <article class="document-card is-admin" tabindex="0" role="button" ${homeCardVisibilityAttribute("oficio")} data-action="start-correspondence" data-kind="oficio">
+      <article class="document-card is-admin" tabindex="0" role="button" ${homeCardVisibilityAttribute("oficio")} data-card-key="oficio" data-action="start-correspondence" data-kind="oficio">
         <span class="card-status is-ready">Pronto</span>
         <span class="card-number" aria-hidden="true">04</span><span class="card-icon" aria-hidden="true">O</span>
         <h3>Ofício</h3>
-        <p>Gere o ofício no modelo oficial da Prefeitura de Bertioga, com assinatura e fotos opcionais.</p>
+        <p>Crie ofícios no modelo da Prefeitura.</p>
         <span class="card-link">Criar ofício <span aria-hidden="true">→</span></span>
       </article>
-      <article class="document-card is-alert" tabindex="0" role="button" ${homeCardVisibilityAttribute("notification")} data-action="start-notification">
+      <article class="document-card is-alert" tabindex="0" role="button" ${homeCardVisibilityAttribute("notification")} data-card-key="notification" data-action="start-notification">
         <span class="card-status is-ready">Pronto</span>
         <span class="card-number" aria-hidden="true">05</span><span class="card-icon" aria-hidden="true">N</span>
         <h3>Notificação</h3>
-        <p>Gere a notificação no modelo oficial da Prefeitura de Bertioga, com assinaturas e fotos opcionais.</p>
+        <p>Emita notificações com texto e anexos.</p>
         <span class="card-link">Criar notificação <span aria-hidden="true">→</span></span>
       </article>
-      <article class="document-card is-alert" tabindex="0" role="button" ${homeCardVisibilityAttribute("warning")} data-action="start-warning">
+      <article class="document-card is-alert" tabindex="0" role="button" ${homeCardVisibilityAttribute("warning")} data-card-key="warning" data-action="start-warning">
         <span class="card-status is-ready">Pronto</span>
         <span class="card-number" aria-hidden="true">06</span><span class="card-icon" aria-hidden="true">A</span>
         <h3>Advertência</h3>
-        <p>Gere a advertência no modelo oficial da Prefeitura de Bertioga, com assinaturas e fotos opcionais.</p>
+        <p>Gere advertências padronizadas.</p>
         <span class="card-link">Criar advertência <span aria-hidden="true">→</span></span>
       </article>
     </div>
+    <div id="homeSearchEmpty" class="home-search-empty" hidden>Nenhum tipo de documento encontrado.</div>
     ${HOME_CARD_OPTIONS.some((card) => canAccessHomeCard(card.key)) ? "" : `<div class="home-access-empty">
       <span aria-hidden="true">○</span>
       <strong>Nenhum card está liberado para sua conta</strong>
@@ -1983,7 +2047,7 @@ async function loadDocumentHistory() {
     state.history.error = error.message;
   } finally {
     state.history.loading = false;
-    if (state.history.open) render();
+    if (state.history.open || (!state.flow && !state.admin.open && !state.processes.open && !state.kanban.open)) render();
   }
 }
 
@@ -7049,6 +7113,18 @@ document.addEventListener("focusout", (event) => {
 });
 
 document.addEventListener("keydown", (event) => {
+  const homeSearch = document.querySelector("#homeDocumentSearch");
+  if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k" && homeSearch) {
+    event.preventDefault();
+    homeSearch.focus();
+    return;
+  }
+  if (event.key === "Escape" && event.target === homeSearch && homeSearch.value) {
+    homeSearch.value = "";
+    homeSearchQuery = "";
+    filterHomeDocuments();
+    return;
+  }
   if (!["Enter", " "].includes(event.key)) return;
   const target = event.target.closest("[role='button'][data-action]");
   if (!target || target.tagName === "BUTTON") return;
@@ -7058,6 +7134,11 @@ document.addEventListener("keydown", (event) => {
 
 document.addEventListener("input", (event) => {
   const target = event.target;
+  if (target.id === "homeDocumentSearch") {
+    homeSearchQuery = target.value;
+    filterHomeDocuments();
+    return;
+  }
   clearValidationHighlight(target);
   if (target.dataset.drainageAdopted) {
     state.drainage.adopted[target.dataset.drainageAdopted] = target.value;
