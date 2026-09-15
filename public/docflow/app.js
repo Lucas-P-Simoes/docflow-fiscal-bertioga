@@ -1794,7 +1794,7 @@ function renderProcesses() {
 
   return `<section class="document-section processes-section">
     <div class="processes-heading">
-      <div><span class="eyebrow eyebrow-dark">Cartilha de apoio</span><h2>Processos</h2><p>Consulte os documentos, justificativas e links necessários antes de formalizar uma solicitação.</p></div>
+      <div><span class="eyebrow eyebrow-dark">Cartilha de apoio</span><h2>Mural</h2><p>Consulte os documentos, justificativas e links necessários antes de formalizar uma solicitação.</p></div>
       <div class="processes-heading-actions">
         <button class="button button-secondary" type="button" data-action="home">← Voltar</button>
         <button class="button button-secondary" type="button" data-action="refresh-processes" ${processes.loading ? "disabled" : ""}>Atualizar</button>
