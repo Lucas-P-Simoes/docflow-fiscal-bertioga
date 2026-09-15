@@ -750,7 +750,7 @@ select:focus-visible,
 .sidebar {
   position: fixed;
   z-index: 20;
-  inset: 72px auto 88px 0;
+  inset: 72px auto 0 0;
   display: flex;
   flex-direction: column;
   width: 282px;
