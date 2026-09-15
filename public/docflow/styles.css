@@ -6465,6 +6465,31 @@ textarea::placeholder {
   display: none;
 }
 
+.lucide-sprite {
+  position: absolute;
+  width: 0;
+  height: 0;
+  overflow: hidden;
+  pointer-events: none;
+}
+
+.lucide-icon {
+  display: block;
+  flex: none;
+  width: 19px;
+  height: 19px;
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1.75;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+}
+
+.admin-icon-stack .lucide-icon { width: 19px; height: 19px; }
+.notification-bell { width: 20px; height: 20px; }
+.api-sparkles { width: 19px; height: 19px; color: #0c593f; }
+.api-button.is-connected .api-sparkles { color: #27a36e; }
+
 .kanban-button { order: 1; }
 .processes-button { order: 2; }
 .documents-button { order: 3; }
@@ -6615,6 +6640,8 @@ body {
   font-weight: 400;
 }
 
+.recent-heading h2 .lucide-icon { width: 18px; height: 18px; }
+
 .recent-heading button {
   gap: 10px;
   padding: 4px 0;
@@ -6666,6 +6693,8 @@ body {
   background: #e7f5ee;
   font-size: 20px;
 }
+
+.recent-icon .lucide-icon { width: 20px; height: 20px; }
 
 .recent-tone-2 .recent-icon {
   color: #955c16;
@@ -6797,6 +6826,8 @@ body {
   border-radius: 14px;
   font-size: 26px;
 }
+
+.home-view .document-card .card-icon .lucide-icon { width: 24px; height: 24px; }
 
 .home-view .document-card h3 {
   margin: 13px 0 4px;

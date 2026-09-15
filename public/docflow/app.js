@@ -1436,6 +1436,10 @@ function recentDocumentDate(unixSeconds) {
   return new Intl.DateTimeFormat("pt-BR", { day: "2-digit", month: "2-digit" }).format(date);
 }
 
+function lucideIcon(name) {
+  return '<svg class="lucide-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-' + name + '"></use></svg>';
+}
+
 function renderRecentDocuments() {
   const history = state.history;
   const content = history.error
@@ -1445,12 +1449,12 @@ function renderRecentDocuments() {
       : history.items.length
         ? `<div class="recent-list">${history.items.slice(0, 3).map((item, index) => `
           <button class="recent-item recent-tone-${index + 1}" type="button" data-action="preview-history-pdf" data-id="${e(item.id)}" title="Visualizar ${e(item.filename)}">
-            <span class="recent-icon" aria-hidden="true">▧</span>
+            <span class="recent-icon" aria-hidden="true">${lucideIcon("file-text")}</span>
             <span class="recent-copy"><strong>${e(item.filename.replace(/\.(docx|doc)$/i, ""))}</strong><small>${e(recentDocumentDate(item.createdAt))}</small></span>
           </button>`).join("")}</div>`
         : `<p class="recent-state">Os documentos que você gerar aparecerão aqui.</p>`;
   return `<aside class="recent-panel" aria-label="Documentos recentes">
-    <div class="recent-heading"><h2><span aria-hidden="true">◷</span> Recentes</h2><button type="button" data-action="show-history">Ver todos <span aria-hidden="true">→</span></button></div>
+    <div class="recent-heading"><h2>${lucideIcon("clock-3")} Recentes</h2><button type="button" data-action="show-history">Ver todos <span aria-hidden="true">→</span></button></div>
     ${content}
   </aside>`;
 }
@@ -1479,49 +1483,49 @@ function renderHome() {
       ${renderRecentDocuments()}
     </div>
     <label class="document-search" for="homeDocumentSearch">
-      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><circle cx="10.8" cy="10.8" r="6.7"/><path d="m16 16 5 5"/></svg>
+      ${lucideIcon("search")}
       <input id="homeDocumentSearch" type="search" autocomplete="off" placeholder="Buscar documento..." value="${e(homeSearchQuery)}" aria-label="Buscar tipos de documento" />
       <kbd aria-hidden="true">Ctrl K</kbd>
     </label>
     <div class="document-grid">
       <article class="document-card" tabindex="0" role="button" ${homeCardVisibilityAttribute("report")} data-card-key="report" data-action="start-report">
         <span class="card-status is-ready">Pronto</span>
-        <span class="card-number" aria-hidden="true">01</span><span class="card-icon" aria-hidden="true">▧</span>
+        <span class="card-number" aria-hidden="true">01</span><span class="card-icon" aria-hidden="true">${lucideIcon("clipboard-check")}</span>
         <h3>Parecer técnico</h3>
         <p>Registre uma vistoria e gere o parecer oficial.</p>
         <span class="card-link">Criar parecer <span aria-hidden="true">→</span></span>
       </article>
       <article class="document-card is-cota" tabindex="0" role="button" ${homeCardVisibilityAttribute("cota")} data-card-key="cota" data-action="start-cota">
         <span class="card-status is-ready">Pronto</span>
-        <span class="card-number" aria-hidden="true">02</span><span class="card-icon" aria-hidden="true">≡</span>
+        <span class="card-number" aria-hidden="true">02</span><span class="card-icon" aria-hidden="true">${lucideIcon("notebook-pen")}</span>
         <h3>Folha de cota</h3>
         <p>Converta anotações em folha pautada.</p>
         <span class="card-link">Preparar folha <span aria-hidden="true">→</span></span>
       </article>
       <article class="document-card is-admin" tabindex="0" role="button" ${homeCardVisibilityAttribute("memorando")} data-card-key="memorando" data-action="start-correspondence" data-kind="memorando">
         <span class="card-status is-ready">Pronto</span>
-        <span class="card-number" aria-hidden="true">03</span><span class="card-icon" aria-hidden="true">M</span>
+        <span class="card-number" aria-hidden="true">03</span><span class="card-icon" aria-hidden="true">${lucideIcon("file-text")}</span>
         <h3>Memorando</h3>
         <p>Gere memorandos no padrão oficial.</p>
         <span class="card-link">Criar memorando <span aria-hidden="true">→</span></span>
       </article>
       <article class="document-card is-admin" tabindex="0" role="button" ${homeCardVisibilityAttribute("oficio")} data-card-key="oficio" data-action="start-correspondence" data-kind="oficio">
         <span class="card-status is-ready">Pronto</span>
-        <span class="card-number" aria-hidden="true">04</span><span class="card-icon" aria-hidden="true">O</span>
+        <span class="card-number" aria-hidden="true">04</span><span class="card-icon" aria-hidden="true">${lucideIcon("send")}</span>
         <h3>Ofício</h3>
         <p>Crie ofícios no modelo da Prefeitura.</p>
         <span class="card-link">Criar ofício <span aria-hidden="true">→</span></span>
       </article>
       <article class="document-card is-alert" tabindex="0" role="button" ${homeCardVisibilityAttribute("notification")} data-card-key="notification" data-action="start-notification">
         <span class="card-status is-ready">Pronto</span>
-        <span class="card-number" aria-hidden="true">05</span><span class="card-icon" aria-hidden="true">N</span>
+        <span class="card-number" aria-hidden="true">05</span><span class="card-icon" aria-hidden="true">${lucideIcon("bell-ring")}</span>
         <h3>Notificação</h3>
         <p>Emita notificações com texto e anexos.</p>
         <span class="card-link">Criar notificação <span aria-hidden="true">→</span></span>
       </article>
       <article class="document-card is-alert" tabindex="0" role="button" ${homeCardVisibilityAttribute("warning")} data-card-key="warning" data-action="start-warning">
         <span class="card-status is-ready">Pronto</span>
-        <span class="card-number" aria-hidden="true">06</span><span class="card-icon" aria-hidden="true">A</span>
+        <span class="card-number" aria-hidden="true">06</span><span class="card-icon" aria-hidden="true">${lucideIcon("triangle-alert")}</span>
         <h3>Advertência</h3>
         <p>Gere advertências padronizadas.</p>
         <span class="card-link">Criar advertência <span aria-hidden="true">→</span></span>

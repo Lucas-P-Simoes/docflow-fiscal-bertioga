@@ -19,9 +19,96 @@
     <meta name="twitter:card" content="summary_large_image" />
     <title>Fiscal Bertioga — Assistente de Documentos</title>
     <link rel="manifest" href="manifest.webmanifest" />
-    <link rel="stylesheet" href="styles.css?v=20260915-compact-documents" />
+    <link rel="stylesheet" href="styles.css?v=20260915-lucide-icons" />
   </head>
   <body>
+    <!-- Lucide icons, ISC License: https://lucide.dev/license -->
+    <svg class="lucide-sprite" xmlns="http://www.w3.org/2000/svg" aria-hidden="true" focusable="false">
+      <symbol id="icon-clipboard-check" viewBox="0 0 24 24">
+        <rect width="8" height="4" x="8" y="2" rx="1" ry="1" />
+        <path d="M16 4h2a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2H6a2 2 0 0 1-2-2V6a2 2 0 0 1 2-2h2" />
+        <path d="m9 14 2 2 4-4" />
+      </symbol>
+      <symbol id="icon-notebook-pen" viewBox="0 0 24 24">
+        <path d="M13.4 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2v-7.4" />
+        <path d="M2 6h4" />
+        <path d="M2 10h4" />
+        <path d="M2 14h4" />
+        <path d="M2 18h4" />
+        <path d="M21.378 5.626a1 1 0 1 0-3.004-3.004l-5.01 5.012a2 2 0 0 0-.506.854l-.837 2.87a.5.5 0 0 0 .62.62l2.87-.837a2 2 0 0 0 .854-.506z" />
+      </symbol>
+      <symbol id="icon-file-text" viewBox="0 0 24 24">
+        <path d="M6 22a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h8a2.4 2.4 0 0 1 1.704.706l3.588 3.588A2.4 2.4 0 0 1 20 8v12a2 2 0 0 1-2 2z" />
+        <path d="M14 2v5a1 1 0 0 0 1 1h5" />
+        <path d="M10 9H8" />
+        <path d="M16 13H8" />
+        <path d="M16 17H8" />
+      </symbol>
+      <symbol id="icon-send" viewBox="0 0 24 24">
+        <path d="M14.536 21.686a.5.5 0 0 0 .937-.024l6.5-19a.496.496 0 0 0-.635-.635l-19 6.5a.5.5 0 0 0-.024.937l7.93 3.18a2 2 0 0 1 1.112 1.11z" />
+        <path d="m21.854 2.147-10.94 10.939" />
+      </symbol>
+      <symbol id="icon-bell-ring" viewBox="0 0 24 24">
+        <path d="M10.268 21a2 2 0 0 0 3.464 0" />
+        <path d="M22 8c0-2.3-.8-4.3-2-6" />
+        <path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326" />
+        <path d="M4 2C2.8 3.7 2 5.7 2 8" />
+      </symbol>
+      <symbol id="icon-triangle-alert" viewBox="0 0 24 24">
+        <path d="m21.73 18-8-14a2 2 0 0 0-3.48 0l-8 14A2 2 0 0 0 4 21h16a2 2 0 0 0 1.73-3" />
+        <path d="M12 9v4" />
+        <path d="M12 17h.01" />
+      </symbol>
+      <symbol id="icon-columns-3" viewBox="0 0 24 24">
+        <rect width="18" height="18" x="3" y="3" rx="2" />
+        <path d="M9 3v18" />
+        <path d="M15 3v18" />
+      </symbol>
+      <symbol id="icon-layout-grid" viewBox="0 0 24 24">
+        <rect width="7" height="7" x="3" y="3" rx="1" />
+        <rect width="7" height="7" x="14" y="3" rx="1" />
+        <rect width="7" height="7" x="14" y="14" rx="1" />
+        <rect width="7" height="7" x="3" y="14" rx="1" />
+      </symbol>
+      <symbol id="icon-files" viewBox="0 0 24 24">
+        <path d="M15 2h-4a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h8a2 2 0 0 0 2-2V8" />
+        <path d="M16.706 2.706A2.4 2.4 0 0 0 15 2v5a1 1 0 0 0 1 1h5a2.4 2.4 0 0 0-.706-1.706z" />
+        <path d="M5 7a2 2 0 0 0-2 2v11a2 2 0 0 0 2 2h8a2 2 0 0 0 1.732-1" />
+      </symbol>
+      <symbol id="icon-settings-2" viewBox="0 0 24 24">
+        <path d="M14 17H5" />
+        <path d="M19 7h-9" />
+        <circle cx="17" cy="17" r="3" />
+        <circle cx="7" cy="7" r="3" />
+      </symbol>
+      <symbol id="icon-history" viewBox="0 0 24 24">
+        <path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8" />
+        <path d="M3 3v5h5" />
+        <path d="M12 7v5l4 2" />
+      </symbol>
+      <symbol id="icon-bell" viewBox="0 0 24 24">
+        <path d="M10.268 21a2 2 0 0 0 3.464 0" />
+        <path d="M3.262 15.326A1 1 0 0 0 4 17h16a1 1 0 0 0 .74-1.673C19.41 13.956 18 12.499 18 8A6 6 0 0 0 6 8c0 4.499-1.411 5.956-2.738 7.326" />
+      </symbol>
+      <symbol id="icon-sparkles" viewBox="0 0 24 24">
+        <path d="M11.017 2.814a1 1 0 0 1 1.966 0l1.051 5.558a2 2 0 0 0 1.594 1.594l5.558 1.051a1 1 0 0 1 0 1.966l-5.558 1.051a2 2 0 0 0-1.594 1.594l-1.051 5.558a1 1 0 0 1-1.966 0l-1.051-5.558a2 2 0 0 0-1.594-1.594l-5.558-1.051a1 1 0 0 1 0-1.966l5.558-1.051a2 2 0 0 0 1.594-1.594z" />
+        <path d="M20 2v4" />
+        <path d="M22 4h-4" />
+        <circle cx="4" cy="20" r="2" />
+      </symbol>
+      <symbol id="icon-signature" viewBox="0 0 24 24">
+        <path d="m21 17-2.156-1.868A.5.5 0 0 0 18 15.5v.5a1 1 0 0 1-1 1h-2a1 1 0 0 1-1-1c0-2.545-3.991-3.97-8.5-4a1 1 0 0 0 0 5c4.153 0 4.745-11.295 5.708-13.5a2.5 2.5 0 1 1 3.31 3.284" />
+        <path d="M3 21h18" />
+      </symbol>
+      <symbol id="icon-clock-3" viewBox="0 0 24 24">
+        <circle cx="12" cy="12" r="10" />
+        <path d="M12 6v6h4" />
+      </symbol>
+      <symbol id="icon-search" viewBox="0 0 24 24">
+        <path d="m21 21-4.34-4.34" />
+        <circle cx="11" cy="11" r="8" />
+      </symbol>
+    </svg>
     <section id="authGate" class="auth-gate" aria-labelledby="authTitle">
       <div class="auth-layout">
         <article class="auth-card">
@@ -104,20 +191,20 @@
         <div class="topbar-actions">
           <span id="saveStatus" class="save-status">Preferências locais</span>
           <button id="kanbanButton" class="kanban-button" type="button" data-action="show-kanban" aria-label="Abrir quadro Kanban">
-            <span aria-hidden="true">▥</span>
+            <svg class="lucide-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-columns-3"></use></svg>
             <span>Kanban</span>
           </button>
           <button id="processesButton" class="processes-button" type="button" data-action="show-processes" aria-label="Abrir mural">
-            <span aria-hidden="true">▤</span>
+            <svg class="lucide-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-layout-grid"></use></svg>
             <span>Mural</span>
           </button>
           <button id="documentsButton" class="documents-button" type="button" data-action="home" aria-label="Abrir documentos">
-            <span aria-hidden="true">▧</span>
+            <svg class="lucide-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-files"></use></svg>
             <span>Documentos</span>
           </button>
           <div class="notification-center">
             <button id="notificationButton" class="notification-button" type="button" data-action="toggle-notifications" aria-label="Abrir notificações" aria-expanded="false" aria-controls="notificationPopover">
-              <span class="notification-bell" aria-hidden="true">&#128276;&#65038;</span>
+              <svg class="lucide-icon notification-bell" viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-bell"></use></svg>
               <span id="notificationBadge" class="notification-badge is-hidden" aria-label="Notificações não lidas"></span>
             </button>
             <div id="notificationPopover" class="notification-popover is-hidden" role="dialog" aria-label="Notificações">
@@ -130,22 +217,22 @@
           </div>
           <button id="adminButton" class="admin-button is-hidden" type="button" data-action="show-admin" aria-label="Abrir administração de usuários">
             <span class="admin-icon-stack" aria-hidden="true">
-              <span class="admin-default-icon">◆</span>
-              <span class="admin-bell-icon">&#128276;&#65038;</span>
+              <span class="admin-default-icon"><svg class="lucide-icon" viewBox="0 0 24 24"><use href="#icon-settings-2"></use></svg></span>
+              <span class="admin-bell-icon"><svg class="lucide-icon" viewBox="0 0 24 24"><use href="#icon-bell"></use></svg></span>
             </span>
             <span class="admin-button-label">Administração</span>
             <span id="adminPendingBadge" class="admin-pending-badge is-hidden" aria-label="Solicitações pendentes"></span>
           </button>
           <button class="history-button" type="button" data-action="show-history" aria-label="Abrir histórico de documentos">
-            <span aria-hidden="true">↻</span>
+            <svg class="lucide-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-history"></use></svg>
             <span>Histórico</span>
           </button>
           <button id="signatureButton" class="signature-button" type="button" data-action="open-signatures" aria-label="Configurar assinaturas">
-            <span aria-hidden="true">✎</span>
+            <svg class="lucide-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-signature"></use></svg>
             <span>Assinaturas</span>
           </button>
           <button id="apiButton" class="api-button" type="button" data-action="open-api">
-            <span class="api-dot" aria-hidden="true"></span>
+            <svg class="lucide-icon api-sparkles" viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-sparkles"></use></svg>
             <span id="apiButtonLabel">Configurar IA</span>
           </button>
           <span id="accountName" class="account-name"></span>
@@ -475,6 +562,6 @@
     <script src="vendor/docx.iife.js" defer></script>
     <script src="vendor/html2canvas.min.js" defer></script>
     <script src="vendor/jspdf.umd.min.js" defer></script>
-    <script src="app.js?v=20260915-mural" defer></script>
+    <script src="app.js?v=20260915-lucide-icons" defer></script>
   </body>
 </html>
