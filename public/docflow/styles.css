@@ -6383,18 +6383,18 @@ textarea::placeholder {
 
 /* Dashboard de documentos */
 .site-shell {
-  padding-top: 72px;
+  padding-top: 68px;
 }
 
 .topbar {
-  height: 72px;
+  height: 68px;
   padding-inline: clamp(20px, 3.8vw, 64px);
   background: rgba(255, 255, 255, 0.96);
 }
 
 .brand-mark {
-  width: 44px;
-  height: 44px;
+  width: 40px;
+  height: 40px;
   border-radius: 12px;
   color: #fff;
   background: #173b2b;
@@ -6402,11 +6402,11 @@ textarea::placeholder {
 }
 
 .brand-copy strong {
-  font-size: 19px;
+  font-size: 18px;
 }
 
 .brand-copy small {
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .topbar-actions {
@@ -6463,14 +6463,14 @@ textarea::placeholder {
 .topbar .signature-button {
   display: inline-flex;
   align-items: center;
-  gap: 9px;
-  min-height: 42px;
-  padding: 0 14px;
+  gap: 8px;
+  min-height: 40px;
+  padding: 0 12px;
   border: 1px solid transparent;
   border-radius: 999px;
   color: #314740;
   background: transparent;
-  font-size: 14px;
+  font-size: 13.5px;
   font-weight: 650;
   white-space: nowrap;
   cursor: pointer;
@@ -6504,11 +6504,11 @@ textarea::placeholder {
 }
 
 .sidebar {
-  top: 72px;
+  top: 68px;
 }
 
 .app-frame {
-  min-height: calc(100vh - 72px);
+  min-height: calc(100vh - 68px);
 }
 
 body {
@@ -6516,7 +6516,7 @@ body {
 }
 
 .main-content.is-home {
-  padding: 22px clamp(20px, 3.8vw, 64px) 64px;
+  padding: 18px clamp(20px, 3.8vw, 64px) 60px;
 }
 
 .home-view {
@@ -6531,8 +6531,8 @@ body {
   display: grid;
   grid-template-columns: minmax(0, 1fr) minmax(480px, 0.95fr);
   align-items: center;
-  gap: 36px;
-  margin-bottom: 16px;
+  gap: 28px;
+  margin-bottom: 12px;
 }
 
 .documents-intro .eyebrow {
@@ -6546,7 +6546,7 @@ body {
 .documents-intro h1 {
   margin: 5px 0 3px;
   font-family: var(--serif);
-  font-size: clamp(40px, 4vw, 52px);
+  font-size: clamp(36px, 3.6vw, 46px);
   font-weight: 500;
   letter-spacing: -0.055em;
   line-height: 1.05;
@@ -6556,16 +6556,16 @@ body {
   max-width: 660px;
   margin: 0;
   color: #687780;
-  font-size: 16px;
+  font-size: 15px;
   line-height: 1.4;
 }
 
 .recent-panel {
   min-width: 0;
-  min-height: 108px;
-  padding: 14px 18px;
+  min-height: 98px;
+  padding: 12px 16px;
   border: 1px solid #e0e7e5;
-  border-radius: 19px;
+  border-radius: 17px;
   background: #fff;
   box-shadow: 0 10px 26px rgba(24, 48, 38, 0.055);
 }
@@ -6585,7 +6585,7 @@ body {
 .recent-heading h2 {
   gap: 12px;
   margin: 0;
-  font-size: 14px;
+  font-size: 13.5px;
   font-weight: 800;
 }
 
@@ -6602,7 +6602,7 @@ body {
   border: 0;
   color: #0b593d;
   background: transparent;
-  font-size: 14px;
+  font-size: 13.5px;
   cursor: pointer;
 }
 
@@ -6610,15 +6610,15 @@ body {
   display: grid;
   grid-template-columns: repeat(3, minmax(0, 1fr));
   gap: 0;
-  margin-top: 10px;
+  margin-top: 8px;
 }
 
 .recent-item {
   display: flex;
   align-items: center;
-  gap: 11px;
+  gap: 9px;
   min-width: 0;
-  padding: 0 14px;
+  padding: 0 12px;
   border: 0;
   border-left: 1px solid #e5ebea;
   background: transparent;
@@ -6640,15 +6640,15 @@ body {
   display: grid;
   place-items: center;
   flex: none;
-  width: 40px;
-  height: 40px;
-  border-radius: 13px;
+  width: 36px;
+  height: 36px;
+  border-radius: 11px;
   color: #136444;
   background: #e7f5ee;
   font-size: 20px;
 }
 
-.recent-icon .lucide-icon { width: 20px; height: 20px; }
+.recent-icon .lucide-icon { width: 18px; height: 18px; }
 
 .recent-tone-2 .recent-icon {
   color: #955c16;
@@ -6680,14 +6680,14 @@ body {
   overflow: hidden;
   line-height: 1.25;
   white-space: normal;
-  font-size: 13px;
+  font-size: 12.5px;
   font-weight: 700;
 }
 
 .recent-copy small {
   margin-top: 4px;
   color: #718087;
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .recent-state {
@@ -6699,13 +6699,13 @@ body {
 .document-search {
   display: flex;
   align-items: center;
-  gap: 14px;
+  gap: 12px;
   width: 100%;
-  height: 50px;
-  margin-bottom: 18px;
-  padding: 0 18px;
+  height: 44px;
+  margin-bottom: 14px;
+  padding: 0 16px;
   border: 1px solid #cfdcda;
-  border-radius: 15px;
+  border-radius: 13px;
   color: #456169;
   background: #fff;
   box-shadow: 0 3px 14px rgba(28, 53, 45, 0.035);
@@ -6718,8 +6718,8 @@ body {
 
 .document-search svg {
   flex: none;
-  width: 20px;
-  height: 20px;
+  width: 18px;
+  height: 18px;
 }
 
 .document-search input {
@@ -6743,17 +6743,17 @@ body {
   border-radius: 6px;
   color: #75848b;
   background: #f3f7f8;
-  font-size: 13px;
+  font-size: 12px;
 }
 
 .home-view .document-grid {
-  gap: 14px 18px;
+  gap: 12px 16px;
 }
 
 .home-view .document-grid > .document-card {
-  min-height: 190px;
-  padding: 18px 24px 16px;
-  border-radius: 18px;
+  min-height: 170px;
+  padding: 16px 20px 14px;
+  border-radius: 16px;
 }
 
 .document-card[hidden],
@@ -6766,42 +6766,42 @@ body {
 }
 
 .home-view .document-card .card-number {
-  top: 22px;
-  right: 22px;
+  top: 18px;
+  right: 18px;
   color: #b4c2c6;
   font-family: var(--font);
-  font-size: 14px;
+  font-size: 13px;
   font-weight: 400;
 }
 
 .home-view .document-card .card-icon {
-  width: 52px;
-  height: 52px;
-  border-radius: 14px;
+  width: 46px;
+  height: 46px;
+  border-radius: 12px;
   font-size: 26px;
 }
 
-.home-view .document-card .card-icon .lucide-icon { width: 24px; height: 24px; }
+.home-view .document-card .card-icon .lucide-icon { width: 23px; height: 23px; }
 
 .home-view .document-card h3 {
-  margin: 13px 0 4px;
-  font-size: 25px;
+  margin: 10px 0 4px;
+  font-size: 22px;
   line-height: 1.15;
 }
 
 .home-view .document-card p {
   color: #687780;
-  font-size: 16px;
+  font-size: 15px;
   line-height: 1.35;
 }
 
 .home-view .document-card .card-link {
   width: 100%;
   margin-top: auto;
-  padding-top: 10px;
+  padding-top: 8px;
   border-top: 1px solid #e5ebea;
   color: #075d40;
-  font-size: 14px;
+  font-size: 13.5px;
 }
 
 .home-search-empty {
@@ -6872,14 +6872,14 @@ body {
   .documents-button { flex: none; width: 40px; min-height: 40px; }
   .topbar .brand-copy { display: block; }
   .main-content.is-home { padding: 24px 16px 62px; }
-  .documents-intro h1 { font-size: 46px; }
-  .documents-intro p { font-size: 16px; }
-  .recent-panel { padding: 17px; }
+  .documents-intro h1 { font-size: 42px; }
+  .documents-intro p { font-size: 15px; }
+  .recent-panel { padding: 14px; }
   .recent-list { grid-template-columns: 1fr; gap: 10px; }
   .recent-item { padding: 0; border-left: 0; }
   .home-view .document-grid { grid-template-columns: 1fr; gap: 14px; }
-  .home-view .document-grid > .document-card { min-height: 205px; }
-  .document-search { height: 50px; }
+  .home-view .document-grid > .document-card { min-height: 188px; }
+  .document-search { height: 46px; }
   .document-search kbd { display: none; }
 }
 
