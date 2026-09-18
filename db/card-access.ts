@@ -1,5 +1,6 @@
 export const HOME_CARD_KEYS = [
   "report",
+  "etp",
   "cota",
   "memorando",
   "oficio",

@@ -2944,6 +2944,11 @@ select:focus-visible,
   background: var(--lime-soft);
 }
 
+.document-card.is-etp .card-icon {
+  color: #315d93;
+  background: #e6eef8;
+}
+
 .document-card.is-admin .card-icon {
   color: #1d5870;
   background: #e4f2f7;
@@ -4124,6 +4129,55 @@ textarea::placeholder {
   border: 1px solid var(--line);
   border-radius: 14px;
   background: #fafbf9;
+}
+
+.etp-section-panel textarea {
+  min-height: 150px;
+}
+
+.etp-risk-list {
+  display: grid;
+  gap: 18px;
+}
+
+.etp-risk-card {
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: #fafbf9;
+}
+
+.etp-risk-heading {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  margin-bottom: 18px;
+}
+
+.etp-risk-heading div,
+.etp-risk-heading span,
+.etp-risk-heading strong {
+  display: block;
+}
+
+.etp-risk-heading span {
+  color: var(--muted);
+  font-size: 10px;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+}
+
+.etp-risk-heading strong {
+  margin-top: 4px;
+  font-family: var(--serif);
+  font-size: 20px;
+  font-weight: 500;
+}
+
+.etp-risk-card textarea {
+  min-height: 112px;
 }
 
 .topic-heading {

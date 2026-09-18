@@ -13,6 +13,7 @@ const MAX_DOCUMENT_BYTES = 50 * 1024 * 1024;
 const MAX_MUTATION_BODY_BYTES = 4 * 1024;
 const DOCUMENT_TYPES = new Set([
   "Parecer técnico",
+  "Estudo Técnico Preliminar",
   "Relatório fotográfico",
   "Folha de cota",
   "Memorando",

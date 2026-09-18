@@ -67,7 +67,7 @@ export const userCardPermissions = sqliteTable(
       .notNull()
       .references(() => users.id, { onDelete: "cascade" }),
     cardKey: text("card_key", {
-      enum: ["report", "cota", "memorando", "oficio", "notification", "warning", "drainage"],
+      enum: ["report", "etp", "cota", "memorando", "oficio", "notification", "warning", "drainage"],
     }).notNull(),
     enabled: integer("enabled", { mode: "boolean" }).notNull().default(true),
     updatedAt: integer("updated_at").notNull(),

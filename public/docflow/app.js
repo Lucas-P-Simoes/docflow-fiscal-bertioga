@@ -10,6 +10,7 @@ if (LEGACY_DOCFLOW_PATHS.has(window.location.pathname)) {
 }
 
 const REPORT_STEPS = ["Identificação", "Mapa e vias", "Fotografias", "Parecer e assinaturas", "Revisão"];
+const ETP_STEPS = ["Identificação", "Necessidade e planejamento", "Mercado e solução", "Resultados e impactos", "Riscos e assinaturas", "Revisão"];
 const COTA_STEPS = ["Conteúdo", "Revisão", "Assinatura e download"];
 const OFFICIAL_CORRESPONDENCE_STEPS = ["Dados do documento", "Conteúdo", "Revisão e download"];
 const CORRESPONDENCE_STEPS = ["Dados do documento", "Conteúdo", "Revisão e download"];
@@ -40,6 +41,7 @@ const DRAINAGE_COMPOSITIONS = {
 };
 const HOME_CARD_OPTIONS = [
   { key: "report", label: "Parecer técnico", mark: "PT" },
+  { key: "etp", label: "Estudo Técnico Preliminar", mark: "ETP" },
   { key: "cota", label: "Folha de cota", mark: "FC" },
   { key: "memorando", label: "Memorando", mark: "M" },
   { key: "oficio", label: "Ofício", mark: "O" },
@@ -143,6 +145,7 @@ const COTA_TEMPLATE_URL = "templates/MODELO_FOLHA_COTA.docx";
 const OFFICIAL_CORRESPONDENCE_TEMPLATE_URL = "templates/MODELO_MEMORANDO.docx";
 const NOTIFICATION_TEMPLATE_URL = "templates/MODELO_NOTIFICACAO.docx";
 const TECHNICAL_OPINION_TEMPLATE_URL = "templates/MODELO_PARECER_TECNICO.docx";
+const ETP_TEMPLATE_URL = "templates/MODELO_ETP.docx";
 const COTA_TEXT_STYLE = { font: "Arial", size: 24, language: { value: "pt-BR" } };
 const COTA_HEADER_FIELD_STYLE = { ...COTA_TEXT_STYLE, bold: true, italics: false };
 const MAX_CORRESPONDENCE_TEXT = 7000;
@@ -375,6 +378,7 @@ const state = {
   },
   signatures: createSignatureConfigurationState(),
   report: createReportState(persisted),
+  etp: createEtpState(persisted),
   cota: createCotaState(persisted),
   correspondence: createCorrespondenceState(persisted),
   notification: createNotificationState(persisted, "notification"),
@@ -398,6 +402,7 @@ let cotaMeasureContext = null;
 let officialCorrespondenceTemplatePromise = null;
 let notificationTemplatePromise = null;
 let technicalOpinionTemplatePromise = null;
+let etpTemplatePromise = null;
 let pendingSignatureTarget = null;
 let notificationPollTimer = null;
 let draggedKanbanCardId = "";
@@ -430,6 +435,48 @@ function createReportState(saved = {}) {
     recommendations: DEFAULT_TECHNICAL_RECOMMENDATIONS,
     responsibles: [],
     onePerPage: saved.onePerPage !== false,
+    complete: false,
+  };
+}
+
+function createEtpRisk(values = {}) {
+  return {
+    id: values.id || makeId("etp-risk"),
+    title: values.title || "",
+    probability: values.probability || "",
+    impact: values.impact || "",
+    damage: values.damage || "",
+    preventiveAction: values.preventiveAction || "",
+    contingencyAction: values.contingencyAction || "",
+  };
+}
+
+function createEtpState(saved = {}) {
+  return {
+    object: "",
+    processNumber: "",
+    requestingUnit: saved.department || "",
+    city: saved.technicalOpinionCity || "Bertioga",
+    date: todayInputValue(),
+    introduction: "",
+    needDescription: "",
+    annualPlan: "",
+    budgetAllocation: "",
+    requirements: "",
+    quantityEstimate: "",
+    marketSurvey: "",
+    estimatedValue: "",
+    solutionDescription: "",
+    parcelingJustification: "",
+    expectedResults: "",
+    socialAssessment: "",
+    operationalQualification: "",
+    priorMeasures: "",
+    relatedContracts: "",
+    environmentalImpacts: "",
+    licenses: "",
+    risks: [createEtpRisk()],
+    responsibles: [],
     complete: false,
   };
 }
@@ -752,6 +799,38 @@ function renderReportSignatureChoices() {
     '</div></fieldset>';
 }
 
+function renderEtpSignatureChoices() {
+  const profiles = sortedSignatureProfiles();
+  const selectedProfileIds = new Set(
+    state.etp.responsibles.map((signature) => signature.profileId).filter(Boolean),
+  );
+  if (state.signatures.loading) {
+    return '<div class="report-signature-choices signature-profile-state" data-etp-signature-group><strong>Carregando assinaturas…</strong><span>Aguarde para selecionar os responsáveis pelo ETP.</span></div>';
+  }
+  if (state.signatures.error) {
+    return '<div class="report-signature-choices signature-profile-state is-error" data-etp-signature-group><strong>Não foi possível carregar as assinaturas</strong><span>' +
+      e(state.signatures.error) +
+      '</span><button class="button button-secondary" type="button" data-action="reload-signatures">Tentar novamente</button></div>';
+  }
+  if (!profiles.length) {
+    return '<div class="report-signature-choices signature-profile-state" data-etp-signature-group><strong>Nenhuma assinatura cadastrada</strong><span>Cadastre as pessoas e depois marque quem assinará o ETP.</span></div>';
+  }
+  const choices = profiles.map((profile) =>
+    '<label class="report-signature-choice"><input type="checkbox" data-etp-signature-choice="' +
+    e(profile.id) +
+    '" ' +
+    (selectedProfileIds.has(profile.id) ? "checked" : "") +
+    ' /><span><strong>' +
+    e(profile.name) +
+    '</strong><em>' +
+    e(profile.role) +
+    '</em></span></label>'
+  ).join("");
+  return '<fieldset class="report-signature-choices" data-etp-signature-group><legend>Selecione uma ou mais pessoas *</legend><p>As assinaturas aparecerão no final do documento, no padrão do ETP de referência.</p><div class="report-signature-choice-grid">' +
+    choices +
+    '</div></fieldset>';
+}
+
 async function loadSignatureProfiles() {
   if (!state.auth.user || state.signatures.loading) return;
   state.signatures.loading = true;
@@ -840,6 +919,12 @@ function applySignatureProfile(target, profile) {
       return;
     }
     state.report.responsibles.push({ profileId: profile.id, name: profile.name, role: profile.role });
+  } else if (target.type === "etp") {
+    if (state.etp.responsibles.some((item) => item.profileId === profile.id)) {
+      showToast("Essa assinatura já foi adicionada ao ETP.");
+      return;
+    }
+    state.etp.responsibles.push({ profileId: profile.id, name: profile.name, role: profile.role });
   } else if (target.type === "cota") {
     state.cota.signerProfileId = profile.id;
     state.cota.signer = profile.name;
@@ -862,6 +947,9 @@ function applySignatureProfile(target, profile) {
 
 function updateSignatureReferences(profile) {
   state.report.responsibles = state.report.responsibles.map((item) =>
+    item.profileId === profile.id ? { profileId: profile.id, name: profile.name, role: profile.role } : item,
+  );
+  state.etp.responsibles = state.etp.responsibles.map((item) =>
     item.profileId === profile.id ? { profileId: profile.id, name: profile.name, role: profile.role } : item,
   );
   if (state.cota.signerProfileId === profile.id) {
@@ -949,6 +1037,9 @@ async function deleteSignatureProfile(profile, targetAfterDelete = null) {
     await apiRequest(`/api/signatures/${encodeURIComponent(profile.id)}`, { method: "DELETE" });
     state.signatures.items = state.signatures.items.filter((item) => item.id !== profile.id);
     state.report.responsibles = state.report.responsibles.map((item) =>
+      item.profileId === profile.id ? { ...item, profileId: "" } : item,
+    );
+    state.etp.responsibles = state.etp.responsibles.map((item) =>
       item.profileId === profile.id ? { ...item, profileId: "" } : item,
     );
     if (state.cota.signerProfileId === profile.id) state.cota.signerProfileId = "";
@@ -1330,6 +1421,8 @@ function render() {
       ? renderDrainage()
       : state.flow === "report"
         ? renderReport()
+      : state.flow === "etp"
+        ? renderEtp()
       : state.flow === "cota"
         ? renderCota()
         : isNoticeFlow()
@@ -1345,6 +1438,7 @@ function render() {
 function currentData() {
   if (state.flow === "drainage") return state.drainage;
   if (state.flow === "report") return state.report;
+  if (state.flow === "etp") return state.etp;
   if (state.flow === "cota") return state.cota;
   if (isNoticeFlow()) return noticeState();
   return state.correspondence;
@@ -1353,6 +1447,7 @@ function currentData() {
 function currentSteps() {
   if (state.flow === "drainage") return DRAINAGE_STEPS;
   if (state.flow === "report") return REPORT_STEPS;
+  if (state.flow === "etp") return ETP_STEPS;
   if (state.flow === "cota") return COTA_STEPS;
   if (state.flow === "notification") return NOTIFICATION_STEPS;
   if (state.flow === "warning") return WARNING_STEPS;
@@ -1369,6 +1464,10 @@ function renderSidebar() {
     elements.flowEyebrow.textContent = "Parecer técnico";
     elements.flowTitle.textContent = "Prepare a vistoria";
     elements.flowDescription.textContent = "Preencha o modelo, anexe o mapa e organize as evidências.";
+  } else if (state.flow === "etp") {
+    elements.flowEyebrow.textContent = "Estudo Técnico Preliminar";
+    elements.flowTitle.textContent = "Estruture o ETP";
+    elements.flowDescription.textContent = "Preencha as 14 seções e gere o Word no modelo oficial.";
   } else if (state.flow === "cota") {
     elements.flowEyebrow.textContent = "Folha de cota";
     elements.flowTitle.textContent = "Prepare o despacho";
@@ -1502,37 +1601,44 @@ function renderHome() {
         <p>Registre uma vistoria e gere o parecer oficial.</p>
         <span class="card-link">Criar parecer <span aria-hidden="true">→</span></span>
       </article>
+      <article class="document-card is-etp" tabindex="0" role="button" ${homeCardVisibilityAttribute("etp")} data-card-key="etp" data-action="start-etp">
+        <span class="card-status is-ready">Pronto</span>
+        <span class="card-number" aria-hidden="true">02</span><span class="card-icon" aria-hidden="true">${lucideIcon("list-checks")}</span>
+        <h3>Estudo Técnico Preliminar</h3>
+        <p>Preencha as 14 seções e gere o ETP timbrado.</p>
+        <span class="card-link">Criar ETP <span aria-hidden="true">→</span></span>
+      </article>
       <article class="document-card is-cota" tabindex="0" role="button" ${homeCardVisibilityAttribute("cota")} data-card-key="cota" data-action="start-cota">
         <span class="card-status is-ready">Pronto</span>
-        <span class="card-number" aria-hidden="true">02</span><span class="card-icon" aria-hidden="true">${lucideIcon("notebook-pen")}</span>
+        <span class="card-number" aria-hidden="true">03</span><span class="card-icon" aria-hidden="true">${lucideIcon("notebook-pen")}</span>
         <h3>Folha de cota</h3>
         <p>Converta anotações em folha pautada.</p>
         <span class="card-link">Preparar folha <span aria-hidden="true">→</span></span>
       </article>
       <article class="document-card is-admin" tabindex="0" role="button" ${homeCardVisibilityAttribute("memorando")} data-card-key="memorando" data-action="start-correspondence" data-kind="memorando">
         <span class="card-status is-ready">Pronto</span>
-        <span class="card-number" aria-hidden="true">03</span><span class="card-icon" aria-hidden="true">${lucideIcon("file-text")}</span>
+        <span class="card-number" aria-hidden="true">04</span><span class="card-icon" aria-hidden="true">${lucideIcon("file-text")}</span>
         <h3>Memorando</h3>
         <p>Gere memorandos no padrão oficial.</p>
         <span class="card-link">Criar memorando <span aria-hidden="true">→</span></span>
       </article>
       <article class="document-card is-admin" tabindex="0" role="button" ${homeCardVisibilityAttribute("oficio")} data-card-key="oficio" data-action="start-correspondence" data-kind="oficio">
         <span class="card-status is-ready">Pronto</span>
-        <span class="card-number" aria-hidden="true">04</span><span class="card-icon" aria-hidden="true">${lucideIcon("send")}</span>
+        <span class="card-number" aria-hidden="true">05</span><span class="card-icon" aria-hidden="true">${lucideIcon("send")}</span>
         <h3>Ofício</h3>
         <p>Crie ofícios no modelo da Prefeitura.</p>
         <span class="card-link">Criar ofício <span aria-hidden="true">→</span></span>
       </article>
       <article class="document-card is-alert" tabindex="0" role="button" ${homeCardVisibilityAttribute("notification")} data-card-key="notification" data-action="start-notification">
         <span class="card-status is-ready">Pronto</span>
-        <span class="card-number" aria-hidden="true">05</span><span class="card-icon" aria-hidden="true">${lucideIcon("bell-ring")}</span>
+        <span class="card-number" aria-hidden="true">06</span><span class="card-icon" aria-hidden="true">${lucideIcon("bell-ring")}</span>
         <h3>Notificação</h3>
         <p>Emita notificações com texto e anexos.</p>
         <span class="card-link">Criar notificação <span aria-hidden="true">→</span></span>
       </article>
       <article class="document-card is-alert" tabindex="0" role="button" ${homeCardVisibilityAttribute("warning")} data-card-key="warning" data-action="start-warning">
         <span class="card-status is-ready">Pronto</span>
-        <span class="card-number" aria-hidden="true">06</span><span class="card-icon" aria-hidden="true">${lucideIcon("triangle-alert")}</span>
+        <span class="card-number" aria-hidden="true">07</span><span class="card-icon" aria-hidden="true">${lucideIcon("triangle-alert")}</span>
         <h3>Advertência</h3>
         <p>Gere advertências padronizadas.</p>
         <span class="card-link">Criar advertência <span aria-hidden="true">→</span></span>
@@ -3857,6 +3963,178 @@ function summaryCard(label, value, detail) {
   return `<article class="summary-card"><span>${e(label)}</span><strong>${e(value)}</strong><small>${e(detail)}</small></article>`;
 }
 
+function renderEtp() {
+  return [
+    renderEtpIdentification,
+    renderEtpPlanning,
+    renderEtpSolution,
+    renderEtpResults,
+    renderEtpRisks,
+    renderEtpReview,
+  ][state.step]();
+}
+
+function etpRequirements() {
+  return String(state.etp.requirements || "")
+    .replace(/\r\n?/g, "\n")
+    .split("\n")
+    .map((item) => item.replace(/^\s*\d+(?:\.\d+)*\s*[-.)]?\s*/, "").trim())
+    .filter(Boolean);
+}
+
+function renderEtpIdentification() {
+  const d = state.etp;
+  return `${pageHeading("Etapa 1", "Identifique o ETP", "Informe o objeto, o processo e a unidade responsável pelo estudo.")}
+  <section class="panel">
+    ${panelHeader("Informações básicas", "Esses dados abrem o documento e identificam a contratação.")}
+    <label class="field stacked"><span>Objeto da contratação *</span><input type="text" maxlength="240" data-bind="etp.object" value="${e(d.object)}" placeholder="Ex.: Reforma e revitalização do Portal Dezenove de Maio" /></label>
+    <div class="field-grid">
+      <label class="field"><span>Nº do processo administrativo *</span><input type="text" maxlength="80" data-bind="etp.processNumber" value="${e(d.processNumber)}" placeholder="Ex.: 12595/2025" /></label>
+      <label class="field"><span>Unidade requisitante *</span><input type="text" maxlength="240" data-bind="etp.requestingUnit" value="${e(d.requestingUnit)}" placeholder="Ex.: Setor de Planejamento Financeiro" /></label>
+    </div>
+    <div class="field-grid">
+      <label class="field"><span>Cidade *</span><input type="text" maxlength="100" data-bind="etp.city" value="${e(d.city)}" /></label>
+      <label class="field"><span>Data *</span><input type="date" data-bind="etp.date" value="${e(d.date)}" /></label>
+    </div>
+  </section>
+  <div class="notice"><span aria-hidden="true">✓</span><span><strong>Modelo do ETP preservado.</strong> O arquivo final manterá o brasão, o cabeçalho, o rodapé, as margens, a paginação e a tipografia do documento anexado.</span></div>`;
+}
+
+function renderEtpPlanning() {
+  const d = state.etp;
+  return `${pageHeading("Etapa 2", "Descreva a necessidade e o planejamento", "Preencha a introdução e as três primeiras seções do ETP.")}
+  <section class="panel etp-section-panel">
+    ${panelHeader("Introdução", "Apresente de forma objetiva a contratação proposta.")}
+    <label class="field stacked"><span>Texto da introdução *</span><textarea maxlength="6000" data-bind="etp.introduction" placeholder="Contextualize a contratação, o objeto e sua finalidade.">${e(d.introduction)}</textarea></label>
+  </section>
+  <section class="panel etp-section-panel">
+    ${panelHeader("1 — Descrição da necessidade", "Explique o problema, a condição atual e a necessidade pública a ser atendida.")}
+    <label class="field stacked"><span>Descrição da necessidade *</span><textarea maxlength="10000" data-bind="etp.needDescription">${e(d.needDescription)}</textarea></label>
+  </section>
+  <section class="panel etp-section-panel">
+    ${panelHeader("2 — Previsão no Plano de Contratações Anual", "Registre a previsão no PCA e, quando houver, a origem dos recursos.")}
+    <label class="field stacked"><span>Previsão no PCA *</span><textarea maxlength="6000" data-bind="etp.annualPlan">${e(d.annualPlan)}</textarea></label>
+    <label class="field stacked"><span>Dotação ou fonte orçamentária</span><textarea maxlength="3000" data-bind="etp.budgetAllocation" placeholder="Informe a dotação, os vínculos ou a origem dos recursos, se aplicável.">${e(d.budgetAllocation)}</textarea></label>
+  </section>
+  <section class="panel etp-section-panel">
+    ${panelHeader("3 — Requisitos da contratação", "Informe um requisito por linha; o Word numerará automaticamente como 3.1, 3.2 e assim por diante.")}
+    <label class="field stacked"><span>Requisitos *</span><textarea maxlength="10000" data-bind="etp.requirements" placeholder="Lei e normas aplicáveis&#10;Qualificação técnica necessária&#10;Condições de execução">${e(d.requirements)}</textarea><span class="text-counter"><span>Um requisito por linha</span><span>${etpRequirements().length} requisito(s)</span></span></label>
+  </section>`;
+}
+
+function renderEtpSolution() {
+  const d = state.etp;
+  return `${pageHeading("Etapa 3", "Registre quantidades, mercado e solução", "Preencha as seções 4 a 8 conforme os estudos e anexos disponíveis.")}
+  <section class="panel etp-section-panel">
+    ${panelHeader("4 — Estimativa das quantidades", "Indique os quantitativos, a memória de cálculo ou a referência ao anexo correspondente.")}
+    <label class="field stacked"><span>Estimativa das quantidades *</span><textarea maxlength="7000" data-bind="etp.quantityEstimate">${e(d.quantityEstimate)}</textarea></label>
+  </section>
+  <section class="panel etp-section-panel">
+    ${panelHeader("5 — Levantamento de mercado", "Descreva as alternativas pesquisadas e as fontes oficiais ou técnicas consultadas.")}
+    <label class="field stacked"><span>Levantamento de mercado *</span><textarea maxlength="9000" data-bind="etp.marketSurvey">${e(d.marketSurvey)}</textarea></label>
+  </section>
+  <section class="panel etp-section-panel">
+    ${panelHeader("6 — Estimativa do valor da contratação", "Informe o valor estimado e a base de cálculo, inclusive por extenso quando necessário.")}
+    <label class="field stacked"><span>Estimativa de valor *</span><textarea maxlength="5000" data-bind="etp.estimatedValue" placeholder="Ex.: Conforme planilha de custos em anexo, o valor estimado é de R$…">${e(d.estimatedValue)}</textarea></label>
+  </section>
+  <section class="panel etp-section-panel">
+    ${panelHeader("7 — Descrição da solução como um todo", "Explique a solução escolhida, seu escopo e as condições essenciais de execução.")}
+    <label class="field stacked"><span>Descrição da solução *</span><textarea maxlength="9000" data-bind="etp.solutionDescription">${e(d.solutionDescription)}</textarea></label>
+  </section>
+  <section class="panel etp-section-panel">
+    ${panelHeader("8 — Justificativa para parcelamento ou não", "Fundamente a decisão de parcelar ou executar o objeto de forma integrada.")}
+    <label class="field stacked"><span>Justificativa *</span><textarea maxlength="7000" data-bind="etp.parcelingJustification">${e(d.parcelingJustification)}</textarea></label>
+  </section>`;
+}
+
+function renderEtpResults() {
+  const d = state.etp;
+  return `${pageHeading("Etapa 4", "Detalhe resultados, providências e impactos", "Preencha as seções 9 a 13 com as informações verificadas para a contratação.")}
+  <section class="panel etp-section-panel">
+    ${panelHeader("9 — Demonstrativo dos resultados pretendidos", "Registre os resultados esperados e, se aplicável, as dimensões social e operacional.")}
+    <label class="field stacked"><span>Resultados pretendidos *</span><textarea maxlength="9000" data-bind="etp.expectedResults">${e(d.expectedResults)}</textarea></label>
+    <div class="field-grid">
+      <label class="field stacked"><span>Apreciação social</span><textarea maxlength="5000" data-bind="etp.socialAssessment">${e(d.socialAssessment)}</textarea></label>
+      <label class="field stacked"><span>Qualificação operacional</span><textarea maxlength="5000" data-bind="etp.operationalQualification">${e(d.operationalQualification)}</textarea></label>
+    </div>
+  </section>
+  <section class="panel etp-section-panel">
+    ${panelHeader("10 — Providências prévias ao contrato", "Informe as providências administrativas ou técnicas necessárias, ou registre que não se aplica.")}
+    <label class="field stacked"><span>Providências prévias *</span><textarea maxlength="5000" data-bind="etp.priorMeasures">${e(d.priorMeasures)}</textarea></label>
+  </section>
+  <section class="panel etp-section-panel">
+    ${panelHeader("11 — Contratações correlatas ou interdependentes", "Relacione outras contratações vinculadas, ou registre que não se aplica.")}
+    <label class="field stacked"><span>Contratações correlatas *</span><textarea maxlength="5000" data-bind="etp.relatedContracts">${e(d.relatedContracts)}</textarea></label>
+  </section>
+  <section class="panel etp-section-panel">
+    ${panelHeader("12 — Impactos ambientais", "Identifique impactos e medidas de prevenção, mitigação e destinação de resíduos.")}
+    <label class="field stacked"><span>Impactos ambientais *</span><textarea maxlength="10000" data-bind="etp.environmentalImpacts">${e(d.environmentalImpacts)}</textarea></label>
+  </section>
+  <section class="panel etp-section-panel">
+    ${panelHeader("13 — Licença, autorização ou manifestação", "Informe as licenças e autorizações necessárias, ou registre que não se aplica.")}
+    <label class="field stacked"><span>Licenças e autorizações *</span><textarea maxlength="5000" data-bind="etp.licenses">${e(d.licenses)}</textarea></label>
+  </section>`;
+}
+
+function renderEtpRisk(risk, index) {
+  const options = (value) => ["", "Baixa", "Média", "Alta"].map((option) =>
+    `<option value="${e(option)}" ${value === option ? "selected" : ""}>${e(option || "Selecione")}</option>`
+  ).join("");
+  return `<article class="etp-risk-card" data-etp-risk-id="${e(risk.id)}">
+    <div class="etp-risk-heading"><div><span>Risco ${index + 1}</span><strong>${e(risk.title || "Novo risco")}</strong></div><button class="icon-button" type="button" data-action="remove-etp-risk" data-id="${e(risk.id)}" aria-label="Remover risco ${index + 1}" ${state.etp.risks.length === 1 ? "disabled" : ""}>×</button></div>
+    <label class="field stacked"><span>Risco *</span><input type="text" maxlength="240" data-bind="etp.risks.${index}.title" value="${e(risk.title)}" placeholder="Ex.: Viabilidade técnica e operacional" /></label>
+    <div class="field-grid">
+      <label class="field"><span>Probabilidade *</span><select data-bind="etp.risks.${index}.probability">${options(risk.probability)}</select></label>
+      <label class="field"><span>Impacto *</span><select data-bind="etp.risks.${index}.impact">${options(risk.impact)}</select></label>
+    </div>
+    <label class="field stacked"><span>Dano *</span><textarea maxlength="3000" data-bind="etp.risks.${index}.damage">${e(risk.damage)}</textarea></label>
+    <div class="field-grid">
+      <label class="field stacked"><span>Ação preventiva *</span><textarea maxlength="3000" data-bind="etp.risks.${index}.preventiveAction">${e(risk.preventiveAction)}</textarea></label>
+      <label class="field stacked"><span>Ação de contingência *</span><textarea maxlength="3000" data-bind="etp.risks.${index}.contingencyAction">${e(risk.contingencyAction)}</textarea></label>
+    </div>
+  </article>`;
+}
+
+function renderEtpRisks() {
+  const d = state.etp;
+  return `${pageHeading("Etapa 5", "Mapeie os riscos e responsáveis", "Registre os riscos da contratação e selecione quem assinará o estudo.")}
+  <section class="panel">
+    ${panelHeader("14 — Gerenciamento de riscos", "Cada risco será apresentado em uma tabela de seis linhas, como no ETP de referência.", `<button class="button button-secondary" type="button" data-action="add-etp-risk">Adicionar risco</button>`)}
+    <div class="etp-risk-list">${d.risks.map(renderEtpRisk).join("")}</div>
+  </section>
+  <section class="panel">
+    ${panelHeader("Assinaturas do ETP", "Selecione uma ou mais pessoas responsáveis pelo documento.", `<button class="button button-secondary" type="button" data-action="open-signatures">Cadastrar ou editar assinaturas</button>`)}
+    ${renderEtpSignatureChoices()}
+    <div class="selected-signature-list">
+      ${d.responsibles.length ? d.responsibles.map((signature, index) => `<article class="selected-signature-card">
+        <span class="signatory-index">${String(index + 1).padStart(2, "0")}</span>
+        <div class="signature-profile-copy"><strong>${e(signature.name)}</strong><em>${e(signature.role)}</em></div>
+        <button class="icon-button" type="button" data-action="remove-etp-signature" data-index="${index}" aria-label="Remover assinatura de ${e(signature.name)}" title="Remover">×</button>
+      </article>`).join("") : `<div class="signature-profile-state"><strong>Nenhuma assinatura selecionada</strong><span>Marque uma ou mais pessoas na lista acima.</span></div>`}
+    </div>
+  </section>`;
+}
+
+function renderEtpReview() {
+  const d = state.etp;
+  return `${pageHeading("Etapa 6", "Revise antes de gerar", "Confira a identificação, as 14 seções, os riscos e as assinaturas.")}
+  <div class="summary-grid">
+    ${summaryCard("Documento", "ETP", d.processNumber)}
+    ${summaryCard("Seções técnicas", "14", d.object)}
+    ${summaryCard("Riscos", String(d.risks.length), `${d.responsibles.length} responsável(is)`) }
+  </div>
+  <section class="panel">
+    <div class="review-block"><h3>Objeto</h3><p>${e(d.object)}</p></div>
+    <div class="review-block"><h3>Unidade requisitante</h3><p>${e(d.requestingUnit)}</p></div>
+    <div class="review-block"><h3>Descrição da necessidade</h3><p>${e(d.needDescription)}</p></div>
+    <div class="review-block"><h3>Solução</h3><p>${e(d.solutionDescription)}</p></div>
+    <div class="review-block"><h3>Resultados pretendidos</h3><p>${e(d.expectedResults)}</p></div>
+    <div class="review-block"><h3>Riscos</h3><p>${d.risks.map((risk, index) => `${index + 1}. ${e(risk.title)}`).join(" • ")}</p></div>
+    <div class="review-block"><h3>Responsáveis</h3><div class="review-signatures">${d.responsibles.map((signature) => signaturePreview(signature)).join("")}</div></div>
+  </section>
+  <div class="notice"><span aria-hidden="true">✓</span><span><strong>Formatação oficial preservada.</strong> O Word será criado a partir do ETP anexado, com o mesmo timbre, rodapé, margens, paginação, tabelas e assinatura.</span></div>`;
+}
+
 function renderCota() {
   return [renderCotaContent, renderCotaReview, renderCotaSignature][state.step]();
 }
@@ -4371,6 +4649,8 @@ function renderSuccess() {
   }
   const documentLabel = state.flow === "report"
     ? "O parecer técnico"
+    : state.flow === "etp"
+      ? "O Estudo Técnico Preliminar"
     : state.flow === "cota"
       ? "A folha de cota"
       : state.flow === "notification"
@@ -4531,6 +4811,7 @@ async function nextStep() {
   }
   if (state.flow === "drainage") generateDrainageSpreadsheet();
   else if (state.flow === "report") generateReport();
+  else if (state.flow === "etp") generateEtp();
   else if (state.flow === "cota") generateCota();
   else if (isNoticeFlow()) generateNotification();
   else generateCorrespondence();
@@ -4607,9 +4888,73 @@ function applyValidationHighlights() {
   });
 }
 
+function validateEtpStep() {
+  const d = state.etp;
+  const showMissing = (title, text, fields) => {
+    showFieldValidationMessage({ title, text, fields: fields.filter(Boolean) });
+    return false;
+  };
+  if (state.step === 0 && (!d.object.trim() || !d.processNumber.trim() || !d.requestingUnit.trim() || !d.city.trim() || !d.date)) {
+    return showMissing("Complete a identificação", "Informe o objeto, o processo, a unidade requisitante, a cidade e a data.", [
+      !d.object.trim() && '[data-bind="etp.object"]',
+      !d.processNumber.trim() && '[data-bind="etp.processNumber"]',
+      !d.requestingUnit.trim() && '[data-bind="etp.requestingUnit"]',
+      !d.city.trim() && '[data-bind="etp.city"]',
+      !d.date && '[data-bind="etp.date"]',
+    ]);
+  }
+  if (state.step === 1 && (!d.introduction.trim() || !d.needDescription.trim() || !d.annualPlan.trim() || !etpRequirements().length)) {
+    return showMissing("Complete a necessidade e o planejamento", "Preencha a introdução, a descrição da necessidade, a previsão no PCA e pelo menos um requisito.", [
+      !d.introduction.trim() && '[data-bind="etp.introduction"]',
+      !d.needDescription.trim() && '[data-bind="etp.needDescription"]',
+      !d.annualPlan.trim() && '[data-bind="etp.annualPlan"]',
+      !etpRequirements().length && '[data-bind="etp.requirements"]',
+    ]);
+  }
+  if (state.step === 2 && (!d.quantityEstimate.trim() || !d.marketSurvey.trim() || !d.estimatedValue.trim() || !d.solutionDescription.trim() || !d.parcelingJustification.trim())) {
+    return showMissing("Complete o estudo da solução", "Preencha as estimativas, o levantamento de mercado, a solução e a justificativa de parcelamento.", [
+      !d.quantityEstimate.trim() && '[data-bind="etp.quantityEstimate"]',
+      !d.marketSurvey.trim() && '[data-bind="etp.marketSurvey"]',
+      !d.estimatedValue.trim() && '[data-bind="etp.estimatedValue"]',
+      !d.solutionDescription.trim() && '[data-bind="etp.solutionDescription"]',
+      !d.parcelingJustification.trim() && '[data-bind="etp.parcelingJustification"]',
+    ]);
+  }
+  if (state.step === 3 && (!d.expectedResults.trim() || !d.priorMeasures.trim() || !d.relatedContracts.trim() || !d.environmentalImpacts.trim() || !d.licenses.trim())) {
+    return showMissing("Complete os resultados e impactos", "Preencha os resultados pretendidos, as providências, as contratações relacionadas, os impactos ambientais e as licenças.", [
+      !d.expectedResults.trim() && '[data-bind="etp.expectedResults"]',
+      !d.priorMeasures.trim() && '[data-bind="etp.priorMeasures"]',
+      !d.relatedContracts.trim() && '[data-bind="etp.relatedContracts"]',
+      !d.environmentalImpacts.trim() && '[data-bind="etp.environmentalImpacts"]',
+      !d.licenses.trim() && '[data-bind="etp.licenses"]',
+    ]);
+  }
+  if (state.step === 4) {
+    const invalidRiskIndexes = d.risks.map((risk, index) => ({ risk, index })).filter(({ risk }) =>
+      !risk.title.trim() || !risk.probability || !risk.impact || !risk.damage.trim() || !risk.preventiveAction.trim() || !risk.contingencyAction.trim()
+    );
+    if (invalidRiskIndexes.length || !d.responsibles.length) {
+      const riskFields = invalidRiskIndexes.flatMap(({ risk, index }) => [
+        !risk.title.trim() && `[data-bind="etp.risks.${index}.title"]`,
+        !risk.probability && `[data-bind="etp.risks.${index}.probability"]`,
+        !risk.impact && `[data-bind="etp.risks.${index}.impact"]`,
+        !risk.damage.trim() && `[data-bind="etp.risks.${index}.damage"]`,
+        !risk.preventiveAction.trim() && `[data-bind="etp.risks.${index}.preventiveAction"]`,
+        !risk.contingencyAction.trim() && `[data-bind="etp.risks.${index}.contingencyAction"]`,
+      ].filter(Boolean));
+      return showMissing("Complete os riscos e as assinaturas", "Preencha todos os campos de cada risco e selecione pelo menos uma pessoa responsável pelo ETP.", [
+        ...riskFields,
+        !d.responsibles.length && '[data-etp-signature-group]',
+      ]);
+    }
+  }
+  return true;
+}
+
 function validateCurrentStep() {
   clearValidationHighlights();
   if (state.flow === "drainage") return validateDrainageStep();
+  if (state.flow === "etp") return validateEtpStep();
   if (state.flow === "report") {
     const r = state.report;
     if (state.step === 0) {
@@ -5006,6 +5351,10 @@ function updateCounter(target) {
   if (target.dataset.bind === "report.recommendations") {
     const counter = target.parentElement.querySelector(".text-counter span:last-child");
     if (counter) counter.textContent = `${reportRecommendations().length} item(ns)`;
+  }
+  if (target.dataset.bind === "etp.requirements") {
+    const counter = target.parentElement.querySelector(".text-counter span:last-child");
+    if (counter) counter.textContent = `${etpRequirements().length} requisito(s)`;
   }
   if (["cota.baseText", "cota.finalText"].includes(target.dataset.bind)) {
     const metrics = cotaMetrics(target.value);
@@ -5540,6 +5889,29 @@ async function generateReport() {
     state.generation.running = false;
     render();
     showMessage({ title: "Não foi possível gerar o parecer", text: error.message, kind: "error" });
+  }
+}
+
+async function generateEtp() {
+  if (!validateCurrentStep()) return;
+  if (!window.docx) {
+    showMessage({ title: "Gerador indisponível", text: "O componente de criação do Word não foi carregado. Atualize a página e tente novamente.", kind: "error" });
+    return;
+  }
+  state.generation = { running: true, progress: 8, message: "Organizando as seções do ETP…" };
+  render();
+  try {
+    const blob = await buildEtpDocument((progress, message) => setGenerationProgress(progress, message));
+    const suffix = state.etp.processNumber || state.etp.object;
+    const filename = `etp-${slugify(suffix, "estudo-tecnico-preliminar")}.docx`;
+    await finishDownload(blob, filename, "Estudo Técnico Preliminar");
+    state.etp.complete = true;
+    state.generation.running = false;
+    render();
+  } catch (error) {
+    state.generation.running = false;
+    render();
+    showMessage({ title: "Não foi possível gerar o ETP", text: error.message, kind: "error" });
   }
 }
 
@@ -6436,6 +6808,239 @@ async function loadTechnicalOpinionTemplate() {
   return data.slice(0);
 }
 
+function etpRun(text, options = {}) {
+  const { TextRun } = window.docx;
+  return new TextRun({
+    text: String(text || ""),
+    font: "Arial",
+    size: options.size || 24,
+    bold: Boolean(options.bold),
+    italics: Boolean(options.italics),
+    language: { value: "pt-BR" },
+  });
+}
+
+function etpParagraph(text, options = {}) {
+  const { Paragraph, AlignmentType } = window.docx;
+  const alignment = options.center
+    ? AlignmentType.CENTER
+    : options.right
+      ? AlignmentType.RIGHT
+      : options.left
+        ? AlignmentType.LEFT
+        : AlignmentType.JUSTIFIED;
+  return new Paragraph({
+    alignment,
+    keepNext: Boolean(options.keepNext),
+    spacing: { before: options.before || 0, after: options.after || 0, line: 360 },
+    children: [etpRun(String(text || "").trim(), { bold: options.bold })],
+  });
+}
+
+function etpBlankParagraph() {
+  const { Paragraph } = window.docx;
+  return new Paragraph({ spacing: { before: 0, after: 0, line: 360 }, children: [] });
+}
+
+function etpTextParagraphs(text) {
+  return String(text || "")
+    .replace(/\r\n?/g, "\n")
+    .split(/\n+/)
+    .map((paragraph) => paragraph.trim())
+    .filter(Boolean)
+    .map((paragraph) => etpParagraph(paragraph));
+}
+
+function etpHeading(text) {
+  return etpParagraph(text, { left: true, bold: true, keepNext: true, before: 180 });
+}
+
+function etpLabeledParagraph(label, text) {
+  const { Paragraph, AlignmentType } = window.docx;
+  return new Paragraph({
+    alignment: AlignmentType.JUSTIFIED,
+    spacing: { before: 0, after: 0, line: 360 },
+    children: [etpRun(`${label}: `, { bold: true }), etpRun(String(text || "").trim())],
+  });
+}
+
+function etpHeaderTitle() {
+  return `ETP – ${state.etp.object.trim().toLocaleUpperCase("pt-BR")}`;
+}
+
+function etpRiskTable(risk, index) {
+  const {
+    Table, TableRow, TableCell, WidthType, TableLayoutType,
+    Paragraph, AlignmentType, BorderStyle, VerticalAlign,
+  } = window.docx;
+  const borders = {
+    top: { style: BorderStyle.SINGLE, size: 4, color: "000000" },
+    bottom: { style: BorderStyle.SINGLE, size: 4, color: "000000" },
+    left: { style: BorderStyle.SINGLE, size: 4, color: "000000" },
+    right: { style: BorderStyle.SINGLE, size: 4, color: "000000" },
+    insideHorizontal: { style: BorderStyle.SINGLE, size: 4, color: "000000" },
+    insideVertical: { style: BorderStyle.SINGLE, size: 4, color: "000000" },
+  };
+  const widths = [2547, 5947];
+  const cell = (text, width) => new TableCell({
+    width: { size: width, type: WidthType.DXA },
+    verticalAlign: VerticalAlign.CENTER,
+    margins: { top: 80, bottom: 80, left: 120, right: 120 },
+    borders,
+    children: [new Paragraph({
+      alignment: AlignmentType.LEFT,
+      spacing: { before: 0, after: 0, line: 360 },
+      children: [etpRun(text)],
+    })],
+  });
+  const rows = [
+    [`Risco ${index + 1}`, risk.title],
+    ["Probabilidade", risk.probability],
+    ["Impacto", risk.impact],
+    ["Dano", risk.damage],
+    ["Ação preventiva", risk.preventiveAction],
+    ["Ação de contingência", risk.contingencyAction],
+  ].map(([label, value]) => new TableRow({
+    cantSplit: true,
+    children: [cell(label, widths[0]), cell(value, widths[1])],
+  }));
+  return new Table({
+    width: { size: 8494, type: WidthType.DXA },
+    layout: TableLayoutType.FIXED,
+    columnWidths: widths,
+    borders,
+    rows,
+  });
+}
+
+function etpSignatureParagraphs(signatures) {
+  const paragraphs = [];
+  signatures.forEach((signature, index) => {
+    paragraphs.push(etpParagraph(signature.name, { center: true, before: index === 0 ? 900 : 540 }));
+    paragraphs.push(etpParagraph(signature.role, { center: true }));
+  });
+  return paragraphs;
+}
+
+async function loadEtpTemplate() {
+  if (!etpTemplatePromise) {
+    etpTemplatePromise = fetch(ETP_TEMPLATE_URL)
+      .then((response) => {
+        if (!response.ok) throw new Error("O modelo oficial do ETP não pôde ser carregado.");
+        return response.arrayBuffer();
+      })
+      .catch((error) => {
+        etpTemplatePromise = null;
+        throw error;
+      });
+  }
+  const data = await etpTemplatePromise;
+  return data.slice(0);
+}
+
+async function buildEtpDocument(onProgress) {
+  const { patchDocument, PatchType } = window.docx;
+  const d = state.etp;
+  if (typeof patchDocument !== "function" || !PatchType) {
+    throw new Error("O componente de preenchimento do modelo Word não está disponível.");
+  }
+
+  onProgress(18, "Carregando o modelo oficial do ETP…");
+  const template = await loadEtpTemplate();
+  const children = [
+    etpParagraph("ESTUDO TÉCNICO PRELIMINAR - ETP", { center: true, bold: true, keepNext: true }),
+    etpParagraph("Lei Federal 14.133/21", { center: true, bold: true, keepNext: true }),
+    etpParagraph("REFERENCIAL - OBRAS", { center: true, bold: true }),
+    etpBlankParagraph(),
+    etpHeading("Informações Básicas"),
+    etpLabeledParagraph("Nº do Processo Administrativo", d.processNumber),
+    etpLabeledParagraph("Unidade requisitante", d.requestingUnit),
+    etpBlankParagraph(),
+    etpHeading("INTRODUÇÃO"),
+    ...etpTextParagraphs(d.introduction),
+    etpBlankParagraph(),
+    etpHeading("1 - DESCRIÇÃO DA NECESSIDADE"),
+    ...etpTextParagraphs(d.needDescription),
+    etpBlankParagraph(),
+    etpHeading("2 - PREVISÃO NO PLANO DE CONTRATAÇÕES ANUAL"),
+    ...etpTextParagraphs(d.annualPlan),
+  ];
+
+  if (d.budgetAllocation.trim()) {
+    children.push(etpLabeledParagraph("Dotação ou fonte orçamentária", d.budgetAllocation));
+  }
+  children.push(etpBlankParagraph(), etpHeading("3 - REQUISITOS DA CONTRATAÇÃO"));
+  etpRequirements().forEach((requirement, index) => children.push(etpParagraph(`3.${index + 1} - ${requirement}`)));
+  children.push(
+    etpBlankParagraph(),
+    etpHeading("4 - ESTIMATIVA DAS QUANTIDADES"),
+    ...etpTextParagraphs(d.quantityEstimate),
+    etpBlankParagraph(),
+    etpHeading("5 - LEVANTAMENTO DE MERCADO"),
+    ...etpTextParagraphs(d.marketSurvey),
+    etpBlankParagraph(),
+    etpHeading("6 - ESTIMATIVA DO VALOR DA CONTRATAÇÃO"),
+    ...etpTextParagraphs(d.estimatedValue),
+    etpBlankParagraph(),
+    etpHeading("7 - DESCRIÇÃO DA SOLUÇÃO COMO UM TODO"),
+    ...etpTextParagraphs(d.solutionDescription),
+    etpBlankParagraph(),
+    etpHeading("8 - JUSTIFICATIVA PARA PARCELAMENTO OU NÃO DA SOLUÇÃO"),
+    ...etpTextParagraphs(d.parcelingJustification),
+    etpBlankParagraph(),
+    etpHeading("9 - DEMONSTRATIVO DOS RESULTADOS PRETENDIDOS"),
+    ...etpTextParagraphs(d.expectedResults),
+  );
+  if (d.socialAssessment.trim()) children.push(etpLabeledParagraph("Apreciação social", d.socialAssessment));
+  if (d.operationalQualification.trim()) children.push(etpLabeledParagraph("Qualificação operacional", d.operationalQualification));
+  children.push(
+    etpBlankParagraph(),
+    etpHeading("10 - PROVIDÊNCIAS PRÉVIAS AO CONTRATO"),
+    ...etpTextParagraphs(d.priorMeasures),
+    etpBlankParagraph(),
+    etpHeading("11 - CONTRATAÇÕES CORRELATAS/INTERDEPENDENTES"),
+    ...etpTextParagraphs(d.relatedContracts),
+    etpBlankParagraph(),
+    etpHeading("12 - IMPACTOS AMBIENTAIS"),
+    ...etpTextParagraphs(d.environmentalImpacts),
+    etpBlankParagraph(),
+    etpHeading("13 - LICENÇA/AUTORIZAÇÃO/MANIFESTAÇÃO DE ÓRGÃOS DO GOVERNO"),
+    ...etpTextParagraphs(d.licenses),
+    etpBlankParagraph(),
+    etpHeading("14 - GERENCIAMENTO DE RISCOS"),
+    etpParagraph("Os riscos do processo de contratação estão apresentados nas tabelas a seguir, com as respectivas medidas preventivas e ações de contingência."),
+    etpBlankParagraph(),
+  );
+
+  d.risks.forEach((risk, index) => {
+    onProgress(42 + Math.round(((index + 1) / d.risks.length) * 32), `Formatando risco ${index + 1} de ${d.risks.length}…`);
+    children.push(etpRiskTable(risk, index));
+    children.push(etpBlankParagraph());
+  });
+  children.push(etpParagraph(`${d.city.trim()}, ${formatDateLong(d.date)}.`, { left: true, before: 180 }));
+  children.push(...etpSignatureParagraphs(d.responsibles));
+
+  onProgress(88, "Aplicando o conteúdo ao timbre e à paginação do modelo…");
+  const blob = await patchDocument({
+    outputType: "blob",
+    data: template,
+    patches: {
+      etp_content: {
+        type: PatchType.DOCUMENT,
+        children,
+      },
+      etp_header_title: {
+        type: PatchType.PARAGRAPH,
+        children: [etpRun(etpHeaderTitle())],
+      },
+    },
+    keepOriginalStyles: true,
+    recursive: true,
+  });
+  onProgress(100, "ETP concluído.");
+  return blob;
+}
+
 async function buildCotaDocument(onProgress) {
   const { patchDocument, PatchType, Paragraph, TextRun, AlignmentType, LineRuleType } = window.docx;
   const c = state.cota;
@@ -6908,6 +7513,8 @@ function resetCurrentDocument() {
     state.report.photos.forEach((photo) => URL.revokeObjectURL(photo.url));
     if (state.report.map?.url) URL.revokeObjectURL(state.report.map.url);
     state.report = createReportState(readStorage("docflow-preferences", {}));
+  } else if (state.flow === "etp") {
+    state.etp = createEtpState(readStorage("docflow-preferences", {}));
   } else if (state.flow === "cota") {
     if (state.cota.contextImage?.url) URL.revokeObjectURL(state.cota.contextImage.url);
     state.cota = createCotaState(readStorage("docflow-preferences", {}));
@@ -6975,6 +7582,7 @@ async function handleAction(action, target) {
   if (action === "delete-history") return confirmHistoryDelete(target.dataset.id);
   if (action === "logout") return logout();
   if (action === "start-report") return startFlow("report");
+  if (action === "start-etp") return startFlow("etp");
   if (action === "start-cota") return startFlow("cota");
   if (action === "start-notification") return startFlow("notification");
   if (action === "start-warning") return startFlow("warning");
@@ -7001,6 +7609,23 @@ async function handleAction(action, target) {
   if (action === "remove-report-signature") {
     state.report.responsibles.splice(Number(target.dataset.index), 1);
     render();
+    return;
+  }
+  if (action === "remove-etp-signature") {
+    state.etp.responsibles.splice(Number(target.dataset.index), 1);
+    render();
+    return;
+  }
+  if (action === "add-etp-risk") {
+    state.etp.risks.push(createEtpRisk());
+    render();
+    return;
+  }
+  if (action === "remove-etp-risk") {
+    if (state.etp.risks.length > 1) {
+      state.etp.risks = state.etp.risks.filter((risk) => risk.id !== target.dataset.id);
+      render();
+    }
     return;
   }
   if (action === "remove-correspondence-signature") {
@@ -7217,6 +7842,17 @@ document.addEventListener("change", (event) => {
       applySignatureProfile({ type: "report" }, profile);
     } else if (!target.checked) {
       state.report.responsibles = state.report.responsibles.filter((item) => item.profileId !== profileId);
+    }
+    render();
+    return;
+  }
+  if (target.dataset.etpSignatureChoice !== undefined) {
+    const profileId = target.dataset.etpSignatureChoice;
+    const profile = state.signatures.items.find((item) => item.id === profileId);
+    if (target.checked && profile) {
+      applySignatureProfile({ type: "etp" }, profile);
+    } else if (!target.checked) {
+      state.etp.responsibles = state.etp.responsibles.filter((item) => item.profileId !== profileId);
     }
     render();
     return;

@@ -152,6 +152,8 @@ test("keeps the editable and deployable DocFlow assets synchronized", async () =
     builtTemplate,
     sourceTechnicalOpinionTemplate,
     builtTechnicalOpinionTemplate,
+    sourceEtpTemplate,
+    builtEtpTemplate,
     sourceNotificationTemplate,
     builtNotificationTemplate,
     sourceMemorandumTemplate,
@@ -173,6 +175,10 @@ test("keeps the editable and deployable DocFlow assets synchronized", async () =
     readFile(
       new URL("dist/client/docflow/templates/MODELO_PARECER_TECNICO.docx", siteRoot),
     ),
+    readFile(new URL("public/docflow/templates/MODELO_ETP.docx", siteRoot)),
+    readFile(
+      new URL("dist/client/docflow/templates/MODELO_ETP.docx", siteRoot),
+    ),
     readFile(new URL("public/docflow/templates/MODELO_NOTIFICACAO.docx", siteRoot)),
     readFile(
       new URL("dist/client/docflow/templates/MODELO_NOTIFICACAO.docx", siteRoot),
@@ -192,6 +198,7 @@ test("keeps the editable and deployable DocFlow assets synchronized", async () =
   assert.deepEqual(builtApp, sourceApp);
   assert.deepEqual(builtTemplate, sourceTemplate);
   assert.deepEqual(builtTechnicalOpinionTemplate, sourceTechnicalOpinionTemplate);
+  assert.deepEqual(builtEtpTemplate, sourceEtpTemplate);
   assert.deepEqual(builtNotificationTemplate, sourceNotificationTemplate);
   assert.deepEqual(builtMemorandumTemplate, sourceMemorandumTemplate);
   assert.deepEqual(builtLoginImage, sourceLoginImage);
@@ -342,15 +349,16 @@ test("keeps new registrations pending and limits user approval to the configured
 });
 
 
-test("labels every available document, including the technical opinion, as ready", async () => {
+test("labels every available document, including the technical opinion and ETP, as ready", async () => {
   const [app, styles] = await Promise.all([
     readFile(new URL("public/docflow/app.js", siteRoot), "utf8"),
     readFile(new URL("public/docflow/styles.css", siteRoot), "utf8"),
   ]);
 
-  assert.equal((app.match(/card-status is-ready/g) || []).length, 6);
+  assert.equal((app.match(/card-status is-ready/g) || []).length, 7);
   assert.equal((app.match(/card-status is-development/g) || []).length, 0);
   assert.match(app, /data-action="start-report">[\s\S]*?card-status is-ready">Pronto<\/span>[\s\S]*?<h3>Parecer técnico<\/h3>/);
+  assert.match(app, /data-action="start-etp">[\s\S]*?card-status is-ready">Pronto<\/span>[\s\S]*?<h3>Estudo Técnico Preliminar<\/h3>/);
   assert.match(app, /card-status is-ready">Pronto<\/span>[\s\S]*?<h3>Folha de cota<\/h3>/);
   assert.match(app, /data-kind="memorando">[\s\S]*?card-status is-ready">Pronto<\/span>[\s\S]*?<h3>Memorando<\/h3>/);
   assert.match(app, /data-kind="oficio">[\s\S]*?card-status is-ready">Pronto<\/span>[\s\S]*?<h3>Ofício<\/h3>/);
@@ -420,6 +428,39 @@ test("builds technical opinions from the supplied model with map, streets, photo
   assert.match(app, /keepOriginalStyles:\s*true/);
   assert.match(app, /await finishDownload\(blob, filename, "Parecer técnico"\)/);
   assert.match(documentWorker, /"Parecer técnico"/);
+});
+
+
+test("builds an ETP from the supplied municipal model with all fourteen sections and risk tables", async () => {
+  const [app, template, documentWorker, cardAccess, schema, styles] = await Promise.all([
+    readFile(new URL("public/docflow/app.js", siteRoot), "utf8"),
+    readFile(new URL("public/docflow/templates/MODELO_ETP.docx", siteRoot)),
+    readFile(new URL("worker/documents.ts", siteRoot), "utf8"),
+    readFile(new URL("db/card-access.ts", siteRoot), "utf8"),
+    readFile(new URL("db/schema.ts", siteRoot), "utf8"),
+    readFile(new URL("public/docflow/styles.css", siteRoot), "utf8"),
+  ]);
+
+  assert.ok(template.byteLength > 150_000 && template.byteLength < 260_000);
+  assert.match(app, /ETP_TEMPLATE_URL\s*=\s*"templates\/MODELO_ETP\.docx"/);
+  assert.match(app, /ETP_STEPS\s*=\s*\["Identificação", "Necessidade e planejamento", "Mercado e solução", "Resultados e impactos", "Riscos e assinaturas", "Revisão"\]/);
+  assert.match(app, /function createEtpState/);
+  assert.match(app, /data-bind="etp\.object"/);
+  assert.match(app, /data-bind="etp\.processNumber"/);
+  assert.match(app, /data-bind="etp\.requirements"/);
+  assert.match(app, /data-bind="etp\.environmentalImpacts"/);
+  assert.match(app, /data-action="add-etp-risk"/);
+  assert.match(app, /data-etp-signature-choice=/);
+  assert.match(app, /etpHeading\("14 - GERENCIAMENTO DE RISCOS"\)/);
+  assert.match(app, /columnWidths:\s*widths/);
+  assert.match(app, /etp_content:\s*\{[\s\S]*?type:\s*PatchType\.DOCUMENT/);
+  assert.match(app, /etp_header_title:\s*\{[\s\S]*?type:\s*PatchType\.PARAGRAPH/);
+  assert.match(app, /recursive:\s*true/);
+  assert.match(app, /await finishDownload\(blob, filename, "Estudo Técnico Preliminar"\)/);
+  assert.match(documentWorker, /"Estudo Técnico Preliminar"/);
+  assert.match(cardAccess, /"etp"/);
+  assert.match(schema, /"etp"/);
+  assert.match(styles, /\.etp-risk-card/);
 });
 
 
@@ -639,7 +680,7 @@ test("keeps a private account history for every generated document", async () =>
   assert.match(app, /Histórico de documentos/);
   assert.match(app, /apiRequest\("\/api\/documents"/);
   assert.match(app, /requestOptions\.body instanceof FormData/);
-  assert.equal((app.match(/await finishDownload\(/g) || []).length, 4);
+  assert.equal((app.match(/await finishDownload\(/g) || []).length, 5);
   assert.match(app, /data-action="download-history"/);
   assert.match(app, /\/api\/documents\/\$\{encodeURIComponent\(documentId\)\}\/download/);
   assert.match(worker, /url\.pathname === "\/api\/documents"/);
@@ -729,7 +770,7 @@ test("adds private Kanban boards with member permissions, files, comments, histo
   assert.match(page, /id="kanbanButton"/);
   assert.match(page, /data-action="show-kanban"/);
   assert.match(page, /id="notificationButton"/);
-  assert.match(page, /class="notification-bell"/);
+  assert.match(page, /class="[^"]*notification-bell[^"]*"/);
   assert.match(page, /id="notificationBadge"/);
   assert.match(page, /id="kanbanCardDialog"/);
   assert.match(page, /id="kanbanAssigneeList"/);
