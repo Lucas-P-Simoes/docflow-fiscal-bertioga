@@ -2,7 +2,7 @@ import type { Metadata } from "next";
 import "./globals.css";
 
 export const metadata: Metadata = {
-  title: "Fiscal Bertioga — Assistente de Documentos",
+  title: "Fiscal Bertioga",
   description:
     "Crie pareceres técnicos, Estudos Técnicos Preliminares e documentos oficiais em Word direto do navegador.",
   icons: {

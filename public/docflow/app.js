@@ -1,6 +1,8 @@
 /* DocFlow — aplicação web independente para geração de documentos. */
 
 const LEGACY_DOCFLOW_PATHS = new Set(["/docflow/", "/docflow/index.html"]);
+const APP_HISTORY_KEY = "__fiscalBertiogaNavigation";
+const NAVIGABLE_FLOWS = new Set(["drainage", "report", "etp", "cota", "correspondence", "notification", "warning"]);
 if (LEGACY_DOCFLOW_PATHS.has(window.location.pathname)) {
   window.history.replaceState(
     null,
@@ -407,6 +409,74 @@ let pendingSignatureTarget = null;
 let notificationPollTimer = null;
 let draggedKanbanCardId = "";
 let homeSearchQuery = "";
+
+function currentNavigationRoute() {
+  if (state.flow) {
+    return {
+      view: "flow",
+      flow: state.flow,
+      kind: state.flow === "correspondence" ? state.correspondence.kind : "",
+      step: state.step,
+      complete: Boolean(currentData().complete),
+    };
+  }
+  if (state.admin.open) return { view: "admin" };
+  if (state.processes.open) return { view: "processes" };
+  if (state.history.open) return { view: "history" };
+  if (state.kanban.open) return { view: "kanban", boardId: state.kanban.activeBoardId || "" };
+  return { view: "home" };
+}
+
+function writeNavigationState(mode = "push", route = currentNavigationRoute()) {
+  const currentRoute = window.history.state?.[APP_HISTORY_KEY];
+  const nextRoute = { ...route };
+  if (mode === "push" && JSON.stringify(currentRoute) === JSON.stringify(nextRoute)) return;
+  const historyState = { ...(window.history.state || {}), [APP_HISTORY_KEY]: nextRoute };
+  const url = `${window.location.pathname}${window.location.search}${window.location.hash}`;
+  window.history[mode === "replace" ? "replaceState" : "pushState"](historyState, "", url);
+}
+
+function pushNavigationState() {
+  writeNavigationState("push");
+}
+
+function replaceNavigationState(route = currentNavigationRoute()) {
+  writeNavigationState("replace", route);
+}
+
+function applyNavigationRoute(route) {
+  if (!state.auth.user || !route) return;
+  const requestedView = String(route.view || "home");
+  const view = requestedView === "admin" && !state.auth.user.isAdmin ? "home" : requestedView;
+  state.admin.open = view === "admin";
+  state.processes.open = view === "processes";
+  state.history.open = view === "history";
+  state.kanban.open = view === "kanban";
+  state.validationFields = [];
+  state.generation.running = false;
+
+  if (view === "flow" && NAVIGABLE_FLOWS.has(route.flow)) {
+    state.flow = route.flow;
+    if (state.flow === "correspondence" && CORRESPONDENCE_TYPES[route.kind]) {
+      state.correspondence.kind = route.kind;
+    }
+    const lastStep = Math.max(0, currentSteps().length - 1);
+    state.step = Math.min(lastStep, Math.max(0, Number(route.step) || 0));
+    currentData().complete = Boolean(route.complete);
+  } else {
+    state.flow = null;
+    state.step = 0;
+  }
+
+  if (view === "kanban" && route.boardId) state.kanban.activeBoardId = route.boardId;
+  closeNotificationPopover();
+  render();
+  focusMain();
+  if (view === "admin" && !state.admin.loaded) void loadAdminUsers();
+  if (view === "processes" && !state.processes.loaded) void loadProcesses();
+  if (view === "history" && !state.history.loaded) void loadDocumentHistory();
+  if (view === "kanban" && !state.kanban.loaded) void loadKanban();
+}
 
 function createSignatureConfigurationState() {
   return {
@@ -1172,6 +1242,7 @@ function applyAccount(payload) {
   elements.siteShell.hidden = false;
   elements.siteShell.classList.remove("is-hidden");
   render();
+  replaceNavigationState();
   loadSignatureProfiles();
   loadDocumentHistory();
   loadKanbanNotifications({ silent: true });
@@ -1203,6 +1274,7 @@ function showAuthGate(view = "login") {
   elements.loginPassword.value = "";
   elements.registerPassword.value = "";
   elements.registerPasswordConfirmation.value = "";
+  replaceNavigationState({ view: "auth" });
   showAuthView(view);
 }
 
@@ -1791,6 +1863,7 @@ function showAdminPanel() {
   state.kanban.open = false;
   state.admin.open = true;
   render();
+  pushNavigationState();
   focusMain();
   if (!state.admin.loaded) loadAdminUsers();
 }
@@ -1976,6 +2049,7 @@ function showProcesses() {
   state.kanban.open = false;
   state.processes.open = true;
   render();
+  pushNavigationState();
   focusMain();
   if (!state.processes.loaded) loadProcesses();
 }
@@ -2175,6 +2249,7 @@ function showDocumentHistory() {
   state.kanban.open = false;
   state.history.open = true;
   render();
+  pushNavigationState();
   focusMain();
   if (!state.history.loaded) loadDocumentHistory();
 }
@@ -2414,6 +2489,7 @@ async function showKanban({ focusCardId = "", boardId = "" } = {}) {
   if (boardId) state.kanban.activeBoardId = boardId;
   closeNotificationPopover();
   render();
+  pushNavigationState();
   focusMain();
   if (!state.kanban.loaded || boardId) await loadKanban();
   if (focusCardId) {
@@ -2432,6 +2508,7 @@ async function selectKanbanBoard(boardId) {
   state.kanban.cards = [];
   state.kanban.activity = [];
   await loadKanban();
+  pushNavigationState();
 }
 
 async function openKanbanHistoryDialog(boardId) {
@@ -3597,6 +3674,7 @@ async function generateDrainageSpreadsheet() {
     state.drainage.complete = true;
     state.generation.running = false;
     render();
+    pushNavigationState();
   } catch (error) {
     state.generation.running = false;
     render();
@@ -4764,6 +4842,7 @@ function startFlow(flow, kind = "") {
   state.generation = { running: false, progress: 0, message: "" };
   currentData().complete = false;
   render();
+  pushNavigationState();
   focusMain();
 }
 
@@ -4777,6 +4856,7 @@ function goHome() {
   state.validationFields = [];
   state.generation.running = false;
   render();
+  pushNavigationState();
   focusMain();
 }
 
@@ -4806,6 +4886,7 @@ async function nextStep() {
     }
     state.step += 1;
     render();
+    pushNavigationState();
     focusMain();
     return;
   }
@@ -4818,14 +4899,17 @@ async function nextStep() {
 }
 
 function previousStep() {
-  if (state.step === 0) {
-    goHome();
+  if (window.history.state?.[APP_HISTORY_KEY]) {
+    window.history.back();
     return;
   }
-  state.step -= 1;
-  state.validationFields = [];
-  render();
-  focusMain();
+  if (state.step === 0) goHome();
+  else {
+    state.step -= 1;
+    state.validationFields = [];
+    render();
+    focusMain();
+  }
 }
 
 function clearValidationHighlights() {
@@ -5785,6 +5869,7 @@ async function improveCota({ advanceOnSuccess = false } = {}) {
     if (advanceOnSuccess) {
       state.step += 1;
       render();
+      pushNavigationState();
       focusMain();
     }
     return true;
@@ -5819,6 +5904,7 @@ async function improveCota({ advanceOnSuccess = false } = {}) {
     state.generation.running = false;
     if (advanceOnSuccess) state.step += 1;
     render();
+    if (advanceOnSuccess) pushNavigationState();
     if (advanceOnSuccess) focusMain();
     showToast("Texto revisado. Confira cada informação antes de gerar o Word.");
     return true;
@@ -5885,6 +5971,7 @@ async function generateReport() {
     state.report.complete = true;
     state.generation.running = false;
     render();
+    pushNavigationState();
   } catch (error) {
     state.generation.running = false;
     render();
@@ -5908,6 +5995,7 @@ async function generateEtp() {
     state.etp.complete = true;
     state.generation.running = false;
     render();
+    pushNavigationState();
   } catch (error) {
     state.generation.running = false;
     render();
@@ -5931,6 +6019,7 @@ async function generateCota() {
     state.cota.complete = true;
     state.generation.running = false;
     render();
+    pushNavigationState();
   } catch (error) {
     state.generation.running = false;
     render();
@@ -5956,6 +6045,7 @@ async function generateNotification() {
     n.complete = true;
     state.generation.running = false;
     render();
+    pushNavigationState();
   } catch (error) {
     state.generation.running = false;
     render();
@@ -5988,6 +6078,7 @@ async function generateCorrespondence() {
     state.correspondence.complete = true;
     state.generation.running = false;
     render();
+    pushNavigationState();
   } catch (error) {
     state.generation.running = false;
     render();
@@ -7531,6 +7622,7 @@ function resetCurrentDocument() {
   state.step = 0;
   state.generation = { running: false, progress: 0, message: "" };
   render();
+  pushNavigationState();
   focusMain();
 }
 
@@ -7594,6 +7686,7 @@ async function handleAction(action, target) {
     if (next <= state.step) {
       state.step = next;
       render();
+      pushNavigationState();
       focusMain();
     }
     return;
@@ -8029,6 +8122,11 @@ elements.kanbanBoardDialog.addEventListener("click", (event) => {
 
 elements.renameDialog.addEventListener("click", (event) => {
   if (event.target === elements.renameDialog) closeHistoryRename();
+});
+
+window.addEventListener("popstate", (event) => {
+  const route = event.state?.[APP_HISTORY_KEY];
+  if (route) applyNavigationRoute(route);
 });
 
 window.addEventListener("beforeunload", () => {

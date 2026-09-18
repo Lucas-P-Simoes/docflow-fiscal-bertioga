@@ -24,8 +24,26 @@ test("serves the DocFlow interface at the site root without exposing its asset p
   assert.match(docflowApp, /window\.history\.replaceState/);
   assert.match(manifest, /"start_url": "\/"/);
   assert.match(manifest, /"scope": "\/"/);
-  assert.match(layout, /Fiscal Bertioga — Assistente de Documentos/);
+  assert.match(layout, /title: "Fiscal Bertioga"/);
+  assert.match(docflowPage, /<title>Fiscal Bertioga<\/title>/);
+  assert.match(manifest, /"name": "Fiscal Bertioga"/);
+  assert.doesNotMatch(layout, /Assistente de Documentos/);
+  assert.doesNotMatch(docflowPage, /<title>[^<]*Assistente de Documentos/);
   assert.doesNotMatch(page, /codex-preview|_sites-preview|SkeletonPreview/);
+});
+
+
+test("keeps browser back navigation inside the current site screen history", async () => {
+  const app = await readFile(new URL("public/docflow/app.js", siteRoot), "utf8");
+
+  assert.match(app, /APP_HISTORY_KEY\s*=\s*"__fiscalBertiogaNavigation"/);
+  assert.match(app, /function currentNavigationRoute\(\)/);
+  assert.match(app, /window\.history\[mode === "replace" \? "replaceState" : "pushState"\]/);
+  assert.match(app, /function applyNavigationRoute\(route\)/);
+  assert.match(app, /window\.addEventListener\("popstate"/);
+  assert.match(app, /if \(window\.history\.state\?\.\[APP_HISTORY_KEY\]\) \{\s*window\.history\.back\(\)/);
+  assert.match(app, /state\.step \+= 1;\s*render\(\);\s*pushNavigationState\(\)/);
+  assert.match(app, /state\.flow = flow;[\s\S]*?render\(\);\s*pushNavigationState\(\)/);
 });
 
 
