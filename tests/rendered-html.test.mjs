@@ -450,7 +450,7 @@ test("builds technical opinions from the supplied model with map, streets, photo
 });
 
 
-test("builds an ETP from the supplied municipal model with all fourteen sections and risk tables", async () => {
+test("builds an ETP from the supplied CGBR model and exposes only the red sections as user input", async () => {
   const [app, template, documentWorker, cardAccess, schema, styles] = await Promise.all([
     readFile(new URL("public/docflow/app.js", siteRoot), "utf8"),
     readFile(new URL("public/docflow/templates/MODELO_ETP.docx", siteRoot)),
@@ -460,21 +460,25 @@ test("builds an ETP from the supplied municipal model with all fourteen sections
     readFile(new URL("public/docflow/styles.css", siteRoot), "utf8"),
   ]);
 
-  assert.ok(template.byteLength > 150_000 && template.byteLength < 260_000);
+  assert.ok(template.byteLength > 100_000 && template.byteLength < 130_000);
   assert.match(app, /ETP_TEMPLATE_URL\s*=\s*"templates\/MODELO_ETP\.docx"/);
-  assert.match(app, /ETP_STEPS\s*=\s*\["Identificação", "Necessidade e planejamento", "Mercado e solução", "Resultados e impactos", "Riscos e assinaturas", "Revisão"\]/);
+  assert.match(app, /ETP_STEPS\s*=\s*\["Identificação", "Descrição da necessidade", "Orçamento e resultados", "Revisão"\]/);
   assert.match(app, /function createEtpState/);
-  assert.match(app, /data-bind="etp\.object"/);
   assert.match(app, /data-bind="etp\.processNumber"/);
-  assert.match(app, /data-bind="etp\.requirements"/);
-  assert.match(app, /data-bind="etp\.environmentalImpacts"/);
-  assert.match(app, /data-action="add-etp-risk"/);
-  assert.match(app, /data-etp-signature-choice=/);
-  assert.match(app, /etpHeading\("14 - GERENCIAMENTO DE RISCOS"\)/);
-  assert.match(app, /columnWidths:\s*widths/);
-  assert.match(app, /etp_content:\s*\{[\s\S]*?type:\s*PatchType\.DOCUMENT/);
-  assert.match(app, /etp_header_title:\s*\{[\s\S]*?type:\s*PatchType\.PARAGRAPH/);
-  assert.match(app, /recursive:\s*true/);
+  assert.match(app, /data-bind="etp\.introObject"/);
+  assert.match(app, /data-bind="etp\.needObject"/);
+  assert.match(app, /data-bind="etp\.needJustification"/);
+  assert.match(app, /data-bind="etp\.needPlan"/);
+  assert.match(app, /data-bind="etp\.budgetAllocation"/);
+  assert.match(app, /data-bind="etp\.estimatedValue"/);
+  assert.match(app, /data-bind="etp\.socialObject"/);
+  assert.match(app, /data-bind="etp\.operationalObject"/);
+  assert.match(app, /data-bind="etp\.city"/);
+  assert.match(app, /data-bind="etp\.date"/);
+  assert.match(app, /function renderEtp\(\) \{\s*return \[\s*renderEtpCgbrIdentification,\s*renderEtpCgbrNeed,\s*renderEtpCgbrBudget,\s*renderEtpCgbrReview,\s*\]\[state\.step\]\(\);\s*\}/);
+  assert.match(app, /window\.JSZip\.loadAsync\(template\)/);
+  assert.match(app, /replaceEtpPlaceholder\(documentXml, key, value\)/);
+  assert.match(app, /async function buildEtpCgbrDocument/);
   assert.match(app, /await finishDownload\(blob, filename, "Estudo Técnico Preliminar"\)/);
   assert.match(documentWorker, /"Estudo Técnico Preliminar"/);
   assert.match(cardAccess, /"etp"/);

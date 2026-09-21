@@ -12,7 +12,7 @@ if (LEGACY_DOCFLOW_PATHS.has(window.location.pathname)) {
 }
 
 const REPORT_STEPS = ["Identificação", "Mapa e vias", "Fotografias", "Parecer e assinaturas", "Revisão"];
-const ETP_STEPS = ["Identificação", "Necessidade e planejamento", "Mercado e solução", "Resultados e impactos", "Riscos e assinaturas", "Revisão"];
+const ETP_STEPS = ["Identificação", "Descrição da necessidade", "Orçamento e resultados", "Revisão"];
 const TR_STEPS = ["Identificação", "Condições gerais", "Qualificação técnica", "Gestão e assinatura", "Revisão"];
 const COTA_STEPS = ["Conteúdo", "Revisão", "Assinatura e download"];
 const OFFICIAL_CORRESPONDENCE_STEPS = ["Dados do documento", "Conteúdo", "Revisão e download"];
@@ -528,29 +528,18 @@ function createEtpRisk(values = {}) {
 
 function createEtpState(saved = {}) {
   return {
-    object: "",
     processNumber: "",
-    requestingUnit: saved.department || "",
+    introObject: "",
+    needObject: "",
+    needJustification: "",
+    needPlan: "",
+    budgetAllocation: "",
+    estimatedValue: "",
+    socialObject: "",
+    operationalObject: "",
     city: saved.technicalOpinionCity || "Bertioga",
     date: todayInputValue(),
-    introduction: "",
-    needDescription: "",
-    annualPlan: "",
-    budgetAllocation: "",
-    requirements: "",
-    quantityEstimate: "",
-    marketSurvey: "",
-    estimatedValue: "",
-    solutionDescription: "",
-    parcelingJustification: "",
-    expectedResults: "",
-    socialAssessment: "",
-    operationalQualification: "",
-    priorMeasures: "",
-    relatedContracts: "",
-    environmentalImpacts: "",
-    licenses: "",
-    risks: [createEtpRisk()],
+    risks: [],
     responsibles: [],
     complete: false,
   };
@@ -4107,13 +4096,73 @@ function summaryCard(label, value, detail) {
 
 function renderEtp() {
   return [
-    renderEtpIdentification,
-    renderEtpPlanning,
-    renderEtpSolution,
-    renderEtpResults,
-    renderEtpRisks,
-    renderEtpReview,
+    renderEtpCgbrIdentification,
+    renderEtpCgbrNeed,
+    renderEtpCgbrBudget,
+    renderEtpCgbrReview,
   ][state.step]();
+}
+
+function renderEtpCgbrIdentification() {
+  const d = state.etp;
+  return `${pageHeading("Etapa 1", "Identifique o Estudo Técnico Preliminar", "Preencha somente os trechos que aparecem em vermelho no modelo CGBR.")}
+  <section class="panel">
+    ${panelHeader("Informações variáveis", "O cabeçalho, a unidade requisitante, os tópicos e todo o texto preto permanecerão fixos.")}
+    <label class="field stacked"><span>Nº do processo administrativo *</span><input type="text" maxlength="80" data-bind="etp.processNumber" value="${e(d.processNumber)}" placeholder="Ex.: 7228/2025" /></label>
+    <label class="field stacked"><span>Objeto na introdução *</span><input type="text" maxlength="300" data-bind="etp.introObject" value="${e(d.introObject)}" placeholder="Ex.: CENTRO DE GERENCIAMENTO DE RESÍDUOS" /></label>
+    <div class="field-grid">
+      <label class="field"><span>Cidade da data *</span><input type="text" maxlength="100" data-bind="etp.city" value="${e(d.city)}" /></label>
+      <label class="field"><span>Data *</span><input type="date" data-bind="etp.date" value="${e(d.date)}" /></label>
+    </div>
+  </section>
+  <div class="notice"><span aria-hidden="true">✓</span><span><strong>Modelo CGBR preservado.</strong> Somente os campos vermelhos serão substituídos; o restante sairá exatamente como no documento anexado.</span></div>`;
+}
+
+function renderEtpCgbrNeed() {
+  const d = state.etp;
+  return `${pageHeading("Etapa 2", "Descreva a necessidade", "Os três campos correspondem aos três parágrafos vermelhos da seção 1.")}
+  <section class="panel etp-section-panel">
+    ${panelHeader("1 — Descrição da necessidade", "Mantenha cada ideia no campo correspondente para conservar a estrutura do modelo.")}
+    <label class="field stacked"><span>Objeto da contratação *</span><textarea maxlength="3500" data-bind="etp.needObject" placeholder="Descreva o objeto e as condições que a contratação deverá assegurar.">${e(d.needObject)}</textarea></label>
+    <label class="field stacked"><span>Justificativa da intervenção *</span><textarea maxlength="5000" data-bind="etp.needJustification" placeholder="Explique o desgaste, as patologias e os riscos que justificam a intervenção.">${e(d.needJustification)}</textarea></label>
+    <label class="field stacked"><span>Plano da intervenção *</span><textarea maxlength="4000" data-bind="etp.needPlan" placeholder="Descreva as correções e os padrões que deverão ser restabelecidos.">${e(d.needPlan)}</textarea></label>
+  </section>`;
+}
+
+function renderEtpCgbrBudget() {
+  const d = state.etp;
+  return `${pageHeading("Etapa 3", "Informe orçamento e referências do objeto", "Estes são os demais trechos vermelhos do ETP CGBR.")}
+  <section class="panel etp-section-panel">
+    ${panelHeader("2 — Previsão orçamentária", "Informe apenas a dotação, o vínculo ou a fonte que substituirá o item vermelho.")}
+    <label class="field stacked"><span>Dotação ou fonte orçamentária *</span><textarea maxlength="1000" data-bind="etp.budgetAllocation" placeholder="Ex.: Dotação, vínculo e fonte orçamentária aplicáveis.">${e(d.budgetAllocation)}</textarea></label>
+  </section>
+  <section class="panel etp-section-panel">
+    ${panelHeader("6 — Estimativa do valor", "Inclua o valor em reais e também por extenso, como aparece no modelo.")}
+    <label class="field stacked"><span>Valor estimado completo *</span><textarea maxlength="1000" data-bind="etp.estimatedValue" placeholder="Ex.: R$ 1.519.397,35 (Um milhão...)">${e(d.estimatedValue)}</textarea></label>
+  </section>
+  <section class="panel etp-section-panel">
+    ${panelHeader("9 — Referências do equipamento", "Os dois campos substituem somente o nome destacado em vermelho nos textos fixos.")}
+    <label class="field stacked"><span>Nome na apreciação social *</span><input type="text" maxlength="300" data-bind="etp.socialObject" value="${e(d.socialObject)}" placeholder="Ex.: Centro de Gerenciamento de Resíduos" /></label>
+    <label class="field stacked"><span>Nome na qualificação operacional *</span><input type="text" maxlength="300" data-bind="etp.operationalObject" value="${e(d.operationalObject)}" placeholder="Ex.: Centro de Gerenciamento de Resíduos" /></label>
+  </section>`;
+}
+
+function renderEtpCgbrReview() {
+  const d = state.etp;
+  return `${pageHeading("Etapa 4", "Revise os campos variáveis", "Confira os dez trechos antes de gerar o Word oficial.")}
+  <div class="summary-grid">
+    ${summaryCard("Documento", "ETP", d.processNumber)}
+    ${summaryCard("Modelo", "CGBR", d.introObject)}
+    ${summaryCard("Campos dinâmicos", "10", `${d.city}, ${formatDateLong(d.date)}`)}
+  </div>
+  <section class="panel">
+    <div class="review-block"><h3>Objeto na introdução</h3><p>${e(d.introObject)}</p></div>
+    <div class="review-block"><h3>Descrição da necessidade</h3><p>${e(d.needObject)}</p><p>${e(d.needJustification)}</p><p>${e(d.needPlan)}</p></div>
+    <div class="review-block"><h3>Dotação orçamentária</h3><p>${e(d.budgetAllocation)}</p></div>
+    <div class="review-block"><h3>Valor estimado</h3><p>${e(d.estimatedValue)}</p></div>
+    <div class="review-block"><h3>Referências do equipamento</h3><p>${e(d.socialObject)} • ${e(d.operationalObject)}</p></div>
+  </section>
+  <div class="notice"><span aria-hidden="true">✓</span><span><strong>Conteúdo fixo protegido.</strong> Títulos, seções, requisitos, riscos, assinatura, cabeçalho, rodapé e paginação virão diretamente do modelo CGBR.</span></div>`;
 }
 
 function etpRequirements() {
@@ -5141,6 +5190,38 @@ function applyValidationHighlights() {
   });
 }
 
+function validateEtpCgbrStep() {
+  const d = state.etp;
+  const showMissing = (title, text, fields) => {
+    showFieldValidationMessage({ title, text, fields: fields.filter(Boolean) });
+    return false;
+  };
+  if (state.step === 0 && (!d.processNumber.trim() || !d.introObject.trim() || !d.city.trim() || !d.date)) {
+    return showMissing("Complete a identificação", "Informe o processo, o objeto da introdução, a cidade e a data.", [
+      !d.processNumber.trim() && '[data-bind="etp.processNumber"]',
+      !d.introObject.trim() && '[data-bind="etp.introObject"]',
+      !d.city.trim() && '[data-bind="etp.city"]',
+      !d.date && '[data-bind="etp.date"]',
+    ]);
+  }
+  if (state.step === 1 && (!d.needObject.trim() || !d.needJustification.trim() || !d.needPlan.trim())) {
+    return showMissing("Complete a descrição da necessidade", "Preencha os três parágrafos variáveis da seção 1.", [
+      !d.needObject.trim() && '[data-bind="etp.needObject"]',
+      !d.needJustification.trim() && '[data-bind="etp.needJustification"]',
+      !d.needPlan.trim() && '[data-bind="etp.needPlan"]',
+    ]);
+  }
+  if (state.step === 2 && (!d.budgetAllocation.trim() || !d.estimatedValue.trim() || !d.socialObject.trim() || !d.operationalObject.trim())) {
+    return showMissing("Complete orçamento e resultados", "Informe a dotação, o valor estimado e as duas referências do equipamento.", [
+      !d.budgetAllocation.trim() && '[data-bind="etp.budgetAllocation"]',
+      !d.estimatedValue.trim() && '[data-bind="etp.estimatedValue"]',
+      !d.socialObject.trim() && '[data-bind="etp.socialObject"]',
+      !d.operationalObject.trim() && '[data-bind="etp.operationalObject"]',
+    ]);
+  }
+  return true;
+}
+
 function validateEtpStep() {
   const d = state.etp;
   const showMissing = (title, text, fields) => {
@@ -5260,7 +5341,7 @@ function validateTrStep() {
 function validateCurrentStep() {
   clearValidationHighlights();
   if (state.flow === "drainage") return validateDrainageStep();
-  if (state.flow === "etp") return validateEtpStep();
+  if (state.flow === "etp") return validateEtpCgbrStep();
   if (state.flow === "tr") return validateTrStep();
   if (state.flow === "report") {
     const r = state.report;
@@ -6206,15 +6287,15 @@ async function generateReport() {
 
 async function generateEtp() {
   if (!validateCurrentStep()) return;
-  if (!window.docx) {
+  if (!window.JSZip) {
     showMessage({ title: "Gerador indisponível", text: "O componente de criação do Word não foi carregado. Atualize a página e tente novamente.", kind: "error" });
     return;
   }
-  state.generation = { running: true, progress: 8, message: "Organizando as seções do ETP…" };
+  state.generation = { running: true, progress: 8, message: "Aplicando os campos ao modelo CGBR…" };
   render();
   try {
-    const blob = await buildEtpDocument((progress, message) => setGenerationProgress(progress, message));
-    const suffix = state.etp.processNumber || state.etp.object;
+    const blob = await buildEtpCgbrDocument((progress, message) => setGenerationProgress(progress, message));
+    const suffix = state.etp.processNumber || state.etp.introObject;
     const filename = `etp-${slugify(suffix, "estudo-tecnico-preliminar")}.docx`;
     await finishDownload(blob, filename, "Estudo Técnico Preliminar");
     state.etp.complete = true;
@@ -7275,6 +7356,59 @@ async function loadEtpTemplate() {
   }
   const data = await etpTemplatePromise;
   return data.slice(0);
+}
+
+function replaceEtpPlaceholder(xml, key, value) {
+  const token = `{{${key}}}`;
+  const pattern = new RegExp(`(<w:t\\b)([^>]*>)${trRegexEscape(token)}(<\\/w:t>)`, "g");
+  let count = 0;
+  const replacement = trFieldText(value);
+  const output = xml.replace(pattern, (_match, start, attributes, end) => {
+    count += 1;
+    const opening = /xml:space=/.test(attributes)
+      ? `${start}${attributes}`
+      : `${start}${attributes.slice(0, -1)} xml:space="preserve">`;
+    return `${opening}${trXmlEscape(replacement)}${end}`;
+  });
+  if (count !== 1) throw new Error(`O campo ${key} não foi encontrado uma única vez no modelo do ETP.`);
+  return output;
+}
+
+async function buildEtpCgbrDocument(onProgress) {
+  const d = state.etp;
+  if (!window.JSZip) throw new Error("O componente de preenchimento do modelo Word não está disponível.");
+
+  onProgress(20, "Carregando o modelo oficial do ETP CGBR…");
+  const template = await loadEtpTemplate();
+  const zip = await window.JSZip.loadAsync(template);
+  let documentXml = await zip.file("word/document.xml").async("string");
+  const replacements = {
+    etp_process_number: d.processNumber,
+    etp_intro_object: d.introObject,
+    etp_need_object: d.needObject,
+    etp_need_justification: d.needJustification,
+    etp_need_plan: d.needPlan,
+    etp_budget_allocation: d.budgetAllocation,
+    etp_estimated_value: d.estimatedValue,
+    etp_social_object: d.socialObject,
+    etp_operational_object: d.operationalObject,
+    etp_date: `${d.city.trim()}, ${formatDateLong(d.date)}`,
+  };
+
+  onProgress(52, "Preenchendo somente os trechos vermelhos…");
+  Object.entries(replacements).forEach(([key, value]) => {
+    documentXml = replaceEtpPlaceholder(documentXml, key, value);
+  });
+  zip.file("word/document.xml", documentXml);
+
+  onProgress(82, "Mantendo todo o conteúdo fixo e a formatação original…");
+  const blob = await zip.generateAsync({
+    type: "blob",
+    mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    compression: "DEFLATE",
+  });
+  onProgress(100, "ETP concluído.");
+  return blob;
 }
 
 async function buildEtpDocument(onProgress) {
