@@ -367,16 +367,17 @@ test("keeps new registrations pending and limits user approval to the configured
 });
 
 
-test("labels every available document, including the technical opinion and ETP, as ready", async () => {
+test("labels every available document, including the technical opinion, ETP and TR, as ready", async () => {
   const [app, styles] = await Promise.all([
     readFile(new URL("public/docflow/app.js", siteRoot), "utf8"),
     readFile(new URL("public/docflow/styles.css", siteRoot), "utf8"),
   ]);
 
-  assert.equal((app.match(/card-status is-ready/g) || []).length, 7);
+  assert.equal((app.match(/card-status is-ready/g) || []).length, 8);
   assert.equal((app.match(/card-status is-development/g) || []).length, 0);
   assert.match(app, /data-action="start-report">[\s\S]*?card-status is-ready">Pronto<\/span>[\s\S]*?<h3>Parecer técnico<\/h3>/);
   assert.match(app, /data-action="start-etp">[\s\S]*?card-status is-ready">Pronto<\/span>[\s\S]*?<h3>Estudo Técnico Preliminar<\/h3>/);
+  assert.match(app, /data-action="start-tr">[\s\S]*?card-status is-ready">Pronto<\/span>[\s\S]*?<h3>Termo de Referência<\/h3>/);
   assert.match(app, /card-status is-ready">Pronto<\/span>[\s\S]*?<h3>Folha de cota<\/h3>/);
   assert.match(app, /data-kind="memorando">[\s\S]*?card-status is-ready">Pronto<\/span>[\s\S]*?<h3>Memorando<\/h3>/);
   assert.match(app, /data-kind="oficio">[\s\S]*?card-status is-ready">Pronto<\/span>[\s\S]*?<h3>Ofício<\/h3>/);
@@ -479,6 +480,39 @@ test("builds an ETP from the supplied municipal model with all fourteen sections
   assert.match(cardAccess, /"etp"/);
   assert.match(schema, /"etp"/);
   assert.match(styles, /\.etp-risk-card/);
+});
+
+
+test("builds a Termo de Referência from the supplied model and exposes every red section as user input", async () => {
+  const [app, template, documentWorker, cardAccess, schema, styles] = await Promise.all([
+    readFile(new URL("public/docflow/app.js", siteRoot), "utf8"),
+    readFile(new URL("public/docflow/templates/MODELO_TR.docx", siteRoot)),
+    readFile(new URL("worker/documents.ts", siteRoot), "utf8"),
+    readFile(new URL("db/card-access.ts", siteRoot), "utf8"),
+    readFile(new URL("db/schema.ts", siteRoot), "utf8"),
+    readFile(new URL("public/docflow/styles.css", siteRoot), "utf8"),
+  ]);
+
+  assert.ok(template.byteLength > 180_000 && template.byteLength < 230_000);
+  assert.match(app, /TR_TEMPLATE_URL\s*=\s*"templates\/MODELO_TR\.docx"/);
+  assert.match(app, /TR_STEPS\s*=\s*\["Identificação", "Condições gerais", "Qualificação técnica", "Gestão e assinatura", "Revisão"\]/);
+  assert.match(app, /function createTrState/);
+  assert.match(app, /data-bind="tr\.object"/);
+  assert.match(app, /renderSingleImageUpload\("tr-image"/);
+  assert.match(app, /data-bind="tr\.priceReference"/);
+  assert.match(app, /data-bind="tr\.operationalQualification"/);
+  assert.match(app, /data-bind="tr\.management"/);
+  assert.match(app, /data-signature-target="tr"/);
+  assert.match(app, /window\.JSZip\.loadAsync\(template\)/);
+  assert.match(app, /replaceTrPlaceholder\(documentXml, key, value/);
+  assert.match(app, /word\/media\/tr-intervention\.jpg/);
+  assert.match(app, /trImageDrawingXml\(imageRelationshipId, image\.width, image\.height\)/);
+  assert.match(app, /rIdTrInterventionImage/);
+  assert.match(app, /await finishDownload\(blob, filename, "Termo de Referência"\)/);
+  assert.match(documentWorker, /"Termo de Referência"/);
+  assert.match(cardAccess, /"tr"/);
+  assert.match(schema, /"tr"/);
+  assert.match(styles, /\.document-card\.is-tr/);
 });
 
 
@@ -698,7 +732,7 @@ test("keeps a private account history for every generated document", async () =>
   assert.match(app, /Histórico de documentos/);
   assert.match(app, /apiRequest\("\/api\/documents"/);
   assert.match(app, /requestOptions\.body instanceof FormData/);
-  assert.equal((app.match(/await finishDownload\(/g) || []).length, 5);
+  assert.equal((app.match(/await finishDownload\(/g) || []).length, 6);
   assert.match(app, /data-action="download-history"/);
   assert.match(app, /\/api\/documents\/\$\{encodeURIComponent\(documentId\)\}\/download/);
   assert.match(worker, /url\.pathname === "\/api\/documents"/);

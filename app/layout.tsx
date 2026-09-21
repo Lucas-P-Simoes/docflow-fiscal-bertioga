@@ -4,7 +4,7 @@ import "./globals.css";
 export const metadata: Metadata = {
   title: "Fiscal Bertioga",
   description:
-    "Crie pareceres técnicos, Estudos Técnicos Preliminares e documentos oficiais em Word direto do navegador.",
+    "Crie pareceres técnicos, Estudos Técnicos Preliminares, Termos de Referência e documentos oficiais em Word direto do navegador.",
   icons: {
     icon: "/favicon.svg",
   },

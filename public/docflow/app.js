@@ -2,7 +2,7 @@
 
 const LEGACY_DOCFLOW_PATHS = new Set(["/docflow/", "/docflow/index.html"]);
 const APP_HISTORY_KEY = "__fiscalBertiogaNavigation";
-const NAVIGABLE_FLOWS = new Set(["drainage", "report", "etp", "cota", "correspondence", "notification", "warning"]);
+const NAVIGABLE_FLOWS = new Set(["drainage", "report", "etp", "tr", "cota", "correspondence", "notification", "warning"]);
 if (LEGACY_DOCFLOW_PATHS.has(window.location.pathname)) {
   window.history.replaceState(
     null,
@@ -13,6 +13,7 @@ if (LEGACY_DOCFLOW_PATHS.has(window.location.pathname)) {
 
 const REPORT_STEPS = ["Identificação", "Mapa e vias", "Fotografias", "Parecer e assinaturas", "Revisão"];
 const ETP_STEPS = ["Identificação", "Necessidade e planejamento", "Mercado e solução", "Resultados e impactos", "Riscos e assinaturas", "Revisão"];
+const TR_STEPS = ["Identificação", "Condições gerais", "Qualificação técnica", "Gestão e assinatura", "Revisão"];
 const COTA_STEPS = ["Conteúdo", "Revisão", "Assinatura e download"];
 const OFFICIAL_CORRESPONDENCE_STEPS = ["Dados do documento", "Conteúdo", "Revisão e download"];
 const CORRESPONDENCE_STEPS = ["Dados do documento", "Conteúdo", "Revisão e download"];
@@ -44,6 +45,7 @@ const DRAINAGE_COMPOSITIONS = {
 const HOME_CARD_OPTIONS = [
   { key: "report", label: "Parecer técnico", mark: "PT" },
   { key: "etp", label: "Estudo Técnico Preliminar", mark: "ETP" },
+  { key: "tr", label: "Termo de Referência", mark: "TR" },
   { key: "cota", label: "Folha de cota", mark: "FC" },
   { key: "memorando", label: "Memorando", mark: "M" },
   { key: "oficio", label: "Ofício", mark: "O" },
@@ -148,6 +150,7 @@ const OFFICIAL_CORRESPONDENCE_TEMPLATE_URL = "templates/MODELO_MEMORANDO.docx";
 const NOTIFICATION_TEMPLATE_URL = "templates/MODELO_NOTIFICACAO.docx";
 const TECHNICAL_OPINION_TEMPLATE_URL = "templates/MODELO_PARECER_TECNICO.docx";
 const ETP_TEMPLATE_URL = "templates/MODELO_ETP.docx";
+const TR_TEMPLATE_URL = "templates/MODELO_TR.docx";
 const COTA_TEXT_STYLE = { font: "Arial", size: 24, language: { value: "pt-BR" } };
 const COTA_HEADER_FIELD_STYLE = { ...COTA_TEXT_STYLE, bold: true, italics: false };
 const MAX_CORRESPONDENCE_TEXT = 7000;
@@ -381,6 +384,7 @@ const state = {
   signatures: createSignatureConfigurationState(),
   report: createReportState(persisted),
   etp: createEtpState(persisted),
+  tr: createTrState(persisted),
   cota: createCotaState(persisted),
   correspondence: createCorrespondenceState(persisted),
   notification: createNotificationState(persisted, "notification"),
@@ -405,6 +409,7 @@ let officialCorrespondenceTemplatePromise = null;
 let notificationTemplatePromise = null;
 let technicalOpinionTemplatePromise = null;
 let etpTemplatePromise = null;
+let trTemplatePromise = null;
 let pendingSignatureTarget = null;
 let notificationPollTimer = null;
 let draggedKanbanCardId = "";
@@ -547,6 +552,38 @@ function createEtpState(saved = {}) {
     licenses: "",
     risks: [createEtpRisk()],
     responsibles: [],
+    complete: false,
+  };
+}
+
+function createTrState(saved = {}) {
+  return {
+    object: "",
+    interventionImage: null,
+    location: "",
+    durationNumber: "",
+    durationWords: "",
+    estimatedCost: "",
+    estimatedCostWords: "",
+    priceReference: "",
+    bidMode: "Concorrência",
+    relevanceCriteria: "Para definição das parcelas de maior relevância técnica foram considerados critérios de representatividade financeira, complexidade executiva, impacto na funcionalidade e desempenho do objeto.",
+    accessoryService: "Embora o serviço de fechamento provisório por tapume apresente representatividade financeira na planilha orçamentária, trata-se de atividade acessória e preparatória, não demandando expertise técnica específica capaz de comprometer a adequada execução do objeto.",
+    relevantServices: "Foram consideradas parcelas de maior relevância os serviços de pintura em estrutura metálica com preparo de superfície e aplicação de fundo antioxidante, bem como a instalação de sistema de iluminação LED em fachada, por envolverem técnicas executivas específicas e interferirem diretamente na durabilidade, desempenho e resultado final da intervenção.",
+    operationalQualification: "5.1.\tQualificação Técnico-Operacional - Registro ou inscrição da empresa na entidade profissional competente, em plena validade, junto ao Conselho de Arquitetura e Urbanismo – CAU e ao Conselho Federal de Engenharia e Agronomia – CONFEA/Conselho Regional de Engenharia e Agronomia – CREA, conforme a área de atuação e atribuições profissionais pertinentes ao objeto da contratação. Comprovação de aptidão para execução de serviço similar ou do item pertinente, por meio da apresentação de certidões ou atestados emitidos por pessoas jurídicas de direito público ou privado e devidamente registrado na entidade competente. As comprovações de capacidade técnica devem ser apresentadas em nome da licitante e referente aos seguintes serviços:",
+    relevantService1: "Pintura em estrutura metálica com preparo de superfície no mínimo 253,87 m².",
+    relevantService2: "Instalação de sistema de iluminação FITA LED EXTERNA no mínimo 99,20 m.",
+    professionalQualification: "5.2.\tQualificação Técnico-Profissional - Apresentação do(s) profissional(is) devidamente registrado(s) no conselho profissional competente (CAU ou CREA, conforme suas atribuições legais), detentor(es) de atestado de responsabilidade técnica por serviço com características semelhantes ao objeto licitado.",
+    eligibleProfessionals: "5.3\tPara fins de cumprimento das atribuições e responsabilidades do objeto, serão admitidos profissionais com habilitação em Engenharia ou Arquitetura, observadas as respectivas resoluções de cada Conselho Profissional.",
+    certificateAggregation: "5.4\tSerá admitida, para fins de comprovação do quantitativo mínimo exigido, a apresentação e o somatório de diferentes atestados, inclusive executados de forma concomitante, desde que compatíveis com o objeto licitado e observadas as atribuições legais do profissional responsável.",
+    councilCompatibility: "5.5\tA comprovação da capacidade técnico-profissional e técnico-operacional deverá respeitar as atribuições profissionais estabelecidas pela legislação vigente, sendo vedada a exigência de registro em conselho diverso daquele legalmente competente para o exercício da atividade.",
+    professionalBond: "5.6\tO profissional detentor do Acervo Técnico deverá possuir seu vínculo com a licitante na data da apresentação dos documentos de habilitação e proposta, nos termos da Súmula nº 25 do Tribunal de Contas do Estado de São Paulo (TCE-SP).",
+    management: "",
+    city: saved.technicalOpinionCity || "Bertioga",
+    date: todayInputValue(),
+    signerProfileId: "",
+    signerName: "",
+    signerRole: "",
     complete: false,
   };
 }
@@ -999,6 +1036,10 @@ function applySignatureProfile(target, profile) {
     state.cota.signerProfileId = profile.id;
     state.cota.signer = profile.name;
     state.cota.signerRole = profile.role;
+  } else if (target.type === "tr") {
+    state.tr.signerProfileId = profile.id;
+    state.tr.signerName = profile.name;
+    state.tr.signerRole = profile.role;
   } else if (target.type === "correspondence") {
     if (state.correspondence.signatories.some((item) => item.profileId === profile.id)) {
       showToast("Essa assinatura já foi adicionada ao documento.");
@@ -1025,6 +1066,10 @@ function updateSignatureReferences(profile) {
   if (state.cota.signerProfileId === profile.id) {
     state.cota.signer = profile.name;
     state.cota.signerRole = profile.role;
+  }
+  if (state.tr.signerProfileId === profile.id) {
+    state.tr.signerName = profile.name;
+    state.tr.signerRole = profile.role;
   }
   state.correspondence.signatories = state.correspondence.signatories.map((item) =>
     item.profileId === profile.id ? { profileId: profile.id, name: profile.name, role: profile.role } : item,
@@ -1113,6 +1158,7 @@ async function deleteSignatureProfile(profile, targetAfterDelete = null) {
       item.profileId === profile.id ? { ...item, profileId: "" } : item,
     );
     if (state.cota.signerProfileId === profile.id) state.cota.signerProfileId = "";
+    if (state.tr.signerProfileId === profile.id) state.tr.signerProfileId = "";
     state.correspondence.signatories = state.correspondence.signatories.map((item) =>
       item.profileId === profile.id ? { ...item, profileId: "" } : item,
     );
@@ -1139,11 +1185,14 @@ function handleSignatureSelection(select) {
     ? { type: "report" }
     : select.dataset.signatureTarget === "cota"
       ? { type: "cota" }
+    : select.dataset.signatureTarget === "tr"
+      ? { type: "tr" }
     : select.dataset.signatureTarget === "correspondence"
       ? { type: "correspondence" }
       : { type: "notice", signatoryId: select.dataset.id };
   if (select.value === OTHER_SIGNATURE_VALUE) {
     if (target.type === "cota") select.value = state.cota.signerProfileId;
+    else if (target.type === "tr") select.value = state.tr.signerProfileId;
     else if (target.type === "correspondence") select.value = "";
     else if (target.type === "notice") {
       select.value = noticeState().signatories.find((item) => item.id === target.signatoryId)?.profileId || "";
@@ -1495,6 +1544,8 @@ function render() {
         ? renderReport()
       : state.flow === "etp"
         ? renderEtp()
+      : state.flow === "tr"
+        ? renderTr()
       : state.flow === "cota"
         ? renderCota()
         : isNoticeFlow()
@@ -1511,6 +1562,7 @@ function currentData() {
   if (state.flow === "drainage") return state.drainage;
   if (state.flow === "report") return state.report;
   if (state.flow === "etp") return state.etp;
+  if (state.flow === "tr") return state.tr;
   if (state.flow === "cota") return state.cota;
   if (isNoticeFlow()) return noticeState();
   return state.correspondence;
@@ -1520,6 +1572,7 @@ function currentSteps() {
   if (state.flow === "drainage") return DRAINAGE_STEPS;
   if (state.flow === "report") return REPORT_STEPS;
   if (state.flow === "etp") return ETP_STEPS;
+  if (state.flow === "tr") return TR_STEPS;
   if (state.flow === "cota") return COTA_STEPS;
   if (state.flow === "notification") return NOTIFICATION_STEPS;
   if (state.flow === "warning") return WARNING_STEPS;
@@ -1540,6 +1593,10 @@ function renderSidebar() {
     elements.flowEyebrow.textContent = "Estudo Técnico Preliminar";
     elements.flowTitle.textContent = "Estruture o ETP";
     elements.flowDescription.textContent = "Preencha as 14 seções e gere o Word no modelo oficial.";
+  } else if (state.flow === "tr") {
+    elements.flowEyebrow.textContent = "Termo de Referência";
+    elements.flowTitle.textContent = "Prepare o TR";
+    elements.flowDescription.textContent = "Atualize somente os trechos variáveis do modelo oficial.";
   } else if (state.flow === "cota") {
     elements.flowEyebrow.textContent = "Folha de cota";
     elements.flowTitle.textContent = "Prepare o despacho";
@@ -1680,37 +1737,44 @@ function renderHome() {
         <p>Preencha as 14 seções e gere o ETP timbrado.</p>
         <span class="card-link">Criar ETP <span aria-hidden="true">→</span></span>
       </article>
+      <article class="document-card is-tr" tabindex="0" role="button" ${homeCardVisibilityAttribute("tr")} data-card-key="tr" data-action="start-tr">
+        <span class="card-status is-ready">Pronto</span>
+        <span class="card-number" aria-hidden="true">03</span><span class="card-icon" aria-hidden="true">${lucideIcon("file-text")}</span>
+        <h3>Termo de Referência</h3>
+        <p>Atualize os trechos variáveis e gere o TR no modelo oficial.</p>
+        <span class="card-link">Criar TR <span aria-hidden="true">→</span></span>
+      </article>
       <article class="document-card is-cota" tabindex="0" role="button" ${homeCardVisibilityAttribute("cota")} data-card-key="cota" data-action="start-cota">
         <span class="card-status is-ready">Pronto</span>
-        <span class="card-number" aria-hidden="true">03</span><span class="card-icon" aria-hidden="true">${lucideIcon("notebook-pen")}</span>
+        <span class="card-number" aria-hidden="true">04</span><span class="card-icon" aria-hidden="true">${lucideIcon("notebook-pen")}</span>
         <h3>Folha de cota</h3>
         <p>Converta anotações em folha pautada.</p>
         <span class="card-link">Preparar folha <span aria-hidden="true">→</span></span>
       </article>
       <article class="document-card is-admin" tabindex="0" role="button" ${homeCardVisibilityAttribute("memorando")} data-card-key="memorando" data-action="start-correspondence" data-kind="memorando">
         <span class="card-status is-ready">Pronto</span>
-        <span class="card-number" aria-hidden="true">04</span><span class="card-icon" aria-hidden="true">${lucideIcon("file-text")}</span>
+        <span class="card-number" aria-hidden="true">05</span><span class="card-icon" aria-hidden="true">${lucideIcon("file-text")}</span>
         <h3>Memorando</h3>
         <p>Gere memorandos no padrão oficial.</p>
         <span class="card-link">Criar memorando <span aria-hidden="true">→</span></span>
       </article>
       <article class="document-card is-admin" tabindex="0" role="button" ${homeCardVisibilityAttribute("oficio")} data-card-key="oficio" data-action="start-correspondence" data-kind="oficio">
         <span class="card-status is-ready">Pronto</span>
-        <span class="card-number" aria-hidden="true">05</span><span class="card-icon" aria-hidden="true">${lucideIcon("send")}</span>
+        <span class="card-number" aria-hidden="true">06</span><span class="card-icon" aria-hidden="true">${lucideIcon("send")}</span>
         <h3>Ofício</h3>
         <p>Crie ofícios no modelo da Prefeitura.</p>
         <span class="card-link">Criar ofício <span aria-hidden="true">→</span></span>
       </article>
       <article class="document-card is-alert" tabindex="0" role="button" ${homeCardVisibilityAttribute("notification")} data-card-key="notification" data-action="start-notification">
         <span class="card-status is-ready">Pronto</span>
-        <span class="card-number" aria-hidden="true">06</span><span class="card-icon" aria-hidden="true">${lucideIcon("bell-ring")}</span>
+        <span class="card-number" aria-hidden="true">07</span><span class="card-icon" aria-hidden="true">${lucideIcon("bell-ring")}</span>
         <h3>Notificação</h3>
         <p>Emita notificações com texto e anexos.</p>
         <span class="card-link">Criar notificação <span aria-hidden="true">→</span></span>
       </article>
       <article class="document-card is-alert" tabindex="0" role="button" ${homeCardVisibilityAttribute("warning")} data-card-key="warning" data-action="start-warning">
         <span class="card-status is-ready">Pronto</span>
-        <span class="card-number" aria-hidden="true">07</span><span class="card-icon" aria-hidden="true">${lucideIcon("triangle-alert")}</span>
+        <span class="card-number" aria-hidden="true">08</span><span class="card-icon" aria-hidden="true">${lucideIcon("triangle-alert")}</span>
         <h3>Advertência</h3>
         <p>Gere advertências padronizadas.</p>
         <span class="card-link">Criar advertência <span aria-hidden="true">→</span></span>
@@ -4213,6 +4277,108 @@ function renderEtpReview() {
   <div class="notice"><span aria-hidden="true">✓</span><span><strong>Formatação oficial preservada.</strong> O Word será criado a partir do ETP anexado, com o mesmo timbre, rodapé, margens, paginação, tabelas e assinatura.</span></div>`;
 }
 
+function renderTr() {
+  return [renderTrIdentification, renderTrConditions, renderTrQualification, renderTrManagement, renderTrReview][state.step]();
+}
+
+function renderTrIdentification() {
+  const d = state.tr;
+  return `${pageHeading("Etapa 1", "Identifique o Termo de Referência", "Os campos abaixo correspondem aos primeiros trechos em vermelho do modelo anexado.")}
+  <section class="panel">
+    ${panelHeader("Objeto e local", "O texto preto, os títulos e a numeração permanecerão exatamente como estão no documento-base.")}
+    <label class="field stacked"><span>Objeto da contratação *</span><input type="text" maxlength="300" data-bind="tr.object" value="${e(d.object)}" placeholder="Ex.: REFORMA DO PORTAL DEZENOVE DE MAIO" /></label>
+    <label class="field stacked"><span>Localidade *</span><input type="text" maxlength="300" data-bind="tr.location" value="${e(d.location)}" placeholder="Ex.: Avenida Dezenove de Maio – Centro – Bertioga / SP" /></label>
+  </section>
+  <section class="panel">
+    ${panelHeader("Área de intervenção", "A imagem ocupará o lugar indicado em vermelho como ANEXAR IMAGEM.")}
+    <div class="field stacked"><span class="field-label">Imagem da área de intervenção *</span>${renderSingleImageUpload("tr-image", d.interventionImage, "Adicionar imagem", "JPEG, PNG, BMP, GIF ou WebP • até 20 MB")}</div>
+  </section>
+  <div class="notice"><span aria-hidden="true">✓</span><span><strong>Modelo oficial preservado.</strong> O brasão, o cabeçalho, as margens, os tópicos, o texto normativo e a paginação virão do TR anexado.</span></div>`;
+}
+
+function renderTrConditions() {
+  const d = state.tr;
+  return `${pageHeading("Etapa 2", "Preencha as condições gerais", "Informe somente os valores que aparecem em vermelho no modelo.")}
+  <section class="panel">
+    ${panelHeader("Prazos da contratação", "O mesmo prazo será aplicado à vigência e à execução, mantendo as frases originais.")}
+    <div class="field-grid">
+      <label class="field"><span>Prazo em número *</span><input type="text" maxlength="20" data-bind="tr.durationNumber" value="${e(d.durationNumber)}" placeholder="Ex.: 6" /></label>
+      <label class="field"><span>Prazo por extenso *</span><input type="text" maxlength="80" data-bind="tr.durationWords" value="${e(d.durationWords)}" placeholder="Ex.: seis" /></label>
+    </div>
+  </section>
+  <section class="panel">
+    ${panelHeader("Valor e licitação", "Escreva o valor por extenso sem parênteses; o documento os acrescentará automaticamente.")}
+    <div class="field-grid">
+      <label class="field"><span>Valor estimado *</span><input type="text" maxlength="60" data-bind="tr.estimatedCost" value="${e(d.estimatedCost)}" placeholder="Ex.: 376.238,37" /></label>
+      <label class="field"><span>Modalidade *</span><input type="text" maxlength="120" data-bind="tr.bidMode" value="${e(d.bidMode)}" placeholder="Ex.: Concorrência" /></label>
+    </div>
+    <label class="field stacked"><span>Valor por extenso *</span><textarea maxlength="500" data-bind="tr.estimatedCostWords" placeholder="Ex.: trezentos e setenta e seis mil, duzentos e trinta e oito reais e trinta e sete centavos">${e(d.estimatedCostWords)}</textarea></label>
+    <label class="field stacked"><span>Referência de preços *</span><input type="text" maxlength="400" data-bind="tr.priceReference" value="${e(d.priceReference)}" placeholder="Ex.: CDHU 202 ONERADO e SINAPI 05-2026 – ONERADA." /></label>
+  </section>`;
+}
+
+function renderTrQualification() {
+  const d = state.tr;
+  return `${pageHeading("Etapa 3", "Revise a qualificação técnica", "Cada campo corresponde a um parágrafo vermelho das páginas 5 e 6 do modelo.")}
+  <section class="panel tr-section-panel">
+    ${panelHeader("Definição das parcelas relevantes", "Adapte os critérios e serviços à contratação atual.")}
+    <label class="field stacked"><span>Critérios de relevância *</span><textarea maxlength="5000" data-bind="tr.relevanceCriteria">${e(d.relevanceCriteria)}</textarea></label>
+    <label class="field stacked"><span>Serviço acessório não selecionado *</span><textarea maxlength="5000" data-bind="tr.accessoryService">${e(d.accessoryService)}</textarea></label>
+    <label class="field stacked"><span>Serviços de maior relevância *</span><textarea maxlength="5000" data-bind="tr.relevantServices">${e(d.relevantServices)}</textarea></label>
+  </section>
+  <section class="panel tr-section-panel">
+    ${panelHeader("Qualificação técnico-operacional", "Mantenha a numeração interna no próprio texto quando ela for necessária.")}
+    <label class="field stacked"><span>Exigência técnico-operacional *</span><textarea maxlength="7000" data-bind="tr.operationalQualification">${e(d.operationalQualification)}</textarea></label>
+    <div class="field-grid">
+      <label class="field stacked"><span>Serviço relevante 1 *</span><textarea maxlength="1500" data-bind="tr.relevantService1">${e(d.relevantService1)}</textarea></label>
+      <label class="field stacked"><span>Serviço relevante 2 *</span><textarea maxlength="1500" data-bind="tr.relevantService2">${e(d.relevantService2)}</textarea></label>
+    </div>
+  </section>
+  <section class="panel tr-section-panel">
+    ${panelHeader("Qualificação técnico-profissional", "Todos estes textos continuarão nos mesmos tópicos e com a mesma formatação do TR.")}
+    <label class="field stacked"><span>Qualificação profissional *</span><textarea maxlength="5000" data-bind="tr.professionalQualification">${e(d.professionalQualification)}</textarea></label>
+    <label class="field stacked"><span>Profissionais habilitados *</span><textarea maxlength="4000" data-bind="tr.eligibleProfessionals">${e(d.eligibleProfessionals)}</textarea></label>
+    <label class="field stacked"><span>Somatório de atestados *</span><textarea maxlength="4000" data-bind="tr.certificateAggregation">${e(d.certificateAggregation)}</textarea></label>
+    <label class="field stacked"><span>Compatibilidade dos conselhos *</span><textarea maxlength="4000" data-bind="tr.councilCompatibility">${e(d.councilCompatibility)}</textarea></label>
+    <label class="field stacked"><span>Vínculo do detentor do acervo *</span><textarea maxlength="4000" data-bind="tr.professionalBond">${e(d.professionalBond)}</textarea></label>
+  </section>`;
+}
+
+function renderTrManagement() {
+  const d = state.tr;
+  return `${pageHeading("Etapa 4", "Informe gestão e assinatura", "Complete os últimos trechos em vermelho do documento.")}
+  <section class="panel">
+    ${panelHeader("Gestor e fiscais", "O texto será inserido depois das palavras “pelo gestor”, exatamente no item 8.5.")}
+    <label class="field stacked"><span>Identificação do gestor e dos fiscais *</span><textarea maxlength="2500" data-bind="tr.management" placeholder="Ex.: Nome – cargo – reg. 0000 e pelo fiscal Eng. Nome – reg. 0000 da Secretaria…">${e(d.management)}</textarea></label>
+  </section>
+  <section class="panel">
+    ${panelHeader("Emissão e assinatura", "Escolha uma assinatura já cadastrada; nome e cargo ocuparão os dois últimos campos vermelhos.", `<button class="button button-secondary" type="button" data-action="open-signatures">Configurar assinaturas</button>`)}
+    <div class="field-grid">
+      <label class="field"><span>Cidade *</span><input type="text" maxlength="100" data-bind="tr.city" value="${e(d.city)}" /></label>
+      <label class="field"><span>Data *</span><input type="date" data-bind="tr.date" value="${e(d.date)}" /></label>
+    </div>
+    <label class="field signature-select-field"><span>Pessoa que vai assinar *</span><select data-signature-target="tr" ${state.signatures.loading ? "disabled" : ""}>${signatureSelectOptions(d.signerProfileId, "Selecione uma pessoa")}</select></label>
+    ${signaturePreview({ name: d.signerName, role: d.signerRole }, "Nenhuma assinatura selecionada")}
+  </section>`;
+}
+
+function renderTrReview() {
+  const d = state.tr;
+  return `${pageHeading("Etapa 5", "Revise o Termo de Referência", "Confira os dados variáveis antes de gerar o Word.")}
+  <div class="summary-grid">
+    ${summaryCard("Documento", "Termo de Referência", d.object)}
+    ${summaryCard("Vigência e execução", `${d.durationNumber} (${d.durationWords}) meses`, d.bidMode)}
+    ${summaryCard("Valor estimado", `R$ ${d.estimatedCost}`, d.priceReference)}
+  </div>
+  <section class="panel review-panel">
+    <div class="review-block"><h3>Localidade</h3><p>${e(d.location)}</p></div>
+    <div class="review-block"><h3>Imagem da área</h3><p>${e(d.interventionImage?.file?.name || "Nenhuma imagem anexada")}</p></div>
+    <div class="review-block"><h3>Gestor e fiscais</h3><p>${e(d.management)}</p></div>
+    <div class="review-block"><h3>Assinatura</h3>${signaturePreview({ name: d.signerName, role: d.signerRole })}</div>
+  </section>
+  <div class="notice"><span aria-hidden="true">✓</span><span><strong>Formatação do anexo preservada.</strong> O arquivo final manterá o mesmo cabeçalho, os tópicos, o texto preto, as cores, as margens e a paginação do modelo de TR.</span></div>`;
+}
+
 function renderCota() {
   return [renderCotaContent, renderCotaReview, renderCotaSignature][state.step]();
 }
@@ -4729,6 +4895,8 @@ function renderSuccess() {
     ? "O parecer técnico"
     : state.flow === "etp"
       ? "O Estudo Técnico Preliminar"
+    : state.flow === "tr"
+      ? "O Termo de Referência"
     : state.flow === "cota"
       ? "A folha de cota"
       : state.flow === "notification"
@@ -4893,6 +5061,7 @@ async function nextStep() {
   if (state.flow === "drainage") generateDrainageSpreadsheet();
   else if (state.flow === "report") generateReport();
   else if (state.flow === "etp") generateEtp();
+  else if (state.flow === "tr") generateTr();
   else if (state.flow === "cota") generateCota();
   else if (isNoticeFlow()) generateNotification();
   else generateCorrespondence();
@@ -5035,10 +5204,64 @@ function validateEtpStep() {
   return true;
 }
 
+function validateTrStep() {
+  const d = state.tr;
+  const showMissing = (title, text, fields) => {
+    showFieldValidationMessage({ title, text, fields: fields.filter(Boolean) });
+    return false;
+  };
+  if (state.step === 0 && (!d.object.trim() || !d.location.trim() || !d.interventionImage)) {
+    return showMissing("Complete a identificação do TR", "Informe o objeto, a localidade e anexe a imagem da área de intervenção.", [
+      !d.object.trim() && '[data-bind="tr.object"]',
+      !d.location.trim() && '[data-bind="tr.location"]',
+      !d.interventionImage && '[data-upload-kind="tr-image"]',
+    ]);
+  }
+  if (state.step === 1 && (!d.durationNumber.trim() || !d.durationWords.trim() || !d.estimatedCost.trim() || !d.estimatedCostWords.trim() || !d.priceReference.trim() || !d.bidMode.trim())) {
+    return showMissing("Complete as condições gerais", "Informe prazo, valor, referência de preços e modalidade da licitação.", [
+      !d.durationNumber.trim() && '[data-bind="tr.durationNumber"]',
+      !d.durationWords.trim() && '[data-bind="tr.durationWords"]',
+      !d.estimatedCost.trim() && '[data-bind="tr.estimatedCost"]',
+      !d.estimatedCostWords.trim() && '[data-bind="tr.estimatedCostWords"]',
+      !d.priceReference.trim() && '[data-bind="tr.priceReference"]',
+      !d.bidMode.trim() && '[data-bind="tr.bidMode"]',
+    ]);
+  }
+  if (state.step === 2) {
+    const qualificationFields = [
+      ["relevanceCriteria", d.relevanceCriteria],
+      ["accessoryService", d.accessoryService],
+      ["relevantServices", d.relevantServices],
+      ["operationalQualification", d.operationalQualification],
+      ["relevantService1", d.relevantService1],
+      ["relevantService2", d.relevantService2],
+      ["professionalQualification", d.professionalQualification],
+      ["eligibleProfessionals", d.eligibleProfessionals],
+      ["certificateAggregation", d.certificateAggregation],
+      ["councilCompatibility", d.councilCompatibility],
+      ["professionalBond", d.professionalBond],
+    ];
+    const missing = qualificationFields.filter(([, value]) => !value.trim());
+    if (missing.length) {
+      return showMissing("Complete a qualificação técnica", "Revise e mantenha conteúdo em todos os parágrafos variáveis das páginas 5 e 6.", missing.map(([key]) => `[data-bind="tr.${key}"]`));
+    }
+  }
+  if (state.step === 3 && (!d.management.trim() || !d.city.trim() || !d.date || !d.signerName.trim() || !d.signerRole.trim())) {
+    return showMissing("Complete gestão e assinatura", "Informe o gestor e os fiscais, a data e a pessoa que assinará o Termo de Referência.", [
+      !d.management.trim() && '[data-bind="tr.management"]',
+      !d.city.trim() && '[data-bind="tr.city"]',
+      !d.date && '[data-bind="tr.date"]',
+      (!d.signerName.trim() || !d.signerRole.trim()) && '[data-signature-target="tr"]',
+    ]);
+  }
+  return true;
+}
+
 function validateCurrentStep() {
   clearValidationHighlights();
   if (state.flow === "drainage") return validateDrainageStep();
   if (state.flow === "etp") return validateEtpStep();
+  if (state.flow === "tr") return validateTrStep();
   if (state.flow === "report") {
     const r = state.report;
     if (state.step === 0) {
@@ -5509,6 +5732,7 @@ async function handleFiles(kind, files) {
   const record = { file, url: URL.createObjectURL(file) };
   if (kind === "report-map") replaceImageRecord(state.report, "map", record);
   if (kind === "cota-context") replaceImageRecord(state.cota, "contextImage", record);
+  if (kind === "tr-image") replaceImageRecord(state.tr, "interventionImage", record);
   render();
 }
 
@@ -5520,6 +5744,7 @@ function replaceImageRecord(owner, key, record) {
 function removeFile(kind) {
   if (kind === "report-map") replaceImageRecord(state.report, "map", null);
   if (kind === "cota-context") replaceImageRecord(state.cota, "contextImage", null);
+  if (kind === "tr-image") replaceImageRecord(state.tr, "interventionImage", null);
   render();
 }
 
@@ -6000,6 +6225,29 @@ async function generateEtp() {
     state.generation.running = false;
     render();
     showMessage({ title: "Não foi possível gerar o ETP", text: error.message, kind: "error" });
+  }
+}
+
+async function generateTr() {
+  if (!validateCurrentStep()) return;
+  if (!window.docx) {
+    showMessage({ title: "Gerador indisponível", text: "O componente de criação do Word não foi carregado. Atualize a página e tente novamente.", kind: "error" });
+    return;
+  }
+  state.generation = { running: true, progress: 8, message: "Aplicando os campos ao Termo de Referência…" };
+  render();
+  try {
+    const blob = await buildTrDocument((progress, message) => setGenerationProgress(progress, message));
+    const filename = `termo-de-referencia-${slugify(state.tr.object, "tr")}.docx`;
+    await finishDownload(blob, filename, "Termo de Referência");
+    state.tr.complete = true;
+    state.generation.running = false;
+    render();
+    pushNavigationState();
+  } catch (error) {
+    state.generation.running = false;
+    render();
+    showMessage({ title: "Não foi possível gerar o Termo de Referência", text: error.message, kind: "error" });
   }
 }
 
@@ -7132,6 +7380,159 @@ async function buildEtpDocument(onProgress) {
   return blob;
 }
 
+async function loadTrTemplate() {
+  if (!trTemplatePromise) {
+    trTemplatePromise = fetch(TR_TEMPLATE_URL)
+      .then((response) => {
+        if (!response.ok) throw new Error("O modelo oficial do Termo de Referência não pôde ser carregado.");
+        return response.arrayBuffer();
+      })
+      .catch((error) => {
+        trTemplatePromise = null;
+        throw error;
+      });
+  }
+  const data = await trTemplatePromise;
+  return data.slice(0);
+}
+
+function trFieldText(value) {
+  return String(value || "").replace(/\r?\n/g, " ").replace(/\s+/g, " ").trim();
+}
+
+function trBullet(value) {
+  return `• ${trFieldText(value).replace(/^[•\-–—]\s*/, "")}`;
+}
+
+function trXmlEscape(value) {
+  return String(value || "")
+    .replace(/&/g, "&amp;")
+    .replace(/</g, "&lt;")
+    .replace(/>/g, "&gt;")
+    .replace(/"/g, "&quot;")
+    .replace(/'/g, "&apos;");
+}
+
+function trRegexEscape(value) {
+  return String(value).replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+function replaceTrPlaceholder(xml, key, value, options = {}) {
+  const token = `{{${key}}}`;
+  const pattern = new RegExp(`(<w:t\\b)([^>]*>)${trRegexEscape(token)}(<\\/w:t>)`, "g");
+  let count = 0;
+  const replacement = `${trFieldText(value)}${options.trailingSpace ? " " : ""}`;
+  const output = xml.replace(pattern, (_match, start, attributes, end) => {
+    count += 1;
+    const opening = /xml:space=/.test(attributes)
+      ? `${start}${attributes}`
+      : `${start}${attributes.slice(0, -1)} xml:space="preserve">`;
+    return `${opening}${trXmlEscape(replacement)}${end}`;
+  });
+  if (!count) throw new Error(`O campo ${key} não foi encontrado no modelo do Termo de Referência.`);
+  return output;
+}
+
+async function prepareTrImage(file, maxWidth = 520, maxHeight = 280) {
+  const image = await loadImage(file);
+  const ratio = Math.min(maxWidth / image.naturalWidth, maxHeight / image.naturalHeight, 1);
+  const width = Math.max(1, Math.round(image.naturalWidth * ratio));
+  const height = Math.max(1, Math.round(image.naturalHeight * ratio));
+  const sourceRatio = Math.min(1, 2200 / Math.max(image.naturalWidth, image.naturalHeight));
+  const canvas = document.createElement("canvas");
+  canvas.width = Math.max(1, Math.round(image.naturalWidth * sourceRatio));
+  canvas.height = Math.max(1, Math.round(image.naturalHeight * sourceRatio));
+  const context = canvas.getContext("2d");
+  context.fillStyle = "#ffffff";
+  context.fillRect(0, 0, canvas.width, canvas.height);
+  context.drawImage(image, 0, 0, canvas.width, canvas.height);
+  URL.revokeObjectURL(image.src);
+  const blob = await new Promise((resolve) => canvas.toBlob(resolve, "image/jpeg", 0.9));
+  if (!blob) throw new Error(`Não foi possível preparar a imagem ${file.name}.`);
+  return { data: new Uint8Array(await blob.arrayBuffer()), width, height };
+}
+
+function trImageDrawingXml(relationshipId, width, height) {
+  const cx = Math.round(width * 9525);
+  const cy = Math.round(height * 9525);
+  return `<w:r><w:drawing><wp:inline distT="0" distB="0" distL="0" distR="0"><wp:extent cx="${cx}" cy="${cy}"/><wp:effectExtent l="0" t="0" r="0" b="0"/><wp:docPr id="9001" name="Área de intervenção" descr="Área de intervenção"/><wp:cNvGraphicFramePr><a:graphicFrameLocks xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main" noChangeAspect="1"/></wp:cNvGraphicFramePr><a:graphic xmlns:a="http://schemas.openxmlformats.org/drawingml/2006/main"><a:graphicData uri="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:pic xmlns:pic="http://schemas.openxmlformats.org/drawingml/2006/picture"><pic:nvPicPr><pic:cNvPr id="0" name="tr-intervention.jpg"/><pic:cNvPicPr/></pic:nvPicPr><pic:blipFill><a:blip r:embed="${relationshipId}"/><a:stretch><a:fillRect/></a:stretch></pic:blipFill><pic:spPr><a:xfrm><a:off x="0" y="0"/><a:ext cx="${cx}" cy="${cy}"/></a:xfrm><a:prstGeom prst="rect"><a:avLst/></a:prstGeom></pic:spPr></pic:pic></a:graphicData></a:graphic></wp:inline></w:drawing></w:r>`;
+}
+
+async function buildTrDocument(onProgress) {
+  const d = state.tr;
+  if (!window.JSZip) throw new Error("O componente de preenchimento do modelo Word não está disponível.");
+  if (!d.interventionImage?.file) throw new Error("Anexe a imagem da área de intervenção.");
+
+  onProgress(20, "Carregando o modelo oficial do Termo de Referência…");
+  const template = await loadTrTemplate();
+  const zip = await window.JSZip.loadAsync(template);
+  let documentXml = await zip.file("word/document.xml").async("string");
+  onProgress(42, "Preparando a imagem da área de intervenção…");
+  const image = await prepareTrImage(d.interventionImage.file);
+  const duration = `${trFieldText(d.durationNumber)} (${trFieldText(d.durationWords)}) meses`;
+  const replacements = {
+    tr_object: d.object,
+    tr_location: `Localidade: ${d.location}`,
+    tr_contract_term: `de ${duration}`,
+    tr_estimated_cost: `R$ ${d.estimatedCost} (${d.estimatedCostWords})`,
+    tr_price_reference: d.priceReference,
+    tr_bid_mode: d.bidMode,
+    tr_relevance_criteria: d.relevanceCriteria,
+    tr_accessory_service: d.accessoryService,
+    tr_relevant_services: d.relevantServices,
+    tr_operational_qualification: d.operationalQualification,
+    tr_relevant_service_1: trBullet(d.relevantService1),
+    tr_relevant_service_2: trBullet(d.relevantService2),
+    tr_professional_qualification: d.professionalQualification,
+    tr_eligible_professionals: d.eligibleProfessionals,
+    tr_certificate_aggregation: d.certificateAggregation,
+    tr_council_compatibility: d.councilCompatibility,
+    tr_professional_bond: d.professionalBond,
+    tr_execution_term: `O prazo para a execução dos serviços será de ${duration}`,
+    tr_management: d.management,
+    tr_date: `${d.city}, ${formatDateLong(d.date)}.`,
+    tr_signer_name: d.signerName,
+    tr_signer_role: d.signerRole,
+  };
+  Object.entries(replacements).forEach(([key, value]) => {
+    documentXml = replaceTrPlaceholder(documentXml, key, value, {
+      trailingSpace: ["tr_contract_term", "tr_estimated_cost"].includes(key),
+    });
+  });
+
+  const imageRelationshipId = "rIdTrInterventionImage";
+  const imageRunPattern = /<w:r\b[^>]*>(?:(?!<\/w:r>)[\s\S])*?\{\{tr_image\}\}(?:(?!<\/w:r>)[\s\S])*?<\/w:r>/;
+  if (!imageRunPattern.test(documentXml)) throw new Error("O campo de imagem não foi encontrado no modelo do Termo de Referência.");
+  documentXml = documentXml.replace(imageRunPattern, trImageDrawingXml(imageRelationshipId, image.width, image.height));
+  zip.file("word/document.xml", documentXml);
+  zip.file("word/media/tr-intervention.jpg", image.data);
+
+  let relationshipsXml = await zip.file("word/_rels/document.xml.rels").async("string");
+  relationshipsXml = relationshipsXml.replace(
+    "</Relationships>",
+    `<Relationship Id="${imageRelationshipId}" Type="http://schemas.openxmlformats.org/officeDocument/2006/relationships/image" Target="media/tr-intervention.jpg"/></Relationships>`,
+  );
+  zip.file("word/_rels/document.xml.rels", relationshipsXml);
+
+  let contentTypesXml = await zip.file("[Content_Types].xml").async("string");
+  if (!/Extension="jpe?g"/i.test(contentTypesXml)) {
+    contentTypesXml = contentTypesXml.replace(
+      "</Types>",
+      '<Default Extension="jpg" ContentType="image/jpeg"/></Types>',
+    );
+    zip.file("[Content_Types].xml", contentTypesXml);
+  }
+
+  onProgress(76, "Mantendo o cabeçalho, os tópicos e o texto original…");
+  const blob = await zip.generateAsync({
+    type: "blob",
+    mimeType: "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+    compression: "DEFLATE",
+  });
+  onProgress(100, "Termo de Referência concluído.");
+  return blob;
+}
+
 async function buildCotaDocument(onProgress) {
   const { patchDocument, PatchType, Paragraph, TextRun, AlignmentType, LineRuleType } = window.docx;
   const c = state.cota;
@@ -7606,6 +8007,9 @@ function resetCurrentDocument() {
     state.report = createReportState(readStorage("docflow-preferences", {}));
   } else if (state.flow === "etp") {
     state.etp = createEtpState(readStorage("docflow-preferences", {}));
+  } else if (state.flow === "tr") {
+    if (state.tr.interventionImage?.url) URL.revokeObjectURL(state.tr.interventionImage.url);
+    state.tr = createTrState(readStorage("docflow-preferences", {}));
   } else if (state.flow === "cota") {
     if (state.cota.contextImage?.url) URL.revokeObjectURL(state.cota.contextImage.url);
     state.cota = createCotaState(readStorage("docflow-preferences", {}));
@@ -7675,6 +8079,7 @@ async function handleAction(action, target) {
   if (action === "logout") return logout();
   if (action === "start-report") return startFlow("report");
   if (action === "start-etp") return startFlow("etp");
+  if (action === "start-tr") return startFlow("tr");
   if (action === "start-cota") return startFlow("cota");
   if (action === "start-notification") return startFlow("notification");
   if (action === "start-warning") return startFlow("warning");
@@ -8133,6 +8538,7 @@ window.addEventListener("beforeunload", () => {
   stopNotificationPolling();
   state.report.photos.forEach((photo) => URL.revokeObjectURL(photo.url));
   if (state.report.map?.url) URL.revokeObjectURL(state.report.map.url);
+  if (state.tr.interventionImage?.url) URL.revokeObjectURL(state.tr.interventionImage.url);
   state.notification.photos.forEach((photo) => URL.revokeObjectURL(photo.url));
   state.warning.photos.forEach((photo) => URL.revokeObjectURL(photo.url));
   if (state.lastDownload?.url) URL.revokeObjectURL(state.lastDownload.url);

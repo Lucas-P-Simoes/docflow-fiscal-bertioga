@@ -2949,6 +2949,11 @@ select:focus-visible,
   background: #e6eef8;
 }
 
+.document-card.is-tr .card-icon {
+  color: #7a351d;
+  background: #f8e8df;
+}
+
 .document-card.is-admin .card-icon {
   color: #1d5870;
   background: #e4f2f7;
@@ -4133,6 +4138,10 @@ textarea::placeholder {
 
 .etp-section-panel textarea {
   min-height: 150px;
+}
+
+.tr-section-panel textarea {
+  min-height: 132px;
 }
 
 .etp-risk-list {
