@@ -10,6 +10,7 @@ import {
   getAccountBySession,
   getLoginAttempt,
   getOpenAICredential,
+  getOpenAICredentialByEmail,
   recordLoginFailure,
   saveOpenAICredential,
   updateOpenAIModel,
@@ -182,7 +183,7 @@ export async function handleLogin(
 
   return authJson(
     200,
-    accountPayload(account),
+    await accountPayload(account, env),
     { "Set-Cookie": sessionCookie(request, sessionToken, SESSION_SECONDS) },
   );
 }
@@ -202,7 +203,7 @@ export async function handleSession(request: Request, env: Env): Promise<Respons
   if (request.method !== "GET") return authError(405, "Método não permitido.");
   const authenticated = await authenticateRequest(request, env);
   if (!authenticated) return authError(401, "Entre para continuar.");
-  return authJson(200, accountPayload(authenticated.account));
+  return authJson(200, await accountPayload(authenticated.account, env));
 }
 
 export async function handleApiKey(
@@ -211,9 +212,12 @@ export async function handleApiKey(
 ): Promise<Response> {
   const authenticated = await authenticateRequest(request, env);
   if (!authenticated) return authError(401, "Sua sessão expirou. Entre novamente.");
+  if (!isConfiguredAdministrator(authenticated.account)) {
+    return authError(403, "Somente o administrador pode configurar a IA.");
+  }
 
   if (request.method === "GET") {
-    return authJson(200, accountPayload(authenticated.account).api as JsonObject);
+    return authJson(200, (await accountPayload(authenticated.account, env)).api as JsonObject);
   }
 
   if (request.method === "DELETE") {
@@ -274,33 +278,53 @@ export async function authenticateRequest(
   return account ? { account, tokenHash } : null;
 }
 
-export async function openAICredentialForUser(
+export function canAccountUseAI(account: AccountSummary): boolean {
+  return isConfiguredAdministrator(account) || account.aiEnabled;
+}
+
+export async function openAICredentialForAccount(
   env: Env,
-  userId: string,
+  account: AccountSummary,
 ): Promise<{ apiKey: string; model: string } | null> {
-  const credential = await getOpenAICredential(env.DB, userId);
+  if (!canAccountUseAI(account)) return null;
+  const directCredential = isConfiguredAdministrator(account)
+    ? await getOpenAICredential(env.DB, account.id)
+    : null;
+  const credential = isConfiguredAdministrator(account)
+    ? directCredential && { userId: account.id, ...directCredential }
+    : await getOpenAICredentialByEmail(env.DB, ADMIN_EMAIL);
   if (!credential) return null;
   const apiKey = await decryptApiKey(
     credential.encryptedKey,
     credential.iv,
-    userId,
+    credential.userId,
     env,
   );
   return { apiKey, model: credential.model };
 }
 
-function accountPayload(account: AccountSummary): JsonObject {
+function isConfiguredAdministrator(account: AccountSummary): boolean {
+  return account.isAdmin && account.email === ADMIN_EMAIL;
+}
+
+async function accountPayload(account: AccountSummary, env: Env): Promise<JsonObject> {
+  const isAdmin = isConfiguredAdministrator(account);
+  const sharedCredential = !isAdmin && account.aiEnabled
+    ? await getOpenAICredentialByEmail(env.DB, ADMIN_EMAIL)
+    : null;
   return {
     user: {
       id: account.id,
       name: account.name,
       email: account.email,
-      isAdmin: account.isAdmin && account.email === ADMIN_EMAIL,
+      isAdmin,
     },
     api: {
-      hasKey: account.hasApiKey,
-      model: account.apiModel,
-      lastFour: account.apiKeyLastFour,
+      allowed: isAdmin || account.aiEnabled,
+      configurable: isAdmin,
+      hasKey: isAdmin ? account.hasApiKey : Boolean(sharedCredential),
+      model: isAdmin ? account.apiModel : sharedCredential?.model || null,
+      lastFour: isAdmin ? account.apiKeyLastFour : null,
     },
     cards: account.cardAccess,
   };

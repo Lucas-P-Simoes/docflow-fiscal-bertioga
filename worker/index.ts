@@ -8,15 +8,17 @@ import handler from "vinext/server/app-router-entry";
 import {
   authenticateRequest,
   authError,
+  canAccountUseAI,
   handleApiKey,
   handleLogin,
   handleLogout,
   handleRegister,
   handleSession,
-  openAICredentialForUser,
+  openAICredentialForAccount,
 } from "./auth";
 import {
   handleAdminUserCardAccess,
+  handleAdminUserAiAccess,
   handleAdminUserMutation,
   handleAdminUsers,
 } from "./admin";
@@ -55,10 +57,13 @@ async function proxyOpenAI(request: Request, env: Env): Promise<Response> {
 
   const authenticated = await authenticateRequest(request, env);
   if (!authenticated) return authError(401, "Sua sessão expirou. Entre novamente.");
+  if (!canAccountUseAI(authenticated.account)) {
+    return authError(403, "O administrador ainda não liberou o uso da IA para esta conta.");
+  }
 
-  const credential = await openAICredentialForUser(env, authenticated.account.id);
+  const credential = await openAICredentialForAccount(env, authenticated.account);
   if (!credential) {
-    return authError(400, "Cadastre sua chave da API da OpenAI antes de usar a análise.");
+    return authError(503, "A IA ainda não foi configurada pelo administrador.");
   }
 
   const declaredLength = Number(request.headers.get("Content-Length") || 0);
@@ -227,6 +232,10 @@ const worker = {
       const adminUserCardAccess = url.pathname.match(/^\/api\/admin\/users\/([0-9a-f-]{36})\/cards$/i);
       if (adminUserCardAccess) {
         return await handleAdminUserCardAccess(request, env, adminUserCardAccess[1]);
+      }
+      const adminUserAiAccess = url.pathname.match(/^\/api\/admin\/users\/([0-9a-f-]{36})\/ai$/i);
+      if (adminUserAiAccess) {
+        return await handleAdminUserAiAccess(request, env, adminUserAiAccess[1]);
       }
       const adminUserMutation = url.pathname.match(/^\/api\/admin\/users\/([0-9a-f-]{36})$/i);
       if (adminUserMutation) {

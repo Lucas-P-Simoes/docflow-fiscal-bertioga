@@ -20,7 +20,7 @@
     <title>Fiscal Bertioga</title>
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=20260915-shield-check" />
-    <link rel="stylesheet" href="styles.css?v=20260921-etp-cgbr" />
+    <link rel="stylesheet" href="styles.css?v=20260921-ai-access" />
   </head>
   <body>
     <!-- Lucide icons, ISC License: https://lucide.dev/license -->
@@ -239,7 +239,7 @@
             <svg class="lucide-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-signature"></use></svg>
             <span>Assinaturas</span>
           </button>
-          <button id="apiButton" class="api-button" type="button" data-action="open-api">
+          <button id="apiButton" class="api-button is-hidden" type="button" data-action="open-api">
             <svg class="lucide-icon api-sparkles" viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-sparkles"></use></svg>
             <span id="apiButtonLabel">Configurar IA</span>
           </button>
@@ -289,7 +289,7 @@
         <span class="eyebrow eyebrow-dark">Inteligência artificial</span>
         <h2>Conecte sua API da OpenAI</h2>
         <p class="dialog-lead">
-          Cada pessoa usa a própria chave e escolhe o modelo. A chave será criptografada no servidor e vinculada somente à sua conta.
+          Esta configuração é exclusiva do administrador. A chave será criptografada no servidor e usada somente pelas contas que você autorizar.
         </p>
 
         <label class="field">
@@ -563,6 +563,6 @@
     <script src="vendor/docx.iife.js" defer></script>
     <script src="vendor/html2canvas.min.js" defer></script>
     <script src="vendor/jspdf.umd.min.js" defer></script>
-    <script src="app.js?v=20260921-etp-cgbr" defer></script>
+    <script src="app.js?v=20260921-ai-access" defer></script>
   </body>
 </html>

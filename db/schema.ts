@@ -13,6 +13,7 @@ export const users = sqliteTable(
       .notNull()
       .default("approved"),
     isAdmin: integer("is_admin", { mode: "boolean" }).notNull().default(false),
+    aiEnabled: integer("ai_enabled", { mode: "boolean" }).notNull().default(false),
     lastLoginAt: integer("last_login_at"),
     reviewedAt: integer("reviewed_at"),
     reviewedBy: text("reviewed_by"),

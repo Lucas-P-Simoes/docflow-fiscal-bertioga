@@ -2,6 +2,7 @@ import {
   deleteManagedUser,
   getManagedUserDeletion,
   listManagedUsers,
+  updateManagedUserAiAccess,
   updateManagedUserStatus,
 } from "../db/admin";
 import { isHomeCardKey, updateUserCardAccess } from "../db/card-access";
@@ -107,6 +108,38 @@ export async function handleAdminUserCardAccess(
   }
 
   return authJson(200, { cardAccess });
+}
+
+export async function handleAdminUserAiAccess(
+  request: Request,
+  env: Env,
+  userId: string,
+): Promise<Response> {
+  if (request.method !== "PATCH") return authError(405, "Método não permitido.");
+  const authenticated = await authenticateAdmin(request, env);
+  if (authenticated instanceof Response) return authenticated;
+
+  let body: JsonObject;
+  try {
+    body = await readAdminBody(request);
+  } catch (error) {
+    return authError(400, error instanceof Error ? error.message : "Dados inválidos.");
+  }
+
+  if (typeof body.enabled !== "boolean") {
+    return authError(400, "Informe se o acesso à IA deve ficar liberado.");
+  }
+
+  const aiEnabled = await updateManagedUserAiAccess(env.DB, {
+    userId,
+    enabled: body.enabled,
+    now: Math.floor(Date.now() / 1000),
+  });
+  if (aiEnabled === null) {
+    return authError(404, "Usuário aprovado não encontrado ou não pode ter o acesso alterado.");
+  }
+
+  return authJson(200, { aiEnabled });
 }
 
 async function authenticateAdmin(

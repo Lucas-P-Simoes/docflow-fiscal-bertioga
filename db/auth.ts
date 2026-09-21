@@ -6,6 +6,7 @@ export type AccountSummary = {
   email: string;
   status: "pending" | "approved" | "rejected";
   isAdmin: boolean;
+  aiEnabled: boolean;
   lastLoginAt: number | null;
   hasApiKey: boolean;
   apiModel: string | null;
@@ -37,6 +38,7 @@ type SessionRow = {
   email: string;
   status: "pending" | "approved" | "rejected";
   is_admin: number;
+  ai_enabled: number;
   last_login_at: number | null;
   api_model: string | null;
   api_key_last_four: string | null;
@@ -58,6 +60,10 @@ type CredentialRow = {
   iv: string;
   model: string;
   last_four: string;
+};
+
+type CredentialOwnerRow = CredentialRow & {
+  user_id: string;
 };
 
 type LoginAttemptRow = {
@@ -169,6 +175,7 @@ export async function getAccountBySession(
          u.email,
          u.status,
          u.is_admin,
+         u.ai_enabled,
          u.last_login_at,
          c.model AS api_model,
          c.last_four AS api_key_last_four
@@ -188,6 +195,7 @@ export async function getAccountBySession(
     email: row.email,
     status: row.status,
     isAdmin: Boolean(row.is_admin),
+    aiEnabled: Boolean(row.ai_enabled),
     lastLoginAt: row.last_login_at,
     hasApiKey: Boolean(row.api_model && row.api_key_last_four),
     apiModel: row.api_model,
@@ -278,6 +286,32 @@ export async function getOpenAICredential(
 
   if (!row) return null;
   return {
+    encryptedKey: row.encrypted_key,
+    iv: row.iv,
+    model: row.model,
+    lastFour: row.last_four,
+  };
+}
+
+export async function getOpenAICredentialByEmail(
+  db: D1Database,
+  email: string,
+): Promise<(StoredOpenAICredential & { userId: string }) | null> {
+  const row = await db
+    .prepare(
+      `SELECT
+         c.user_id, c.encrypted_key, c.iv, c.model, c.last_four
+       FROM openai_credentials AS c
+       INNER JOIN users AS u ON u.id = c.user_id
+       WHERE u.email = ? AND u.is_admin = 1
+       LIMIT 1`,
+    )
+    .bind(email)
+    .first<CredentialOwnerRow>();
+
+  if (!row) return null;
+  return {
+    userId: row.user_id,
     encryptedKey: row.encrypted_key,
     iv: row.iv,
     model: row.model,

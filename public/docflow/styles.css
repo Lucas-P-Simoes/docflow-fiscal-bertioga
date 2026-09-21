@@ -2499,6 +2499,7 @@ select:focus-visible,
 .admin-user-title {
   display: flex;
   align-items: center;
+  flex-wrap: wrap;
   gap: 9px;
 }
 
@@ -2530,6 +2531,57 @@ select:focus-visible,
 .admin-status.is-rejected {
   color: #8e332b;
   background: #f8e3df;
+}
+
+.admin-ai-toggle {
+  position: relative;
+  display: inline-grid;
+  grid-template-columns: auto 38px;
+  gap: 9px;
+  align-items: center;
+  min-height: 34px;
+  margin-left: 8px;
+  padding: 5px 8px 5px 10px;
+  border: 1px solid #d7e2dc;
+  border-radius: 999px;
+  color: var(--ink-soft);
+  background: #f5faf7;
+  cursor: pointer;
+}
+
+.admin-ai-label {
+  font-size: 11px;
+  font-weight: 850;
+  white-space: nowrap;
+}
+
+.admin-ai-label > span {
+  color: var(--forest);
+}
+
+.admin-ai-toggle input {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  opacity: 0;
+}
+
+.admin-ai-toggle input:checked + .admin-card-switch {
+  background: var(--forest);
+}
+
+.admin-ai-toggle input:checked + .admin-card-switch::after {
+  transform: translateX(16px);
+}
+
+.admin-ai-toggle:has(input:focus-visible) {
+  border-color: var(--forest);
+  box-shadow: 0 0 0 3px rgba(31, 111, 89, 0.15);
+}
+
+.admin-ai-toggle:has(input:disabled) {
+  cursor: wait;
+  opacity: 0.62;
 }
 
 .admin-user-actions {
@@ -2567,6 +2619,13 @@ select:focus-visible,
 .admin-card-access-heading span,
 .admin-card-access-heading b {
   display: block;
+}
+
+.admin-card-access-heading .admin-card-access-summary {
+  color: var(--forest-dark);
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1.4;
 }
 
 .admin-card-access-heading strong {
@@ -6277,6 +6336,10 @@ textarea::placeholder {
   .admin-user-avatar {
     width: 38px;
     height: 38px;
+  }
+
+  .admin-ai-toggle {
+    margin-left: 0;
   }
 
   .admin-user-actions,

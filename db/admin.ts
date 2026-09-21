@@ -13,6 +13,7 @@ export type ManagedUser = {
   email: string;
   status: ManagedUserStatus;
   isAdmin: boolean;
+  aiEnabled: boolean;
   createdAt: number;
   lastLoginAt: number | null;
   reviewedAt: number | null;
@@ -25,6 +26,7 @@ type ManagedUserRow = {
   email: string;
   status: ManagedUserStatus;
   is_admin: number;
+  ai_enabled: number;
   created_at: number;
   last_login_at: number | null;
   reviewed_at: number | null;
@@ -41,7 +43,7 @@ type ManagedUserCardPermissionRow = {
 };
 
 const MANAGED_USER_COLUMNS = `
-  id, name, email, status, is_admin,
+  id, name, email, status, is_admin, ai_enabled,
   created_at, last_login_at, reviewed_at
 `;
 
@@ -55,6 +57,7 @@ function managedUser(
     email: row.email,
     status: row.status,
     isAdmin: Boolean(row.is_admin),
+    aiEnabled: Boolean(row.ai_enabled),
     createdAt: row.created_at,
     lastLoginAt: row.last_login_at,
     reviewedAt: row.reviewed_at,
@@ -142,6 +145,25 @@ export async function updateManagedUserStatus(
     .first<ManagedUserRow>();
 
   return row ? managedUser(row, await getUserCardAccess(db, row.id)) : null;
+}
+
+export async function updateManagedUserAiAccess(
+  db: D1Database,
+  values: {
+    userId: string;
+    enabled: boolean;
+    now: number;
+  },
+): Promise<boolean | null> {
+  const result = await db
+    .prepare(
+      `UPDATE users
+       SET ai_enabled = ?, updated_at = ?
+       WHERE id = ? AND is_admin = 0 AND status = 'approved'`,
+    )
+    .bind(values.enabled ? 1 : 0, values.now, values.userId)
+    .run();
+  return result.meta.changes > 0 ? values.enabled : null;
 }
 
 export async function getManagedUserDeletion(

@@ -325,6 +325,19 @@ function createAdminState() {
   };
 }
 
+function createApiState(api = {}) {
+  const selectedModel = api.model || "gpt-5.6-terra";
+  const knownModels = new Set(["gpt-5.6-terra", "gpt-5.6-sol", "gpt-5.6-luna"]);
+  return {
+    allowed: Boolean(api.allowed),
+    configurable: Boolean(api.configurable),
+    hasKey: Boolean(api.hasKey),
+    lastFour: api.lastFour || "",
+    model: knownModels.has(selectedModel) ? selectedModel : "custom",
+    customModel: knownModels.has(selectedModel) ? "" : selectedModel,
+  };
+}
+
 function createProcessesState() {
   return {
     open: false,
@@ -375,12 +388,7 @@ const state = {
   },
   flow: null,
   step: 0,
-  api: {
-    hasKey: false,
-    lastFour: "",
-    model: "gpt-5.6-terra",
-    customModel: "",
-  },
+  api: createApiState(),
   signatures: createSignatureConfigurationState(),
   report: createReportState(persisted),
   etp: createEtpState(persisted),
@@ -804,11 +812,20 @@ function getSelectedModel(api = state.api) {
   return api.model === "custom" ? api.customModel.trim() : api.model;
 }
 
+function canUseAI() {
+  return Boolean(state.api.allowed);
+}
+
+function canConfigureAI() {
+  return Boolean(state.api.configurable && state.auth.user?.isAdmin);
+}
+
 function isApiReady() {
-  return Boolean(state.api.hasKey && getSelectedModel());
+  return Boolean(canUseAI() && state.api.hasKey && getSelectedModel());
 }
 
 function updateApiBadge() {
+  elements.apiButton.classList.toggle("is-hidden", !canConfigureAI());
   const connected = isApiReady();
   elements.apiButton.classList.toggle("is-connected", connected);
   elements.apiButtonLabel.textContent = connected ? modelDisplayName(getSelectedModel()) : "Configurar IA";
@@ -1264,17 +1281,12 @@ function applyAccount(payload) {
   state.admin = createAdminState();
   state.processes = createProcessesState();
   state.kanban = createKanbanState();
-  const selectedModel = payload.api?.model || "gpt-5.6-terra";
-  const knownModels = new Set(["gpt-5.6-terra", "gpt-5.6-sol", "gpt-5.6-luna"]);
-  state.api = {
-    hasKey: Boolean(payload.api?.hasKey),
-    lastFour: payload.api?.lastFour || "",
-    model: knownModels.has(selectedModel) ? selectedModel : "custom",
-    customModel: knownModels.has(selectedModel) ? "" : selectedModel,
-  };
+  state.api = createApiState(payload.api);
+  if (!state.api.allowed) state.cota.useAI = false;
   const isAdmin = Boolean(payload.user?.isAdmin);
   elements.adminButton.classList.remove("has-pending");
   elements.adminButton.classList.toggle("is-hidden", !isAdmin);
+  elements.apiButton.classList.toggle("is-hidden", !canConfigureAI());
   elements.accountName.textContent = payload.user?.name || payload.user?.email || "";
   elements.authGate.classList.add("is-hidden");
   elements.siteShell.hidden = false;
@@ -1295,11 +1307,13 @@ function showAuthGate(view = "login") {
   state.admin = createAdminState();
   state.processes = createProcessesState();
   state.kanban = createKanbanState();
+  state.api = createApiState();
   stopNotificationPolling();
   state.history.pdfCache.forEach((cached) => cached.url && URL.revokeObjectURL(cached.url));
   state.history = createHistoryState();
   elements.adminButton.classList.add("is-hidden");
   elements.adminButton.classList.remove("has-pending");
+  elements.apiButton.classList.add("is-hidden");
   elements.adminPendingBadge.classList.add("is-hidden");
   elements.adminPendingBadge.textContent = "";
   elements.notificationBadge.classList.add("is-hidden");
@@ -1333,11 +1347,17 @@ async function refreshCurrentCardAccess() {
   try {
     const account = await apiRequest("/api/auth/session");
     const nextAccess = normalizeCardAccess(account.cards);
-    const changed = HOME_CARD_OPTIONS.some(
+    const cardsChanged = HOME_CARD_OPTIONS.some(
       (card) => nextAccess[card.key] !== state.auth.cardAccess?.[card.key],
     );
-    if (!changed) return;
+    const nextApi = createApiState(account.api);
+    const apiChanged = ["allowed", "configurable", "hasKey", "lastFour", "model", "customModel"]
+      .some((key) => nextApi[key] !== state.api[key]);
+    if (!cardsChanged && !apiChanged) return;
     state.auth.cardAccess = nextAccess;
+    state.api = nextApi;
+    if (!state.api.allowed) state.cota.useAI = false;
+    updateApiBadge();
     if (!state.flow && !state.admin.open && !state.processes.open && !state.history.open && !state.kanban.open) render();
   } catch {
     // A próxima navegação ou atualização da página repetirá a verificação da sessão.
@@ -1461,6 +1481,19 @@ function panelHeader(title, description, action = "") {
     <div><h2>${e(title)}</h2>${description ? `<p>${e(description)}</p>` : ""}</div>
     ${action}
   </div>`;
+}
+
+function renderAIStatusNotice(manualText = "Você pode continuar preenchendo manualmente.", compact = false) {
+  if (isApiReady()) return "";
+  const message = !canUseAI()
+    ? `O acesso à IA não está liberado para sua conta. ${manualText}`
+    : canConfigureAI()
+      ? `A IA ainda não está configurada. ${manualText}`
+      : `A IA está liberada para sua conta, mas ainda precisa ser configurada pelo administrador. ${manualText}`;
+  const action = canConfigureAI()
+    ? ' <button class="inline-button" type="button" data-action="open-api">Configurar agora</button>'
+    : "";
+  return `<div class="notice is-warning${compact ? " compact-notice" : ""}"><span aria-hidden="true">✦</span><span>${e(message)}${action}</span></div>`;
 }
 
 function render() {
@@ -1802,7 +1835,7 @@ function renderAdminPanel() {
 
   return `<section class="document-section admin-section">
     <div class="admin-heading">
-      <div><span class="eyebrow eyebrow-dark">Acesso restrito</span><h2>Administração de usuários</h2><p>Revise cadastros, acompanhe o último acesso e escolha quais cards cada pessoa poderá utilizar.</p></div>
+      <div><span class="eyebrow eyebrow-dark">Acesso restrito</span><h2>Administração de usuários</h2><p>Revise cadastros e escolha quem poderá usar a IA e cada card, incluindo ETP e TR.</p></div>
       <div class="admin-heading-actions">
         <button class="button button-secondary" type="button" data-action="home">← Voltar</button>
         <button class="button button-secondary" type="button" data-action="refresh-admin" ${state.admin.loading ? "disabled" : ""}>Atualizar</button>
@@ -1846,6 +1879,14 @@ function renderAdminUser(user) {
         ${user.status !== "rejected" ? `<button class="button button-secondary button-danger" type="button" data-action="reject-admin-user" data-id="${e(user.id)}" ${disabled}>${busyAction === "rejected" ? "Recusando…" : "Recusar"}</button>` : ""}
         <button class="button button-secondary button-danger" type="button" data-action="delete-admin-user" data-id="${e(user.id)}" ${disabled}>${busyAction === "delete" ? "Excluindo…" : "Excluir"}</button>
       </div>`;
+  const aiAccess = Boolean(user.aiEnabled);
+  const aiControl = user.status === "approved" && !user.isAdmin
+    ? `<label class="admin-ai-toggle" title="Definir se ${e(user.name)} pode usar os recursos de IA">
+        <span class="admin-ai-label"><span aria-hidden="true">✦</span> Acesso à IA</span>
+        <input type="checkbox" role="switch" data-admin-ai-user="${e(user.id)}" ${aiAccess ? "checked" : ""} ${disabled} aria-label="Liberar uso da IA para ${e(user.name)}" />
+        <span class="admin-card-switch" aria-hidden="true"></span>
+      </label>`
+    : "";
   const cardAccess = normalizeCardAccess(user.cardAccess);
   const enabledCards = HOME_CARD_OPTIONS.filter((card) => cardAccess[card.key]).length;
   const accessPanel = user.status === "approved" && !user.isAdmin
@@ -1853,6 +1894,7 @@ function renderAdminUser(user) {
         <div class="admin-card-access-heading">
           <div><strong>Cards visíveis para este usuário</strong><span>Ative ou desative cada ferramenta da página inicial.</span></div>
           <b>${enabledCards} de ${HOME_CARD_OPTIONS.length} liberados</b>
+          <span class="admin-card-access-summary">ETP: ${cardAccess.etp ? "liberado" : "oculto"} • TR: ${cardAccess.tr ? "liberado" : "oculto"}</span>
         </div>
         <div class="admin-card-access-options">
           ${HOME_CARD_OPTIONS.map((card) => `<label class="admin-card-toggle">
@@ -1867,7 +1909,7 @@ function renderAdminUser(user) {
   return `<article class="admin-user-item">
     <span class="admin-user-avatar" aria-hidden="true">${e(String(user.name || user.email || "U").slice(0, 1).toUpperCase())}</span>
     <div class="admin-user-copy">
-      <div class="admin-user-title"><strong>${e(user.name)}</strong><span class="admin-status is-${e(user.isAdmin ? "admin" : user.status)}">${e(statusLabel)}</span></div>
+      <div class="admin-user-title"><strong>${e(user.name)}</strong><span class="admin-status is-${e(user.isAdmin ? "admin" : user.status)}">${e(statusLabel)}</span>${aiControl}</div>
       <span>${e(user.email)}</span>
       <small>Solicitação: ${e(formatHistoryDate(user.createdAt))} • Último acesso: ${e(user.lastLoginAt ? formatHistoryDate(user.lastLoginAt) : "Ainda não acessou")}</small>
     </div>
@@ -1968,6 +2010,38 @@ async function setAdminUserCardAccess(userId, cardKey, enabled) {
   } catch (error) {
     state.admin.users = state.admin.users.map((item) => item.id === userId
       ? { ...item, cardAccess: previousAccess }
+      : item);
+    state.admin.error = error.message;
+  } finally {
+    state.admin.busy.delete(userId);
+    if (state.admin.open) render();
+  }
+}
+
+async function setAdminUserAiAccess(userId, enabled) {
+  const user = state.admin.users.find((item) => item.id === userId);
+  if (!state.auth.user?.isAdmin || !user || user.isAdmin || user.status !== "approved" || state.admin.busy.has(userId)) return;
+
+  const previousValue = Boolean(user.aiEnabled);
+  state.admin.busy.set(userId, "ai");
+  state.admin.error = "";
+  state.admin.users = state.admin.users.map((item) => item.id === userId
+    ? { ...item, aiEnabled: enabled }
+    : item);
+  if (state.admin.open) render();
+
+  try {
+    const payload = await apiRequest(`/api/admin/users/${encodeURIComponent(userId)}/ai`, {
+      method: "PATCH",
+      body: { enabled },
+    });
+    state.admin.users = state.admin.users.map((item) => item.id === userId
+      ? { ...item, aiEnabled: Boolean(payload.aiEnabled) }
+      : item);
+    showToast(`Uso da IA ${enabled ? "liberado" : "bloqueado"} para ${user.name}.`);
+  } catch (error) {
+    state.admin.users = state.admin.users.map((item) => item.id === userId
+      ? { ...item, aiEnabled: previousValue }
       : item);
     state.admin.error = error.message;
   } finally {
@@ -4015,12 +4089,12 @@ function renderReportPhotos() {
           <option value="name" ${r.order === "name" ? "selected" : ""}>Ordenar por nome</option>
           <option value="date" ${r.order === "date" ? "selected" : ""}>Ordenar por data</option>
         </select>
-        <button class="button button-secondary" type="button" data-action="analyze-all" ${!r.photos.length || state.analysis.running ? "disabled" : ""}>✦ Descrever com IA</button>
+        ${isApiReady() ? `<button class="button button-secondary" type="button" data-action="analyze-all" ${!r.photos.length || state.analysis.running ? "disabled" : ""}>✦ Descrever com IA</button>` : ""}
       </div>
     </div>
     ${r.photos.length ? `<div class="photo-list">${r.photos.map(renderPhotoCard).join("")}</div>` : `<div class="empty-state"><div><strong>Nenhuma fotografia adicionada</strong><span>Use a área acima para selecionar todas as fotos do relatório.</span></div></div>`}
   </section>
-  ${!isApiReady() ? `<div class="notice is-warning"><span aria-hidden="true">✦</span><span><strong>A IA ainda não está configurada.</strong> Você pode escrever as descrições manualmente ou configurar sua chave da OpenAI no topo da página.</span></div>` : ""}`;
+  ${renderAIStatusNotice("Você pode escrever as descrições manualmente.")}`;
 }
 
 function renderPhotoCard(photo, index) {
@@ -4033,7 +4107,7 @@ function renderPhotoCard(photo, index) {
       <textarea data-photo-description="${e(photo.id)}" maxlength="700" placeholder="Ex.: Rua Um, altura do nº 100: recomposição irregular, com desnível e material de base exposto.">${e(photo.description)}</textarea>
     </div>
     <div class="photo-card-actions">
-      <button class="icon-button" type="button" data-action="analyze-photo" data-id="${e(photo.id)}" aria-label="Descrever com IA" title="Descrever com IA">✦</button>
+      ${isApiReady() ? `<button class="icon-button" type="button" data-action="analyze-photo" data-id="${e(photo.id)}" aria-label="Descrever com IA" title="Descrever com IA">✦</button>` : ""}
       <button class="icon-button" type="button" data-action="remove-photo" data-id="${e(photo.id)}" aria-label="Remover fotografia" title="Remover">×</button>
     </div>
   </article>`;
@@ -4445,14 +4519,15 @@ function renderCotaContent() {
   </section>
   <section class="panel">
     ${panelHeader("Texto-base", "Escreva somente os fatos e encaminhamentos que devem constar no processo.")}
-    <div class="switch-row ai-switch-row">
+    ${canUseAI() ? `<div class="switch-row ai-switch-row">
       <div class="switch-copy"><strong>Analisar e melhorar com IA</strong><small>Desligado: o texto digitado será usado diretamente, sem envio à OpenAI.</small></div>
-      <label class="switch"><input type="checkbox" data-bind="cota.useAI" ${c.useAI ? "checked" : ""} aria-label="Analisar e melhorar o texto com IA" /><span class="switch-track" aria-hidden="true"></span></label>
-    </div>
+      <label class="switch"><input type="checkbox" data-bind="cota.useAI" ${c.useAI ? "checked" : ""} ${!isApiReady() ? "disabled" : ""} aria-label="Analisar e melhorar o texto com IA" /><span class="switch-track" aria-hidden="true"></span></label>
+    </div>` : ""}
+    ${renderAIStatusNotice("O texto digitado será usado diretamente.", true)}
     ${c.useAI ? `<div class="ai-assistance-details">
       <div><strong class="subsection-label">Imagem de contexto (opcional)</strong><p class="field-help">Anexe uma foto para ajudar a IA a compreender o problema. A imagem será enviada somente para a análise e não aparecerá no Word.</p></div>
       ${renderSingleImageUpload("cota-context", c.contextImage, "Anexar imagem para a IA", "JPEG, PNG, BMP, GIF ou WebP • até 20 MB")}
-      ${!isApiReady() ? `<div class="notice is-warning compact-notice"><span aria-hidden="true">✦</span><span>Configure sua chave da OpenAI antes de continuar. <button class="inline-button" type="button" data-action="open-api">Configurar agora</button></span></div>` : `<div class="notice compact-notice"><span aria-hidden="true">✓</span><span>A análise usará <strong>${e(modelDisplayName(getSelectedModel()))}</strong>${c.contextImage ? ` e a imagem <strong>${e(c.contextImage.file.name)}</strong>` : ""}.</span></div>`}
+      <div class="notice compact-notice"><span aria-hidden="true">✓</span><span>A análise usará <strong>${e(modelDisplayName(getSelectedModel()))}</strong>${c.contextImage ? ` e a imagem <strong>${e(c.contextImage.file.name)}</strong>` : ""}.</span></div>
     </div>` : `<div class="notice compact-notice direct-mode-notice"><span aria-hidden="true">✓</span><span><strong>Modo direto.</strong> Ao continuar, somente a sua digitação será levada para a folha de cota.</span></div>`}
     <label class="field cota-base-field"><span>Conteúdo *</span><textarea data-bind="cota.baseText" maxlength="${MAX_COTA_TEXT}" placeholder="Ex.: Em vistoria realizada no local, foi constatado…">${e(c.baseText)}</textarea><span class="text-counter"><span id="cotaLineCount">${metrics.lines} de ${MAX_COTA_LINES} linhas estimadas</span><span id="cotaCharCount">${metrics.characters}/${MAX_COTA_TEXT}</span></span></label>
   </section>
@@ -4814,7 +4889,7 @@ function renderOfficialCorrespondenceContent() {
     </label>
     ${c.photos.length ? `<div class="photo-list notification-photo-list">${c.photos.map(renderOfficialCorrespondencePhoto).join("")}</div>` : `<div class="empty-state notification-empty-state"><div><strong>Nenhuma foto anexada</strong><span>Esta parte é opcional e não aparecerá no Word se permanecer vazia.</span></div></div>`}
   </section>
-  <div class="notice is-warning"><span aria-hidden="true">!</span><span>A IA pode revisar a linguagem na etapa seguinte, sem inventar fatos, datas, números ou providências. Confira o texto antes de gerar o Word.</span></div>`;
+  ${canUseAI() ? `<div class="notice is-warning"><span aria-hidden="true">!</span><span>A IA pode revisar a linguagem na etapa seguinte, sem inventar fatos, datas, números ou providências. Confira o texto antes de gerar o Word.</span></div>` : ""}`;
 }
 
 function renderOfficialCorrespondencePhoto(photo, index) {
@@ -4834,7 +4909,7 @@ function renderOfficialCorrespondenceReview() {
   const typeLower = type.label.toLowerCase();
   return `${pageHeading("Etapa 3", `Revise ${type.article} ${typeLower}`, "Confira os dados e ajuste o texto final antes de baixar o Word.")}
   <section class="panel">
-    ${panelHeader("Texto final", `Somente o conteúdo deste campo será usado como corpo d${type.article === "a" ? "a" : "o"} ${typeLower}.`, `<button class="button button-secondary" type="button" data-action="improve-correspondence">✦ Revisar com IA</button>`)}
+    ${panelHeader("Texto final", `Somente o conteúdo deste campo será usado como corpo d${type.article === "a" ? "a" : "o"} ${typeLower}.`, isApiReady() ? `<button class="button button-secondary" type="button" data-action="improve-correspondence">✦ Revisar com IA</button>` : "")}
     ${renderRichTextEditor({ key: "correspondence.final", html: c.finalHtml, text: c.finalText, label: "Redação final *", placeholder: "Revise o texto final…", help: "Revise nomes, datas, valores e números" })}
   </section>
   <div class="summary-grid">
@@ -4845,6 +4920,7 @@ function renderOfficialCorrespondenceReview() {
   <section class="panel review-panel">
     <div class="review-block"><h3>Assinaturas</h3><div class="review-signatures">${c.signatories.map((signature) => signaturePreview(signature)).join("")}</div></div>
   </section>
+  ${renderAIStatusNotice("Você pode revisar o texto manualmente.")}
   <div class="notice"><span aria-hidden="true">✓</span><span><strong>Modelo conferido.</strong> O arquivo será criado com o cabeçalho oficial, a paginação e a mesma formatação usada no memorando.</span></div>`;
 }
 
@@ -4888,14 +4964,14 @@ function renderCorrespondenceContent() {
   const type = correspondenceType();
   return `${pageHeading("Etapa 2", `Escreva ${type.article} ${type.label.toLowerCase()}`, "Registre somente os fatos, solicitações e orientações que devem constar no documento.")}
   <section class="panel">
-    ${panelHeader("Conteúdo", "Você poderá editar o texto e solicitar uma revisão opcional da IA na próxima etapa.")}
+    ${panelHeader("Conteúdo", canUseAI() ? "Você poderá editar o texto e solicitar uma revisão opcional da IA na próxima etapa." : "Você poderá editar e revisar o texto manualmente na próxima etapa.")}
     ${renderRichTextEditor({ key: "correspondence.base", html: c.baseHtml, text: c.baseText, label: "Corpo do documento *", placeholder: "Escreva o conteúdo do documento…", help: "Use a barra para formatar e organizar as informações" })}
   </section>
   <section class="panel">
     ${panelHeader("Assinaturas", "Adicione uma ou mais pessoas. Os nomes ficarão em negrito e os cargos em itálico.", `<button class="button button-secondary" type="button" data-action="open-signatures">Configurar assinaturas</button>`)}
     ${renderCorrespondenceSignatureSelector()}
   </section>
-  <div class="notice is-warning"><span aria-hidden="true">!</span><span>A IA será orientada a revisar a linguagem sem inventar fatos, datas, leis, prazos ou penalidades. Confira o texto antes de gerar o Word.</span></div>`;
+  ${canUseAI() ? `<div class="notice is-warning"><span aria-hidden="true">!</span><span>A IA será orientada a revisar a linguagem sem inventar fatos, datas, leis, prazos ou penalidades. Confira o texto antes de gerar o Word.</span></div>` : ""}`;
 }
 
 function renderCorrespondenceReview() {
@@ -4903,7 +4979,7 @@ function renderCorrespondenceReview() {
   const type = correspondenceType();
   return `${pageHeading("Etapa 3", `Revise ${type.article} ${type.label.toLowerCase()}`, "Edite livremente, solicite uma revisão opcional da IA ou gere o Word com o texto atual.")}
   <section class="panel">
-    ${panelHeader("Texto final", "Somente o conteúdo deste campo será incluído como corpo do documento.", `<button class="button button-secondary" type="button" data-action="improve-correspondence">✦ Revisar com IA</button>`)}
+    ${panelHeader("Texto final", "Somente o conteúdo deste campo será incluído como corpo do documento.", isApiReady() ? `<button class="button button-secondary" type="button" data-action="improve-correspondence">✦ Revisar com IA</button>` : "")}
     ${renderRichTextEditor({ key: "correspondence.final", html: c.finalHtml, text: c.finalText, label: "Redação final *", placeholder: "Revise o texto final…", help: "Revise nomes, datas e informações sensíveis" })}
   </section>
   <div class="summary-grid">
@@ -4914,7 +4990,7 @@ function renderCorrespondenceReview() {
   <section class="panel review-panel">
     <div class="review-block"><h3>Assinaturas</h3><div class="review-signatures">${c.signatories.map((signature) => signaturePreview(signature)).join("")}</div></div>
   </section>
-  ${!isApiReady() ? `<div class="notice is-warning"><span aria-hidden="true">✦</span><span>Configure sua chave da OpenAI para usar a revisão automática, ou continue com a edição manual.</span></div>` : `<div class="notice"><span aria-hidden="true">✓</span><span>IA configurada com <strong>${e(modelDisplayName(getSelectedModel()))}</strong>. O texto só será enviado quando você clicar no botão.</span></div>`}`;
+  ${isApiReady() ? `<div class="notice"><span aria-hidden="true">✓</span><span>IA disponível com <strong>${e(modelDisplayName(getSelectedModel()))}</strong>. O texto só será enviado quando você clicar no botão.</span></div>` : renderAIStatusNotice("Você pode continuar com a edição manual.")}`;
 }
 
 function renderProgress() {
@@ -5861,6 +5937,10 @@ function removePhoto(id) {
 }
 
 function openApiConfiguration() {
+  if (!canConfigureAI()) {
+    showToast("Somente o administrador pode configurar a IA.");
+    return;
+  }
   elements.apiKeyInput.value = "";
   elements.apiKeyInput.placeholder = state.api.hasKey
     ? `Nova chave (a atual termina em ••••${state.api.lastFour})`
@@ -5887,6 +5967,7 @@ function apiFormValues() {
 }
 
 async function saveApiConfiguration({ close = true } = {}) {
+  if (!canConfigureAI()) return false;
   const values = apiFormValues();
   const model = getSelectedModel(values);
   if (!model) {
@@ -5904,6 +5985,7 @@ async function saveApiConfiguration({ close = true } = {}) {
       body: { apiKey: values.apiKey, model },
     });
     state.api = {
+      ...state.api,
       hasKey: Boolean(api.hasKey),
       lastFour: api.lastFour || state.api.lastFour,
       model: values.model,
@@ -5929,6 +6011,7 @@ function showApiFeedback(message, error = false) {
 }
 
 async function testApiConfiguration() {
+  if (!canConfigureAI()) return;
   const values = apiFormValues();
   const model = getSelectedModel(values);
   if ((!values.apiKey && !state.api.hasKey) || !model) {
@@ -5958,11 +6041,13 @@ async function testApiConfiguration() {
 }
 
 async function removeApiConfiguration() {
+  if (!canConfigureAI()) return;
   elements.removeApiButton.disabled = true;
   showApiFeedback("Removendo a chave salva…");
   try {
     await apiRequest("/api/account/api-key", { method: "DELETE" });
     state.api = {
+      ...state.api,
       hasKey: false,
       lastFour: "",
       model: "gpt-5.6-terra",
@@ -5987,7 +6072,8 @@ async function callOpenAI({
   reasoningEffort = "low",
 }) {
   const model = getSelectedModel();
-  if (!state.api.hasKey || !model) throw new Error("Configure a chave da OpenAI e escolha um modelo.");
+  if (!canUseAI()) throw new Error("O administrador ainda não liberou o uso da IA para esta conta.");
+  if (!state.api.hasKey || !model) throw new Error("A IA ainda não foi configurada pelo administrador.");
 
   const content = [{ type: "input_text", text: prompt }];
   if (imageDataUrl) content.push({ type: "input_image", image_url: imageDataUrl, detail: "high" });
@@ -6031,6 +6117,21 @@ async function callOpenAI({
   return text.trim();
 }
 
+function ensureAIReady() {
+  if (!canUseAI()) {
+    showToast("O acesso à IA não está liberado para sua conta.");
+    return false;
+  }
+  if (isApiReady()) return true;
+  if (canConfigureAI()) {
+    openApiConfiguration();
+    showToast("Configure a IA antes de continuar.");
+  } else {
+    showToast("A IA ainda precisa ser configurada pelo administrador.");
+  }
+  return false;
+}
+
 function extractResponseText(data) {
   if (typeof data.output_text === "string") return data.output_text;
   const texts = [];
@@ -6046,9 +6147,10 @@ function extractResponseText(data) {
 function openAIErrorMessage(status, data) {
   const detail = data?.error?.message;
   if (status === 401) return "Chave da API inválida ou sem permissão. Confira a chave informada.";
-  if (status === 403) return "A conta ou o projeto não tem permissão para usar esse modelo.";
+  if (status === 403) return detail || "A conta não tem permissão para usar a IA.";
   if (status === 404) return "O modelo informado não foi encontrado para esta conta.";
   if (status === 429) return "Limite de uso ou créditos da API atingidos. Verifique sua conta da OpenAI.";
+  if (status === 503 && detail) return detail;
   if (status >= 500) return "A OpenAI está temporariamente indisponível. Tente novamente em instantes.";
   return detail ? `A OpenAI recusou a solicitação: ${detail}` : `Falha na OpenAI (código ${status}).`;
 }
@@ -6085,10 +6187,7 @@ async function analyzePhoto(id, { quiet = false } = {}) {
   const photo = state.report.photos.find((item) => item.id === id);
   if (!photo) return false;
   if (!isApiReady()) {
-    if (!quiet) {
-      openApiConfiguration();
-      showToast("Configure sua API para gerar a descrição.");
-    }
+    if (!quiet) ensureAIReady();
     return false;
   }
   photo.status = "working";
@@ -6128,11 +6227,7 @@ function updatePhotoCard(photo) {
 }
 
 async function analyzeAllPhotos() {
-  if (!isApiReady()) {
-    openApiConfiguration();
-    showToast("Configure sua API antes de iniciar as análises.");
-    return;
-  }
+  if (!ensureAIReady()) return;
   const pending = state.report.photos.filter((photo) => !photo.description.trim());
   if (!pending.length) {
     showToast("Todas as fotografias já possuem descrição.");
@@ -6181,8 +6276,7 @@ async function improveCota({ advanceOnSuccess = false } = {}) {
     return true;
   }
   if (!isApiReady()) {
-    openApiConfiguration();
-    showToast("Configure sua API para revisar o texto.");
+    ensureAIReady();
     return false;
   }
   const source = advanceOnSuccess ? c.baseText.trim() : (c.finalText.trim() || c.baseText.trim());
@@ -6223,11 +6317,7 @@ async function improveCota({ advanceOnSuccess = false } = {}) {
 }
 
 async function improveCorrespondence() {
-  if (!isApiReady()) {
-    openApiConfiguration();
-    showToast("Configure sua API para revisar o texto.");
-    return;
-  }
+  if (!ensureAIReady()) return;
   const c = state.correspondence;
   const source = c.finalText.trim() || c.baseText.trim();
   if (!source) return;
@@ -8455,6 +8545,10 @@ document.addEventListener("input", (event) => {
 document.addEventListener("change", (event) => {
   const target = event.target;
   clearValidationHighlight(target);
+  if (target.dataset.adminAiUser) {
+    void setAdminUserAiAccess(target.dataset.adminAiUser, target.checked);
+    return;
+  }
   if (target.dataset.adminCardKey && target.dataset.adminCardUser) {
     void setAdminUserCardAccess(
       target.dataset.adminCardUser,

@@ -265,7 +265,8 @@ test("requires an account and keeps registrations and encrypted API keys in D1",
   assert.match(worker, /proxyApiToPersonalCloudflare/);
   assert.match(worker, /docflow-fiscal-bertioga\.lucaspsimoes22\.workers\.dev/);
   assert.match(worker, /https:\/\/api\.openai\.com\/v1\/responses/);
-  assert.match(worker, /openAICredentialForUser/);
+  assert.match(worker, /openAICredentialForAccount/);
+  assert.match(worker, /canAccountUseAI/);
   assert.match(worker, /"Cache-Control": "no-store"/);
   assert.match(authWorker, /PBKDF2/);
   assert.match(authWorker, /PASSWORD_ITERATIONS = 100_000/);
@@ -285,8 +286,8 @@ test("requires an account and keeps registrations and encrypted API keys in D1",
 });
 
 
-test("keeps new registrations pending and limits user approval to the configured administrator", async () => {
-  const [app, page, styles, worker, authWorker, adminWorker, constants, dbAuth, dbAdmin, dbCardAccess, schema, migration, cardMigration] = await Promise.all([
+test("keeps new registrations pending and limits user approval and AI configuration to the configured administrator", async () => {
+  const [app, page, styles, worker, authWorker, adminWorker, constants, dbAuth, dbAdmin, dbCardAccess, schema, migration, cardMigration, aiMigration] = await Promise.all([
     readFile(new URL("public/docflow/app.js", siteRoot), "utf8"),
     readFile(new URL("public/docflow/index.html", siteRoot), "utf8"),
     readFile(new URL("public/docflow/styles.css", siteRoot), "utf8"),
@@ -300,10 +301,13 @@ test("keeps new registrations pending and limits user approval to the configured
     readFile(new URL("db/schema.ts", siteRoot), "utf8"),
     readFile(new URL("drizzle/0003_free_thor.sql", siteRoot), "utf8"),
     readFile(new URL("drizzle/0009_nostalgic_thanos.sql", siteRoot), "utf8"),
+    readFile(new URL("drizzle/0012_youthful_wilson_fisk.sql", siteRoot), "utf8"),
   ]);
 
   assert.match(page, /id="adminButton"[^>]*is-hidden/);
   assert.match(page, /id="adminPendingBadge"/);
+  assert.match(page, /id="apiButton"[^>]*is-hidden/);
+  assert.match(page, /configuração é exclusiva do administrador/);
   assert.match(page, /class="admin-bell-icon"/);
   assert.match(page, /Enviar solicitação de cadastro/);
   assert.match(page, /aprovação do administrador/);
@@ -319,8 +323,13 @@ test("keeps new registrations pending and limits user approval to the configured
   assert.match(app, /Último acesso/);
   assert.match(app, /HOME_CARD_OPTIONS/);
   assert.match(app, /data-admin-card-user=/);
+  assert.match(app, /data-admin-ai-user=/);
+  assert.match(app, /ETP:.*liberado.*TR:.*liberado/);
   assert.match(app, /role="switch"/);
   assert.match(app, /apiRequest\(`\/api\/admin\/users\/\$\{encodeURIComponent\(userId\)\}\/cards`/);
+  assert.match(app, /apiRequest\(`\/api\/admin\/users\/\$\{encodeURIComponent\(userId\)\}\/ai`/);
+  assert.match(app, /classList\.toggle\("is-hidden", !canConfigureAI\(\)\)/);
+  assert.match(app, /O acesso à IA não está liberado para sua conta/);
   assert.doesNotMatch(app, /homeCardVisibilityAttribute\("drainage"\)/);
   assert.match(app, /Este card não está liberado para a sua conta/);
   assert.doesNotMatch(app, /key: "drainage", label: "Drenagem", mark: "QD"/);
@@ -330,9 +339,12 @@ test("keeps new registrations pending and limits user approval to the configured
   assert.match(styles, /color:\s*#b42318/);
   assert.match(styles, /\.admin-user-item/);
   assert.match(styles, /\.admin-card-toggle input:checked \+ \.admin-card-switch/);
+  assert.match(styles, /\.admin-ai-toggle input:checked \+ \.admin-card-switch/);
   assert.match(worker, /url\.pathname === "\/api\/admin\/users"/);
   assert.match(worker, /handleAdminUserMutation/);
   assert.match(worker, /handleAdminUserCardAccess/);
+  assert.match(worker, /handleAdminUserAiAccess/);
+  assert.match(worker, /\/ai\$\/i/);
   assert.match(constants, /ADMIN_EMAIL = "lucaspsimoes22@gmail\.com"/);
   assert.match(adminWorker, /authenticated\.account\.isAdmin/);
   assert.match(adminWorker, /authenticated\.account\.email !== ADMIN_EMAIL/);
@@ -340,6 +352,10 @@ test("keeps new registrations pending and limits user approval to the configured
   assert.match(adminWorker, /request\.method !== "PATCH" && request\.method !== "DELETE"/);
   assert.match(adminWorker, /env\.DOCUMENTS\.delete/);
   assert.match(adminWorker, /updateUserCardAccess\(env\.DB/);
+  assert.match(adminWorker, /updateManagedUserAiAccess\(env\.DB/);
+  assert.match(authWorker, /Somente o administrador pode configurar a IA/);
+  assert.match(authWorker, /configurable: isAdmin/);
+  assert.match(authWorker, /getOpenAICredentialByEmail\(env\.DB, ADMIN_EMAIL\)/);
   assert.match(authWorker, /authJson\(\s*202,/);
   assert.match(authWorker, /Seu cadastro aguarda aprovação do administrador/);
   assert.match(authWorker, /Seu cadastro foi recusado/);
@@ -352,11 +368,13 @@ test("keeps new registrations pending and limits user approval to the configured
   assert.match(dbAdmin, /DELETE FROM users WHERE id = \? AND is_admin = 0/);
   assert.match(dbAdmin, /FROM generated_documents/);
   assert.match(dbAdmin, /FROM user_card_permissions/);
+  assert.match(dbAdmin, /SET ai_enabled = \?, updated_at = \?/);
   assert.match(dbCardAccess, /HOME_CARD_KEYS/);
   assert.match(dbCardAccess, /ON CONFLICT\(user_id, card_key\) DO UPDATE SET/);
   assert.match(dbCardAccess, /WHERE id = \? AND is_admin = 0/);
   assert.match(schema, /status:\s*text\("status"/);
   assert.match(schema, /isAdmin:\s*integer\("is_admin"/);
+  assert.match(schema, /aiEnabled:\s*integer\("ai_enabled"/);
   assert.match(schema, /lastLoginAt:\s*integer\("last_login_at"/);
   assert.match(schema, /userCardPermissions/);
   assert.match(migration, /lucaspsimoes22@gmail\.com/);
@@ -364,6 +382,7 @@ test("keeps new registrations pending and limits user approval to the configured
   assert.match(migration, /PRAGMA optimize/);
   assert.match(cardMigration, /CREATE TABLE `user_card_permissions`/);
   assert.match(cardMigration, /PRIMARY KEY\(`user_id`, `card_key`\)/);
+  assert.match(aiMigration, /ALTER TABLE `users` ADD `ai_enabled` integer DEFAULT false NOT NULL/);
 });
 
 

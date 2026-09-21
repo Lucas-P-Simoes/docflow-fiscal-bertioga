@@ -1,0 +1,1 @@
+ALTER TABLE `users` ADD `ai_enabled` integer DEFAULT false NOT NULL;
