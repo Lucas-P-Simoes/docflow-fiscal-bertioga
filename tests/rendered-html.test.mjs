@@ -324,7 +324,7 @@ test("keeps new registrations pending and limits user approval and AI configurat
   assert.match(app, /HOME_CARD_OPTIONS/);
   assert.match(app, /data-admin-card-user=/);
   assert.match(app, /data-admin-ai-user=/);
-  assert.match(app, /ETP:.*liberado.*TR:.*liberado/);
+  assert.match(app, /ETP:.*liberado.*TR:.*liberado.*Memorial:.*liberado/);
   assert.match(app, /role="switch"/);
   assert.match(app, /apiRequest\(`\/api\/admin\/users\/\$\{encodeURIComponent\(userId\)\}\/cards`/);
   assert.match(app, /apiRequest\(`\/api\/admin\/users\/\$\{encodeURIComponent\(userId\)\}\/ai`/);
@@ -389,17 +389,18 @@ test("keeps new registrations pending and limits user approval and AI configurat
 });
 
 
-test("labels every available document, including the technical opinion, ETP and TR, as ready", async () => {
+test("labels every available document, including the technical opinion, ETP, TR and Memorial, as ready", async () => {
   const [app, styles] = await Promise.all([
     readFile(new URL("public/docflow/app.js", siteRoot), "utf8"),
     readFile(new URL("public/docflow/styles.css", siteRoot), "utf8"),
   ]);
 
-  assert.equal((app.match(/card-status is-ready/g) || []).length, 8);
+  assert.equal((app.match(/card-status is-ready/g) || []).length, 9);
   assert.equal((app.match(/card-status is-development/g) || []).length, 0);
   assert.match(app, /data-action="start-report">[\s\S]*?card-status is-ready">Pronto<\/span>[\s\S]*?<h3>Parecer técnico<\/h3>/);
   assert.match(app, /data-action="start-etp">[\s\S]*?card-status is-ready">Pronto<\/span>[\s\S]*?<h3>Estudo Técnico Preliminar<\/h3>/);
   assert.match(app, /data-action="start-tr">[\s\S]*?card-status is-ready">Pronto<\/span>[\s\S]*?<h3>Termo de Referência<\/h3>/);
+  assert.match(app, /data-action="start-memorial">[\s\S]*?card-status is-ready">Pronto<\/span>[\s\S]*?<h3>Memorial Descritivo<\/h3>/);
   assert.match(app, /card-status is-ready">Pronto<\/span>[\s\S]*?<h3>Folha de cota<\/h3>/);
   assert.match(app, /data-kind="memorando">[\s\S]*?card-status is-ready">Pronto<\/span>[\s\S]*?<h3>Memorando<\/h3>/);
   assert.match(app, /data-kind="oficio">[\s\S]*?card-status is-ready">Pronto<\/span>[\s\S]*?<h3>Ofício<\/h3>/);
@@ -539,6 +540,47 @@ test("builds a Termo de Referência from the supplied model and exposes every re
   assert.match(cardAccess, /"tr"/);
   assert.match(schema, /"tr"/);
   assert.match(styles, /\.document-card\.is-tr/);
+});
+
+
+test("builds a Memorial Descritivo from an uploaded budget spreadsheet and the searchable CDHU criteria", async () => {
+  const [app, template, memorialWorker, workerIndex, documentWorker, cardAccess, schema, styles] = await Promise.all([
+    readFile(new URL("public/docflow/app.js", siteRoot), "utf8"),
+    readFile(new URL("public/docflow/templates/MODELO_MEMORIAL_DESCRITIVO.docx", siteRoot)),
+    readFile(new URL("worker/memorial.ts", siteRoot), "utf8"),
+    readFile(new URL("worker/index.ts", siteRoot), "utf8"),
+    readFile(new URL("worker/documents.ts", siteRoot), "utf8"),
+    readFile(new URL("db/card-access.ts", siteRoot), "utf8"),
+    readFile(new URL("db/schema.ts", siteRoot), "utf8"),
+    readFile(new URL("public/docflow/styles.css", siteRoot), "utf8"),
+  ]);
+
+  assert.ok(template.byteLength > 30_000 && template.byteLength < 50_000);
+  assert.match(app, /MEMORIAL_TEMPLATE_URL\s*=\s*"templates\/MODELO_MEMORIAL_DESCRITIVO\.docx"/);
+  assert.doesNotMatch(app, /CRITERIOS_MEDICAO_CDHU\.json/);
+  assert.match(app, /MEMORIAL_STEPS\s*=\s*\["Planilha orçamentária", "Revisão dos itens", "Revisão e download"\]/);
+  assert.match(app, /accept="\.xlsx,\.xls,\.csv,\.tsv/);
+  assert.match(app, /type: "input_file"/);
+  assert.match(app, /MEMORIAL_SPREADSHEET_SCHEMA/);
+  assert.match(app, /MEMORIAL_BATCH_SCHEMA/);
+  assert.match(app, /apiRequest\("\/api\/memorial\/criteria"/);
+  assert.match(app, /async function analyzeMemorialSpreadsheet/);
+  assert.match(app, /async function buildMemorialDocument/);
+  assert.match(app, /MEMORIAL DESCRITIVO/);
+  assert.match(app, /1\) Será medido por/);
+  assert.match(app, /2\) O item remunera/);
+  assert.match(app, /await finishDownload\(blob, filename, "Memorial Descritivo"\)/);
+  assert.match(memorialWorker, /reference-data\/memorial\/criterios-medicao-cdhu-v200\.json/);
+  assert.match(memorialWorker, /env\.DOCUMENTS\.get/);
+  assert.match(memorialWorker, /canAccountUseAI/);
+  assert.match(memorialWorker, /function criteriaPagesForItem/);
+  assert.match(workerIndex, /handleMemorialCriteria/);
+  assert.match(workerIndex, /\/api\/memorial\/criteria/);
+  assert.match(documentWorker, /"Memorial Descritivo"/);
+  assert.match(cardAccess, /"memorial"/);
+  assert.match(schema, /"memorial"/);
+  assert.match(styles, /\.document-card\.is-memorial/);
+  assert.match(styles, /\.memorial-item-list/);
 });
 
 
@@ -758,7 +800,7 @@ test("keeps a private account history for every generated document", async () =>
   assert.match(app, /Histórico de documentos/);
   assert.match(app, /apiRequest\("\/api\/documents"/);
   assert.match(app, /requestOptions\.body instanceof FormData/);
-  assert.equal((app.match(/await finishDownload\(/g) || []).length, 6);
+  assert.equal((app.match(/await finishDownload\(/g) || []).length, 7);
   assert.match(app, /data-action="download-history"/);
   assert.match(app, /\/api\/documents\/\$\{encodeURIComponent\(documentId\)\}\/download/);
   assert.match(worker, /url\.pathname === "\/api\/documents"/);

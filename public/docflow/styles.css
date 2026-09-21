@@ -3013,6 +3013,11 @@ select:focus-visible,
   background: #f8e8df;
 }
 
+.document-card.is-memorial .card-icon {
+  color: #5d3f86;
+  background: #eee8f7;
+}
+
 .document-card.is-admin .card-icon {
   color: #1d5870;
   background: #e4f2f7;
@@ -3535,6 +3540,57 @@ textarea::placeholder {
 }
 
 .selected-file .icon-button {
+  margin-left: auto;
+}
+
+.selected-spreadsheet {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  min-height: 86px;
+  padding: 15px;
+  border: 1px solid #bfd3c8;
+  border-radius: var(--radius-md);
+  background: #f2f8f5;
+}
+
+.selected-spreadsheet-mark {
+  display: grid;
+  flex: 0 0 auto;
+  place-items: center;
+  width: 48px;
+  height: 48px;
+  border-radius: 14px;
+  color: #ffffff;
+  background: var(--forest);
+  font-size: 10px;
+  font-weight: 900;
+  letter-spacing: 0.08em;
+}
+
+.selected-spreadsheet > div {
+  min-width: 0;
+}
+
+.selected-spreadsheet strong,
+.selected-spreadsheet small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.selected-spreadsheet strong {
+  font-size: 13px;
+}
+
+.selected-spreadsheet small {
+  margin-top: 5px;
+  color: var(--muted);
+  font-size: 10.5px;
+}
+
+.selected-spreadsheet .icon-button {
   margin-left: auto;
 }
 
@@ -4201,6 +4257,131 @@ textarea::placeholder {
 
 .tr-section-panel textarea {
   min-height: 132px;
+}
+
+.memorial-method-list {
+  display: grid;
+  gap: 12px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.memorial-method-list li {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr);
+  gap: 13px;
+  align-items: start;
+  padding: 14px;
+  border: 1px solid var(--line);
+  border-radius: 13px;
+  background: #fafbf9;
+}
+
+.memorial-method-list li > span {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  color: var(--forest-dark);
+  background: var(--forest-soft);
+  font-family: var(--serif);
+  font-size: 16px;
+}
+
+.memorial-method-list strong,
+.memorial-method-list p {
+  display: block;
+}
+
+.memorial-method-list strong {
+  font-size: 12.5px;
+}
+
+.memorial-method-list p {
+  margin: 4px 0 0;
+  color: var(--muted);
+  font-size: 10.5px;
+  line-height: 1.55;
+}
+
+.memorial-item-list {
+  display: grid;
+  gap: 18px;
+}
+
+.memorial-item {
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: #fafbf9;
+}
+
+.memorial-item.is-missing {
+  border-color: #e6c58d;
+  background: #fffaf0;
+}
+
+.memorial-item > header {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  gap: 13px;
+  align-items: start;
+  margin-bottom: 18px;
+}
+
+.memorial-item-index {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 12px;
+  color: #ffffff;
+  background: var(--forest);
+  font-size: 10px;
+  font-weight: 850;
+  letter-spacing: 0.08em;
+}
+
+.memorial-item h3 {
+  margin: 0;
+  font-family: var(--serif);
+  font-size: 18px;
+  font-weight: 500;
+  line-height: 1.25;
+}
+
+.memorial-item header p {
+  margin: 5px 0 0;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.memorial-source-status {
+  max-width: 220px;
+  padding: 7px 9px;
+  border-radius: 999px;
+  color: #28533f;
+  background: var(--forest-soft);
+  font-size: 9px;
+  font-weight: 800;
+  line-height: 1.3;
+  text-align: right;
+}
+
+.memorial-item.is-missing .memorial-source-status {
+  color: #765019;
+  background: var(--amber-soft);
+}
+
+.memorial-item textarea {
+  min-height: 112px;
+}
+
+.memorial-source-field {
+  margin-top: 14px;
 }
 
 .etp-risk-list {
@@ -7006,6 +7187,11 @@ body {
   .home-view .document-grid > .document-card { min-height: 188px; }
   .document-search { height: 46px; }
   .document-search kbd { display: none; }
+  .memorial-item { padding: 16px; }
+  .memorial-item > header { grid-template-columns: 38px minmax(0, 1fr); }
+  .memorial-item-index { width: 38px; height: 38px; }
+  .memorial-source-status { grid-column: 2; max-width: none; justify-self: start; text-align: left; }
+  .selected-spreadsheet { align-items: flex-start; }
 }
 
 @media print {

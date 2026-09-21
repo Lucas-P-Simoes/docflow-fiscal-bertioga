@@ -25,6 +25,7 @@ import {
 import { handleDocumentDownload, handleDocumentMutation, handleDocuments } from "./documents";
 import { handleSignatureMutation, handleSignatures } from "./signatures";
 import { handleProcessMutation, handleProcesses } from "./processes";
+import { handleMemorialCriteria } from "./memorial";
 import {
   handleKanban,
   handleKanbanAttachmentMutation,
@@ -122,7 +123,7 @@ async function proxyOpenAI(request: Request, env: Env): Promise<Response> {
 function boundedOutputTokens(value: unknown): number {
   const numeric = typeof value === "number" ? value : Number(value);
   if (!Number.isFinite(numeric)) return 600;
-  return Math.min(2_000, Math.max(16, Math.round(numeric)));
+  return Math.min(20_000, Math.max(16, Math.round(numeric)));
 }
 
 function isObject(value: unknown): value is Record<string, unknown> {
@@ -243,6 +244,9 @@ const worker = {
       }
       if (url.pathname === "/api/openai") {
         return await proxyOpenAI(request, env);
+      }
+      if (url.pathname === "/api/memorial/criteria") {
+        return await handleMemorialCriteria(request, env);
       }
       if (url.pathname === "/api/processes") {
         return await handleProcesses(request, env);

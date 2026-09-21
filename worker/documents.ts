@@ -15,6 +15,7 @@ const DOCUMENT_TYPES = new Set([
   "Parecer técnico",
   "Estudo Técnico Preliminar",
   "Termo de Referência",
+  "Memorial Descritivo",
   "Relatório fotográfico",
   "Folha de cota",
   "Memorando",
