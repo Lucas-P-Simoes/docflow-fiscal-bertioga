@@ -329,6 +329,9 @@ test("keeps new registrations pending and limits user approval and AI configurat
   assert.match(app, /apiRequest\(`\/api\/admin\/users\/\$\{encodeURIComponent\(userId\)\}\/cards`/);
   assert.match(app, /apiRequest\(`\/api\/admin\/users\/\$\{encodeURIComponent\(userId\)\}\/ai`/);
   assert.match(app, /classList\.toggle\("is-hidden", !canConfigureAI\(\)\)/);
+  assert.match(app, /const ADMIN_EMAIL = "lucaspsimoes22@gmail\.com"/);
+  assert.match(app, /function createAccountApiState\(api, user\)/);
+  assert.match(app, /typeof currentApi\.configurable === "boolean" \? currentApi\.configurable : isAdmin/);
   assert.match(app, /O acesso à IA não está liberado para sua conta/);
   assert.doesNotMatch(app, /homeCardVisibilityAttribute\("drainage"\)/);
   assert.match(app, /Este card não está liberado para a sua conta/);

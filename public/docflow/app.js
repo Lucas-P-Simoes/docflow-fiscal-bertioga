@@ -2,6 +2,7 @@
 
 const LEGACY_DOCFLOW_PATHS = new Set(["/docflow/", "/docflow/index.html"]);
 const APP_HISTORY_KEY = "__fiscalBertiogaNavigation";
+const ADMIN_EMAIL = "lucaspsimoes22@gmail.com";
 const NAVIGABLE_FLOWS = new Set(["drainage", "report", "etp", "tr", "cota", "correspondence", "notification", "warning"]);
 if (LEGACY_DOCFLOW_PATHS.has(window.location.pathname)) {
   window.history.replaceState(
@@ -336,6 +337,23 @@ function createApiState(api = {}) {
     model: knownModels.has(selectedModel) ? selectedModel : "custom",
     customModel: knownModels.has(selectedModel) ? "" : selectedModel,
   };
+}
+
+function isConfiguredAdminUser(user) {
+  return Boolean(
+    user?.isAdmin
+    && String(user.email || "").trim().toLowerCase() === ADMIN_EMAIL,
+  );
+}
+
+function createAccountApiState(api, user) {
+  const currentApi = api && typeof api === "object" ? api : {};
+  const isAdmin = isConfiguredAdminUser(user);
+  return createApiState({
+    ...currentApi,
+    allowed: typeof currentApi.allowed === "boolean" ? currentApi.allowed : isAdmin,
+    configurable: typeof currentApi.configurable === "boolean" ? currentApi.configurable : isAdmin,
+  });
 }
 
 function createProcessesState() {
@@ -1281,7 +1299,7 @@ function applyAccount(payload) {
   state.admin = createAdminState();
   state.processes = createProcessesState();
   state.kanban = createKanbanState();
-  state.api = createApiState(payload.api);
+  state.api = createAccountApiState(payload.api, payload.user);
   if (!state.api.allowed) state.cota.useAI = false;
   const isAdmin = Boolean(payload.user?.isAdmin);
   elements.adminButton.classList.remove("has-pending");
@@ -1350,7 +1368,7 @@ async function refreshCurrentCardAccess() {
     const cardsChanged = HOME_CARD_OPTIONS.some(
       (card) => nextAccess[card.key] !== state.auth.cardAccess?.[card.key],
     );
-    const nextApi = createApiState(account.api);
+    const nextApi = createAccountApiState(account.api, account.user || state.auth.user);
     const apiChanged = ["allowed", "configurable", "hasKey", "lastFour", "model", "customModel"]
       .some((key) => nextApi[key] !== state.api[key]);
     if (!cardsChanged && !apiChanged) return;
