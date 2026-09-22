@@ -20,7 +20,7 @@
     <title>Fiscal Bertioga</title>
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=20260915-shield-check" />
-    <link rel="stylesheet" href="styles.css?v=20260921-memorial" />
+    <link rel="stylesheet" href="styles.css?v=20260922-ai-admin" />
   </head>
   <body>
     <!-- Lucide icons, ISC License: https://lucide.dev/license -->
@@ -280,47 +280,90 @@
       </footer>
     </div>
 
-    <dialog id="apiDialog" class="dialog">
-      <form id="apiForm" class="dialog-card" method="dialog">
-        <div class="dialog-topline">
-          <span class="dialog-icon" aria-hidden="true">✦</span>
-          <button class="icon-button" type="button" data-action="close-api" aria-label="Fechar">×</button>
+    <dialog id="apiDialog" class="dialog api-dialog">
+      <form id="apiForm" class="dialog-card api-dialog-card" method="dialog">
+        <div class="api-dialog-heading">
+          <div>
+            <span class="api-dialog-kicker"><svg class="lucide-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-sparkles"></use></svg> Configuração da IA</span>
+            <h2>Conecte a OpenAI aos seus cards</h2>
+            <p>Uma única configuração abastece as análises de IA liberadas para a equipe.</p>
+          </div>
+          <button class="icon-button" type="button" data-action="close-api" aria-label="Fechar configuração da IA">×</button>
         </div>
-        <span class="eyebrow eyebrow-dark">Inteligência artificial</span>
-        <h2>Conecte sua API da OpenAI</h2>
-        <p class="dialog-lead">
-          Esta configuração é exclusiva do administrador. A chave será criptografada no servidor e usada somente pelas contas que você autorizar.
-        </p>
 
-        <label class="field">
-          <span>Chave da API</span>
-          <span class="password-field">
-            <input id="apiKeyInput" type="password" name="apiKey" autocomplete="off" placeholder="sk-..." />
-            <button class="password-toggle" type="button" data-action="toggle-key" aria-label="Mostrar ou ocultar chave">Mostrar</button>
-          </span>
-          <small id="apiKeyHelp">A chave não será exibida novamente. Nunca a inclua em prints, documentos ou mensagens.</small>
-        </label>
+        <div id="apiConnectionSummary" class="api-connection-summary" aria-live="polite">
+          <span class="api-connection-indicator" aria-hidden="true"></span>
+          <div><strong id="apiConnectionTitle">Configuração pendente</strong><span id="apiConnectionDescription">Informe uma chave e teste a conexão para liberar as análises.</span></div>
+        </div>
 
-        <label class="field">
-          <span>Modelo</span>
-          <select id="modelSelect" name="model">
-            <option value="gpt-5.6-terra">GPT-5.6 Terra — equilíbrio recomendado</option>
-            <option value="gpt-5.6-sol">GPT-5.6 Sol — máxima qualidade</option>
-            <option value="gpt-5.6-luna">GPT-5.6 Luna — maior economia</option>
-            <option value="custom">Outro modelo</option>
-          </select>
-        </label>
+        <div class="api-dialog-layout">
+          <div class="api-configuration-form">
+            <section class="api-configuration-step" aria-labelledby="apiKeyLabel">
+              <span class="api-step-number" aria-hidden="true">1</span>
+              <div class="api-step-content">
+                <div class="api-step-heading">
+                  <div><strong id="apiKeyLabel">Chave da API</strong><span>Copie a chave criada no painel da OpenAI.</span></div>
+                  <a href="https://platform.openai.com/api-keys" target="_blank" rel="noopener noreferrer">Criar chave <span aria-hidden="true">↗</span></a>
+                </div>
+                <label class="field api-key-field">
+                  <span class="sr-only">Chave da API da OpenAI</span>
+                  <span class="password-field">
+                    <input id="apiKeyInput" type="password" name="apiKey" autocomplete="new-password" placeholder="sk-..." aria-describedby="apiKeyHelp" />
+                    <button class="password-toggle" type="button" data-action="toggle-key" aria-label="Mostrar ou ocultar chave">Mostrar</button>
+                  </span>
+                  <small id="apiKeyHelp">A chave é criptografada no servidor e não volta a ser exibida.</small>
+                </label>
+              </div>
+            </section>
 
-        <label id="customModelField" class="field is-hidden">
-          <span>ID do modelo</span>
-          <input id="customModelInput" type="text" name="customModel" placeholder="Ex.: gpt-5.6" />
-        </label>
+            <section class="api-configuration-step" aria-labelledby="apiModelLabel">
+              <span class="api-step-number" aria-hidden="true">2</span>
+              <div class="api-step-content">
+                <div class="api-step-heading"><div><strong id="apiModelLabel">Modelo padrão</strong><span>O mesmo modelo será usado como base em todos os cards com IA.</span></div></div>
+                <label class="field api-model-field">
+                  <span class="sr-only">Modelo da OpenAI</span>
+                  <select id="modelSelect" name="model">
+                    <option value="gpt-5.6-terra">GPT-5.6 Terra — equilíbrio recomendado</option>
+                    <option value="gpt-5.6-sol">GPT-5.6 Sol — máxima qualidade</option>
+                    <option value="gpt-5.6-luna">GPT-5.6 Luna — maior economia</option>
+                    <option value="custom">Outro modelo</option>
+                  </select>
+                  <small id="apiModelDetails">Equilibra qualidade, velocidade e custo para as análises do dia a dia.</small>
+                </label>
 
-        <div id="apiFeedback" class="inline-feedback is-hidden" role="status"></div>
+                <label id="customModelField" class="field is-hidden">
+                  <span>ID do modelo</span>
+                  <input id="customModelInput" type="text" name="customModel" autocomplete="off" placeholder="Ex.: gpt-5.6" />
+                </label>
+              </div>
+            </section>
 
-        <div class="dialog-actions">
-          <button id="removeApiButton" class="button button-quiet is-hidden" type="button" data-action="remove-api">Remover chave</button>
-          <button id="testApiButton" class="button button-secondary" type="button" data-action="test-api">Salvar e testar</button>
+            <section class="api-configuration-step" aria-labelledby="apiTestLabel">
+              <span class="api-step-number" aria-hidden="true">3</span>
+              <div class="api-step-content">
+                <div class="api-step-heading"><div><strong id="apiTestLabel">Teste e ativação</strong><span>Valide a chave antes de disponibilizar a IA para os usuários autorizados.</span></div></div>
+                <button id="testApiButton" class="button button-secondary api-test-button" type="button" data-action="test-api"><svg class="lucide-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-sparkles"></use></svg> Salvar e testar conexão</button>
+                <div id="apiFeedback" class="inline-feedback is-hidden" role="status"></div>
+              </div>
+            </section>
+          </div>
+
+          <aside class="api-scope-card" aria-label="Uso da inteligência artificial">
+            <span class="eyebrow eyebrow-dark">Uma configuração</span>
+            <h3>Onde a IA será usada</h3>
+            <ul>
+              <li><span>PF</span><div><strong>Parecer técnico</strong><small>Descrição assistida das fotos da vistoria.</small></div></li>
+              <li><span>MD</span><div><strong>Memorial descritivo</strong><small>Leitura da planilha e detalhamento dos itens.</small></div></li>
+              <li><span>TX</span><div><strong>Textos oficiais</strong><small>Revisão opcional de cotas e correspondências.</small></div></li>
+            </ul>
+            <div class="api-security-note"><strong>Proteção da chave</strong><span>Esta configuração é exclusiva do administrador. A chave será criptografada no servidor; os demais usuários apenas utilizam os cards liberados.</span></div>
+          </aside>
+        </div>
+
+        <div class="dialog-actions api-dialog-actions">
+          <button id="removeApiButton" class="button button-quiet button-danger is-hidden" type="button" data-action="remove-api">Remover chave</button>
+          <span class="api-actions-spacer" aria-hidden="true"></span>
+          <button class="button button-secondary" type="button" data-action="close-api">Cancelar</button>
           <button class="button button-primary" type="submit">Salvar configuração</button>
         </div>
       </form>
@@ -563,6 +606,6 @@
     <script src="vendor/docx.iife.js" defer></script>
     <script src="vendor/html2canvas.min.js" defer></script>
     <script src="vendor/jspdf.umd.min.js" defer></script>
-    <script src="app.js?v=20260921-memorial" defer></script>
+    <script src="app.js?v=20260922-ai-admin" defer></script>
   </body>
 </html>

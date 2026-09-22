@@ -265,6 +265,10 @@ const elements = {
   modelSelect: document.querySelector("#modelSelect"),
   customModelField: document.querySelector("#customModelField"),
   customModelInput: document.querySelector("#customModelInput"),
+  apiModelDetails: document.querySelector("#apiModelDetails"),
+  apiConnectionSummary: document.querySelector("#apiConnectionSummary"),
+  apiConnectionTitle: document.querySelector("#apiConnectionTitle"),
+  apiConnectionDescription: document.querySelector("#apiConnectionDescription"),
   apiFeedback: document.querySelector("#apiFeedback"),
   testApiButton: document.querySelector("#testApiButton"),
   removeApiButton: document.querySelector("#removeApiButton"),
@@ -902,6 +906,26 @@ function modelDisplayName(model) {
     "gpt-5.6-luna": "GPT-5.6 Luna",
   };
   return labels[model] || model || "Configurar IA";
+}
+
+function modelDescription(model) {
+  const descriptions = {
+    "gpt-5.6-sol": "Prioriza qualidade em análises mais complexas e detalhadas.",
+    "gpt-5.6-terra": "Equilibra qualidade, velocidade e custo para as análises do dia a dia.",
+    "gpt-5.6-luna": "Prioriza economia e agilidade em tarefas de maior volume.",
+    custom: "Use apenas se você souber o ID exato de outro modelo disponível na sua conta.",
+  };
+  return descriptions[model] || descriptions.custom;
+}
+
+function updateApiConfigurationDialog() {
+  const connected = isApiReady();
+  elements.apiConnectionSummary.classList.toggle("is-connected", connected);
+  elements.apiConnectionTitle.textContent = connected ? "IA conectada" : "Configuração pendente";
+  elements.apiConnectionDescription.textContent = connected
+    ? `${modelDisplayName(getSelectedModel())} • chave terminada em ••••${state.api.lastFour}`
+    : "Informe uma chave e teste a conexão para liberar as análises.";
+  elements.apiModelDetails.textContent = modelDescription(elements.modelSelect.value);
 }
 
 function sortedSignatureProfiles() {
@@ -1917,12 +1941,13 @@ function renderAdminPanel() {
 
   return `<section class="document-section admin-section">
     <div class="admin-heading">
-      <div><span class="eyebrow eyebrow-dark">Acesso restrito</span><h2>Administração de usuários</h2><p>Revise cadastros e escolha quem poderá usar a IA e cada card, incluindo ETP, TR e Memorial Descritivo.</p></div>
+      <div><span class="eyebrow eyebrow-dark">Acesso restrito</span><h2>Administração</h2><p>Configure a inteligência artificial, revise cadastros e escolha quais recursos cada pessoa poderá utilizar.</p></div>
       <div class="admin-heading-actions">
         <button class="button button-secondary" type="button" data-action="home">← Voltar</button>
         <button class="button button-secondary" type="button" data-action="refresh-admin" ${state.admin.loading ? "disabled" : ""}>Atualizar</button>
       </div>
     </div>
+    ${renderAdminAIConfiguration()}
     <div class="admin-summary" aria-label="Resumo dos usuários">
       <article><span>Pendentes</span><strong>${pendingUsers.length}</strong></article>
       <article><span>Aprovados</span><strong>${approvedCount}</strong></article>
@@ -1937,6 +1962,31 @@ function renderAdminPanel() {
       <div class="admin-group-heading"><div><span class="eyebrow eyebrow-dark">Contas cadastradas</span><h3 id="reviewedUsersTitle">Usuários revisados</h3></div><span class="admin-count">${reviewedUsers.length}</span></div>
       ${reviewedContent}
     </section>
+  </section>`;
+}
+
+function renderAdminAIConfiguration() {
+  const connected = isApiReady();
+  const statusLabel = connected ? "Conectada" : "Configuração pendente";
+  const statusCopy = connected
+    ? `Chave protegida terminada em ••••${e(state.api.lastFour)}.`
+    : "Adicione uma chave da OpenAI para ativar os cards que usam análise de IA.";
+  const model = connected ? modelDisplayName(getSelectedModel()) : "Ainda não definido";
+  return `<section class="admin-ai-configuration${connected ? " is-connected" : ""}" aria-labelledby="adminAiConfigurationTitle">
+    <div class="admin-ai-visual" aria-hidden="true">${lucideIcon("sparkles")}</div>
+    <div class="admin-ai-copy">
+      <div class="admin-ai-title-row">
+        <div><span class="eyebrow eyebrow-dark">Base dos cards inteligentes</span><h3 id="adminAiConfigurationTitle">API da OpenAI</h3></div>
+        <span class="admin-ai-status"><i aria-hidden="true"></i>${statusLabel}</span>
+      </div>
+      <p>${statusCopy}</p>
+      <div class="admin-ai-metadata">
+        <span><small>Modelo padrão</small><strong>${e(model)}</strong></span>
+        <span><small>Aplicação</small><strong>Pareceres, memoriais e textos</strong></span>
+        <span><small>Acesso</small><strong>Somente usuários autorizados</strong></span>
+      </div>
+    </div>
+    <button class="button ${connected ? "button-secondary" : "button-primary"}" type="button" data-action="open-api">${connected ? "Gerenciar conexão" : "Configurar agora"}</button>
   </section>`;
 }
 
@@ -6193,6 +6243,7 @@ function openApiConfiguration() {
   elements.removeApiButton.classList.toggle("is-hidden", !state.api.hasKey);
   elements.apiFeedback.className = "inline-feedback is-hidden";
   elements.apiFeedback.textContent = "";
+  updateApiConfigurationDialog();
   openDialog(elements.apiDialog);
   setTimeout(() => elements.apiKeyInput.focus(), 80);
 }
@@ -6233,9 +6284,10 @@ async function saveApiConfiguration({ close = true } = {}) {
     elements.apiKeyInput.value = "";
     elements.removeApiButton.classList.remove("is-hidden");
     updateApiBadge();
+    updateApiConfigurationDialog();
     if (close) closeDialog(elements.apiDialog);
     showToast(`IA configurada com ${modelDisplayName(model)}.`);
-    if (state.flow) render();
+    if (state.flow || state.admin.open) render();
     return true;
   } catch (error) {
     if (error.status === 401) showAuthGate("login");
@@ -6294,7 +6346,7 @@ async function removeApiConfiguration() {
     };
     closeDialog(elements.apiDialog);
     updateApiBadge();
-    if (state.flow) render();
+    if (state.flow || state.admin.open) render();
     showToast("Chave da OpenAI removida da sua conta.");
   } catch (error) {
     if (error.status === 401) showAuthGate("login");
@@ -9306,6 +9358,7 @@ document.addEventListener("dragend", (event) => {
 
 elements.modelSelect.addEventListener("change", () => {
   elements.customModelField.classList.toggle("is-hidden", elements.modelSelect.value !== "custom");
+  elements.apiModelDetails.textContent = modelDescription(elements.modelSelect.value);
   if (elements.modelSelect.value === "custom") elements.customModelInput.focus();
 });
 

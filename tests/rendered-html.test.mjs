@@ -308,6 +308,9 @@ test("keeps new registrations pending and limits user approval and AI configurat
   assert.match(page, /id="adminPendingBadge"/);
   assert.match(page, /id="apiButton"[^>]*is-hidden/);
   assert.match(page, /configuração é exclusiva do administrador/);
+  assert.match(page, /id="apiConnectionSummary"/);
+  assert.match(page, /Conecte a OpenAI aos seus cards/);
+  assert.match(page, /Salvar e testar conexão/);
   assert.match(page, /class="admin-bell-icon"/);
   assert.match(page, /Enviar solicitação de cadastro/);
   assert.match(page, /aprovação do administrador/);
@@ -329,6 +332,9 @@ test("keeps new registrations pending and limits user approval and AI configurat
   assert.match(app, /apiRequest\(`\/api\/admin\/users\/\$\{encodeURIComponent\(userId\)\}\/cards`/);
   assert.match(app, /apiRequest\(`\/api\/admin\/users\/\$\{encodeURIComponent\(userId\)\}\/ai`/);
   assert.match(app, /classList\.toggle\("is-hidden", !canConfigureAI\(\)\)/);
+  assert.match(app, /function renderAdminAIConfiguration\(\)/);
+  assert.match(app, /function updateApiConfigurationDialog\(\)/);
+  assert.match(app, /Base dos cards inteligentes/);
   assert.match(app, /const ADMIN_EMAIL = "lucaspsimoes22@gmail\.com"/);
   assert.match(app, /function createAccountApiState\(api, user\)/);
   assert.match(app, /typeof currentApi\.configurable === "boolean" \? currentApi\.configurable : isAdmin/);
@@ -341,6 +347,8 @@ test("keeps new registrations pending and limits user approval and AI configurat
   assert.match(styles, /\.admin-button\.has-pending \.admin-bell-icon/);
   assert.match(styles, /color:\s*#b42318/);
   assert.match(styles, /\.admin-user-item/);
+  assert.match(styles, /\.admin-ai-configuration/);
+  assert.match(styles, /\.api-dialog-layout/);
   assert.match(styles, /\.admin-card-toggle input:checked \+ \.admin-card-switch/);
   assert.match(styles, /\.admin-ai-toggle input:checked \+ \.admin-card-switch/);
   assert.match(worker, /url\.pathname === "\/api\/admin\/users"/);
