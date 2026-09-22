@@ -4840,11 +4840,23 @@ textarea::placeholder {
 }
 
 .api-dialog {
-  width: min(calc(100% - 32px), 880px);
+  inset: 0;
+  width: 100vw;
+  max-width: none;
+  height: 100vh;
+  height: 100dvh;
+  max-height: none;
+  margin: 0;
+  border-radius: 0;
+  overscroll-behavior: contain;
 }
 
 .api-dialog-card {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
   padding: 0;
+  border-radius: 0;
   overflow: hidden;
 }
 
@@ -4942,8 +4954,9 @@ textarea::placeholder {
 
 .api-dialog-layout {
   display: grid;
-  grid-template-columns: minmax(0, 1.62fr) minmax(235px, 0.78fr);
+  grid-template-columns: minmax(0, 1.8fr) minmax(300px, 0.8fr);
   gap: 22px;
+  flex: 1 0 auto;
   padding: 21px 28px 10px;
 }
 
@@ -5122,10 +5135,14 @@ textarea::placeholder {
 }
 
 .api-dialog-actions {
+  position: sticky;
+  bottom: 0;
+  z-index: 2;
   align-items: center;
   margin: 10px 28px 0;
   padding: 18px 0 24px;
   border-top: 1px solid var(--line);
+  background: var(--paper);
 }
 
 .api-actions-spacer {

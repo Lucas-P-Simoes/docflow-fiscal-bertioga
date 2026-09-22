@@ -349,6 +349,7 @@ test("keeps new registrations pending and limits user approval and AI configurat
   assert.match(styles, /\.admin-user-item/);
   assert.match(styles, /\.admin-ai-configuration/);
   assert.match(styles, /\.api-dialog-layout/);
+  assert.match(styles, /\.api-dialog\s*\{[\s\S]*?width:\s*100vw;[\s\S]*?height:\s*100dvh;/);
   assert.match(styles, /\.admin-card-toggle input:checked \+ \.admin-card-switch/);
   assert.match(styles, /\.admin-ai-toggle input:checked \+ \.admin-card-switch/);
   assert.match(worker, /url\.pathname === "\/api\/admin\/users"/);
