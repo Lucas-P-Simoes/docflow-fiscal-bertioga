@@ -138,9 +138,10 @@
         description: find(/^descricao(?: dos servicos| de servicos)?$/),
         unit: find(/^unid(?:ade)?$/),
         quantity: find(/^quant(?:idade)?$/),
+        calculation: find(/^memoria de calculo$/),
       };
       if (columns.item >= 0 && columns.code >= 0 && columns.description >= 0 && columns.unit >= 0 && columns.quantity >= 0) {
-        return { rowIndex, columns };
+        return { rowIndex, columns, labels: row.map((value) => cell([value], 0)) };
       }
     }
     return null;
@@ -188,14 +189,74 @@
       || value.includes("descricao dos servicos");
   }
 
+  function compactEvidenceRow(row, labels = [], maxLength = 520) {
+    const parts = [];
+    for (let index = 0; index < (row || []).length; index += 1) {
+      const value = cell(row, index);
+      if (!value) continue;
+      const label = cell(labels, index);
+      const text = label && normalize(label) !== normalize(value) ? `${label}: ${value}` : value;
+      parts.push(text);
+      if (parts.join(" | ").length >= maxLength) break;
+    }
+    return parts.join(" | ").slice(0, maxLength);
+  }
+
+  function workbookContextFromSheets(sheets, budgetSheetNames) {
+    const lines = [];
+    for (const sheet of sheets) {
+      if (budgetSheetNames.has(sheet.name)) continue;
+      const preferred = /mem[oó]ria|c[aá]lculo/i.test(sheet.name);
+      let count = 0;
+      for (let rowIndex = 0; rowIndex < sheet.rows.length; rowIndex += 1) {
+        const rowText = compactEvidenceRow(sheet.rows[rowIndex], [], 320);
+        if (!rowText) continue;
+        lines.push(`Aba ${sheet.name}, linha ${rowIndex + 1}: ${rowText}`);
+        count += 1;
+        if (count >= (preferred ? 12 : 3) || lines.join("\n").length >= 2600) break;
+      }
+      if (lines.join("\n").length >= 2600) break;
+    }
+    return lines.join("\n").slice(0, 2600);
+  }
+
+  function attachWorkbookEvidence(items, sheets, budgetSheetNames) {
+    for (const item of items) {
+      const codeKey = normalize(item.referenceCode).replace(/\s+/g, "");
+      const descriptionKey = normalize(item.description);
+      const evidence = [];
+      if (item.rowContext) evidence.push(`Linha orçamentária: ${item.rowContext}`);
+      if (item.calculationContext) evidence.push(`Memória de cálculo da linha: ${item.calculationContext}`);
+
+      for (const sheet of sheets) {
+        for (let rowIndex = 0; rowIndex < sheet.rows.length; rowIndex += 1) {
+          if (sheet.name === item.sheet && String(rowIndex + 1) === item.row) continue;
+          const row = sheet.rows[rowIndex] || [];
+          const normalizedCells = row.map((value) => normalize(value));
+          const codeMatch = codeKey.length >= 4 && normalizedCells.some((value) => value.replace(/\s+/g, "") === codeKey);
+          const descriptionMatch = descriptionKey.length >= 18 && normalizedCells.some((value) => value === descriptionKey || value.includes(descriptionKey));
+          if (!codeMatch && !descriptionMatch) continue;
+          const rowText = compactEvidenceRow(row, [], 480);
+          if (rowText) evidence.push(`Aba ${sheet.name}, linha ${rowIndex + 1}: ${rowText}`);
+          if (evidence.length >= 5) break;
+        }
+        if (evidence.length >= 5) break;
+      }
+      item.supportingContext = evidence.join("\n").slice(0, 2200);
+    }
+    return workbookContextFromSheets(sheets, budgetSheetNames);
+  }
+
   function extractBudgetFromSheets(sheets) {
     const items = [];
     const metadata = findProjectMetadata(sheets);
+    const budgetSheetNames = new Set();
 
     for (const sheet of sheets) {
       const header = findHeader(sheet.rows);
       if (!header) continue;
-      const { columns } = header;
+      budgetSheetNames.add(sheet.name);
+      const { columns, labels } = header;
       let pendingSection = "";
       let pendingGroup = "";
       let pendingSubgroup = "";
@@ -208,6 +269,7 @@
         const description = cell(row, columns.description);
         const unit = cell(row, columns.unit);
         const quantity = cell(row, columns.quantity);
+        const calculationContext = columns.calculation >= 0 ? cell(row, columns.calculation) : "";
         const isService = Boolean(referenceCode && description && (reference || unit || quantity));
 
         if (isService) {
@@ -223,6 +285,9 @@
             sectionHeading: pendingSection,
             groupHeading: pendingGroup,
             subgroupHeading: pendingSubgroup,
+            calculationContext,
+            rowContext: compactEvidenceRow(row, labels),
+            supportingContext: "",
           });
           pendingSection = "";
           pendingGroup = "";
@@ -244,7 +309,8 @@
       }
     }
 
-    return { ...metadata, items };
+    const workbookContext = attachWorkbookEvidence(items, sheets, budgetSheetNames);
+    return { ...metadata, workbookContext, items };
   }
 
   function parseDelimited(text, delimiter) {

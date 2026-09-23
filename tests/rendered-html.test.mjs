@@ -588,6 +588,10 @@ test("builds a Memorial Descritivo from an uploaded budget spreadsheet and the s
   assert.match(app, /replaceMemorialIntroLine/);
   assert.match(app, /memorial-provenance-panel/);
   assert.match(app, /Parâmetros usados na geração/);
+  assert.match(app, /data-action="set-memorial-filter"/);
+  assert.match(app, /Preenchidos pela IA/);
+  assert.match(app, /sourceStatus="assisted"/);
+  assert.match(app, /memória de cálculo, a linha orçamentária e as outras abas/);
   assert.match(app, /MEMORIAL DESCRITIVO/);
   assert.match(app, /1\) Será medido por/);
   assert.match(app, /2\) O item remunera/);
@@ -605,6 +609,9 @@ test("builds a Memorial Descritivo from an uploaded budget spreadsheet and the s
   assert.match(schema, /"memorial"/);
   assert.match(styles, /\.document-card\.is-memorial/);
   assert.match(styles, /\.memorial-item-list/);
+  assert.match(styles, /\.memorial-filter-button/);
+  assert.match(styles, /\.memorial-item\.is-missing[\s\S]*?background:\s*#fff7d6/);
+  assert.match(styles, /\.memorial-item\.is-assisted/);
 });
 
 
@@ -615,19 +622,25 @@ test("memorial spreadsheet reader preserves every service after item 4.5", async
   const rows = [
     ["", "", "", "OBRA: CGBR REFORMA DA AREA ADMINISTRATIVA E COBERTURAS"],
     ["", "", "", "LOCAL: BAIRRO SITIO SÃO JOÃO"],
-    ["Item", "Ref.", "Cód.", "Descrição dos Serviços", "Unid.", "Quant."],
+    ["Item", "Ref.", "Cód.", "Descrição dos Serviços", "Unid.", "Quant.", "", "", "MEMORIA DE CÁLCULO"],
     ["A", "", "", "SERVIÇOS PRELIMINARES"],
     ["400", "", "", "SUPER ESTRUTURA"],
   ];
   for (let index = 1; index <= 164; index += 1) {
     const itemNumber = index === 20 ? "405" : index === 21 ? "406" : String(400 + index);
-    rows.push([itemNumber, "CDHU", `11.01.${String(index).padStart(3, "0")}`, index === 20 ? "CONCRETO USINADO, FCK = 25 MPA" : `SERVIÇO ${index}`, "UN", String(index)]);
+    rows.push([itemNumber, "CDHU", `11.01.${String(index).padStart(3, "0")}`, index === 20 ? "CONCRETO USINADO, FCK = 25 MPA" : `SERVIÇO ${index}`, "UN", String(index), "", "", index === 20 ? "Volume calculado conforme dimensões da estrutura" : ""]);
   }
-  const result = browserGlobal.DocflowMemorialXlsx.extractBudgetFromSheets([{ name: "Planilha ", rows }]);
+  const result = browserGlobal.DocflowMemorialXlsx.extractBudgetFromSheets([
+    { name: "Planilha ", rows },
+    { name: "Memoria de Cálculo", rows: [["Código", "Composição"], ["11.01.020", "Concreto estrutural da cobertura"]] },
+  ]);
   assert.equal(result.items.length, 164);
   assert.equal(result.items[0].sectionHeading, "A - SERVIÇOS PRELIMINARES");
   assert.equal(result.items[0].groupHeading, "400 SUPER ESTRUTURA");
   assert.equal(result.items[19].description, "CONCRETO USINADO, FCK = 25 MPA");
+  assert.equal(result.items[19].calculationContext, "Volume calculado conforme dimensões da estrutura");
+  assert.match(result.items[19].supportingContext, /Memoria de Cálculo, linha 2/);
+  assert.match(result.workbookContext, /Concreto estrutural da cobertura/);
   assert.equal(result.items[20].itemNumber, "406");
   assert.equal(result.items.at(-1).description, "SERVIÇO 164");
   assert.equal(result.projectName, "CGBR REFORMA DA AREA ADMINISTRATIVA E COBERTURAS");
