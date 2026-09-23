@@ -592,6 +592,11 @@ test("builds a Memorial Descritivo from an uploaded budget spreadsheet and the s
   assert.match(app, /Preenchidos pela IA/);
   assert.match(app, /sourceStatus="assisted"/);
   assert.match(app, /memória de cálculo, a linha orçamentária e as outras abas/);
+  assert.match(app, /ETAPA 1 — CRITÉRIO CDHU/);
+  assert.match(app, /ETAPA 2 — COMPLEMENTO PELA PLANILHA/);
+  assert.match(app, /const criteriaIndexes = batchIndexes\.filter/);
+  assert.match(app, /const fallbackIndexes = batchIndexes\.filter/);
+  assert.match(app, /CDHU primeiro; contexto da planilha somente quando a base oficial não completar o item/);
   assert.match(app, /MEMORIAL DESCRITIVO/);
   assert.match(app, /1\) Será medido por/);
   assert.match(app, /2\) O item remunera/);
