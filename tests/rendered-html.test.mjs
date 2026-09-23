@@ -575,6 +575,9 @@ test("builds a Memorial Descritivo from an uploaded budget spreadsheet and the s
   assert.doesNotMatch(app, /CRITERIOS_MEDICAO_CDHU\.json/);
   assert.match(app, /MEMORIAL_STEPS\s*=\s*\["Planilha orçamentária", "Revisão dos itens", "Revisão e download"\]/);
   assert.match(app, /accept="\.xlsx,\.xls,\.csv,\.tsv/);
+  assert.match(app, /MAX_MEMORIAL_SPREADSHEET_BYTES\s*=\s*20 \* 1024 \* 1024/);
+  assert.match(app, /1 arquivo • XLSX, XLS, CSV ou TSV/);
+  assert.match(app, /Envie apenas uma planilha por vez\./);
   assert.match(app, /type: "input_file"/);
   assert.match(app, /MEMORIAL_SPREADSHEET_SCHEMA/);
   assert.match(app, /MEMORIAL_BATCH_SCHEMA/);

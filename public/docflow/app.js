@@ -155,7 +155,7 @@ const TECHNICAL_OPINION_TEMPLATE_URL = "templates/MODELO_PARECER_TECNICO.docx";
 const ETP_TEMPLATE_URL = "templates/MODELO_ETP.docx";
 const TR_TEMPLATE_URL = "templates/MODELO_TR.docx";
 const MEMORIAL_TEMPLATE_URL = "templates/MODELO_MEMORIAL_DESCRITIVO.docx";
-const MAX_MEMORIAL_SPREADSHEET_BYTES = 8 * 1024 * 1024;
+const MAX_MEMORIAL_SPREADSHEET_BYTES = 20 * 1024 * 1024;
 const MEMORIAL_BATCH_SIZE = 4;
 const COTA_TEXT_STYLE = { font: "Arial", size: 24, language: { value: "pt-BR" } };
 const COTA_HEADER_FIELD_STYLE = { ...COTA_TEXT_STYLE, bold: true, italics: false };
@@ -4674,7 +4674,7 @@ function renderMemorialUpload() {
     : `<label class="upload-box memorial-upload-box" data-upload-kind="memorial-spreadsheet">
         <input type="file" accept=".xlsx,.xls,.csv,.tsv,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet,application/vnd.ms-excel,text/csv,text/tab-separated-values" data-file="memorial-spreadsheet" />
         <span class="upload-symbol" aria-hidden="true">+</span>
-        <span class="upload-copy"><strong>Selecionar planilha orçamentária</strong><span>XLSX, XLS, CSV ou TSV • até ${formatBytes(MAX_MEMORIAL_SPREADSHEET_BYTES)}</span></span>
+        <span class="upload-copy"><strong>Selecionar planilha orçamentária</strong><span>1 arquivo • XLSX, XLS, CSV ou TSV • até ${formatBytes(MAX_MEMORIAL_SPREADSHEET_BYTES)}</span></span>
       </label>`;
   return `${pageHeading("Etapa 1", "Envie a planilha orçamentária", "A IA identificará cada serviço e localizará no catálogo somente os critérios técnicos correspondentes.")}
   <section class="panel">
@@ -6163,6 +6163,10 @@ async function handleFiles(kind, files) {
   const list = [...files];
   if (!list.length) return;
   if (kind === "memorial-spreadsheet") {
+    if (list.length > 1) {
+      showToast("Envie apenas uma planilha por vez.");
+      return;
+    }
     const file = list[0];
     const extension = file.name.toLowerCase().split(".").pop();
     if (!["xlsx", "xls", "csv", "tsv"].includes(extension)) {
