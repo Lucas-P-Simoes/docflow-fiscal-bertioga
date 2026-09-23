@@ -6696,6 +6696,19 @@ function cleanMemorialParagraph(value, prefix) {
 }
 
 async function extractMemorialSpreadsheetItems(file) {
+  const extension = String(file?.name || "").split(".").pop()?.toLowerCase();
+  if (["xlsx", "csv", "tsv"].includes(extension)) {
+    if (!window.DocflowMemorialXlsx) throw new Error("O leitor completo da planilha não foi carregado. Atualize a página e tente novamente.");
+    const payload = await window.DocflowMemorialXlsx.extract(file);
+    const items = Array.isArray(payload.items) ? payload.items.map(cleanMemorialItem).filter((item) => item.description) : [];
+    if (!items.length) throw new Error("Nenhum item de serviço foi identificado na planilha. Confira a estrutura do arquivo e tente novamente.");
+    return {
+      projectName: String(payload.projectName || "").replace(/\s+/g, " ").trim(),
+      projectLocation: String(payload.projectLocation || "").replace(/\s+/g, " ").trim(),
+      items,
+    };
+  }
+
   const dataUrl = await fileAsDataUrl(file);
   const prompt = `Leia a planilha orçamentária anexada e devolva JSON no esquema solicitado.
 

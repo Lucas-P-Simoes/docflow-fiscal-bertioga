@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { readFile } from "node:fs/promises";
 import test from "node:test";
+import vm from "node:vm";
 
 
 const siteRoot = new URL("../", import.meta.url);
@@ -601,6 +602,33 @@ test("builds a Memorial Descritivo from an uploaded budget spreadsheet and the s
   assert.match(schema, /"memorial"/);
   assert.match(styles, /\.document-card\.is-memorial/);
   assert.match(styles, /\.memorial-item-list/);
+});
+
+
+test("memorial spreadsheet reader preserves every service after item 4.5", async () => {
+  const parser = await readFile(new URL("public/docflow/memorial-xlsx.js", siteRoot), "utf8");
+  const browserGlobal = {};
+  vm.runInNewContext(parser, { window: browserGlobal, globalThis: browserGlobal });
+  const rows = [
+    ["", "", "", "OBRA: CGBR REFORMA DA AREA ADMINISTRATIVA E COBERTURAS"],
+    ["", "", "", "LOCAL: BAIRRO SITIO SÃO JOÃO"],
+    ["Item", "Ref.", "Cód.", "Descrição dos Serviços", "Unid.", "Quant."],
+    ["A", "", "", "SERVIÇOS PRELIMINARES"],
+    ["400", "", "", "SUPER ESTRUTURA"],
+  ];
+  for (let index = 1; index <= 164; index += 1) {
+    const itemNumber = index === 20 ? "405" : index === 21 ? "406" : String(400 + index);
+    rows.push([itemNumber, "CDHU", `11.01.${String(index).padStart(3, "0")}`, index === 20 ? "CONCRETO USINADO, FCK = 25 MPA" : `SERVIÇO ${index}`, "UN", String(index)]);
+  }
+  const result = browserGlobal.DocflowMemorialXlsx.extractBudgetFromSheets([{ name: "Planilha ", rows }]);
+  assert.equal(result.items.length, 164);
+  assert.equal(result.items[0].sectionHeading, "A - SERVIÇOS PRELIMINARES");
+  assert.equal(result.items[0].groupHeading, "400 SUPER ESTRUTURA");
+  assert.equal(result.items[19].description, "CONCRETO USINADO, FCK = 25 MPA");
+  assert.equal(result.items[20].itemNumber, "406");
+  assert.equal(result.items.at(-1).description, "SERVIÇO 164");
+  assert.equal(result.projectName, "CGBR REFORMA DA AREA ADMINISTRATIVA E COBERTURAS");
+  assert.equal(result.projectLocation, "BAIRRO SITIO SÃO JOÃO");
 });
 
 
