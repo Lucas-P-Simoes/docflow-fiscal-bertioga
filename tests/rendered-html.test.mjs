@@ -569,7 +569,7 @@ test("builds a Memorial Descritivo from an uploaded budget spreadsheet and the s
     readFile(new URL("public/docflow/styles.css", siteRoot), "utf8"),
   ]);
 
-  assert.ok(template.byteLength > 30_000 && template.byteLength < 50_000);
+  assert.ok(template.byteLength > 90_000 && template.byteLength < 120_000);
   assert.match(app, /MEMORIAL_TEMPLATE_URL\s*=\s*"templates\/MODELO_MEMORIAL_DESCRITIVO\.docx"/);
   assert.doesNotMatch(app, /CRITERIOS_MEDICAO_CDHU\.json/);
   assert.match(app, /MEMORIAL_STEPS\s*=\s*\["Planilha orçamentária", "Revisão dos itens", "Revisão e download"\]/);
@@ -580,6 +580,10 @@ test("builds a Memorial Descritivo from an uploaded budget spreadsheet and the s
   assert.match(app, /apiRequest\("\/api\/memorial\/criteria"/);
   assert.match(app, /async function analyzeMemorialSpreadsheet/);
   assert.match(app, /async function buildMemorialDocument/);
+  assert.match(app, /memorialTechnicalStart/);
+  assert.match(app, /replaceMemorialIntroLine/);
+  assert.match(app, /memorial-provenance-panel/);
+  assert.match(app, /Parâmetros usados na geração/);
   assert.match(app, /MEMORIAL DESCRITIVO/);
   assert.match(app, /1\) Será medido por/);
   assert.match(app, /2\) O item remunera/);
@@ -588,6 +592,8 @@ test("builds a Memorial Descritivo from an uploaded budget spreadsheet and the s
   assert.match(memorialWorker, /env\.DOCUMENTS\.get/);
   assert.match(memorialWorker, /canAccountUseAI/);
   assert.match(memorialWorker, /function criteriaPagesForItem/);
+  assert.match(memorialWorker, /function exactCodeBlock/);
+  assert.match(memorialWorker, /directCriteria/);
   assert.match(workerIndex, /handleMemorialCriteria/);
   assert.match(workerIndex, /\/api\/memorial\/criteria/);
   assert.match(documentWorker, /"Memorial Descritivo"/);

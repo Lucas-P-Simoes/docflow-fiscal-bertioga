@@ -17,6 +17,15 @@ type MemorialItem = {
   description: string;
 };
 
+type CriteriaMatch = {
+  pages: Array<{ page: string; text: string }>;
+  method: "code" | "description" | "none";
+  matchedCode: string;
+  score: number;
+  measurement: string;
+  compensation: string;
+};
+
 let criteriaPagesPromise: Promise<CriteriaPage[]> | null = null;
 
 function normalizeSearchText(value: unknown, compact = false): string {
@@ -54,6 +63,51 @@ function descriptionTerms(description: string): string[] {
     .filter((term) => term.length >= 4 && !ignored.has(term));
 }
 
+function cleanCriterionParagraph(value: string, kind: "measurement" | "compensation"): string {
+  const withoutPageMarkers = value.replace(/\[\[PAGE:[^\]]+\]\]/g, " ").replace(/\s+/g, " ").trim();
+  if (kind === "measurement") {
+    return withoutPageMarkers.replace(/^ser[aá]\s+medido\s+por\s*/i, "").trim();
+  }
+  return withoutPageMarkers.replace(/^o\s+item\s+remunera\s*/i, "").trim();
+}
+
+function exactCodeBlock(item: MemorialItem, pages: CriteriaPage[]): CriteriaMatch | null {
+  const code = referenceCode(item);
+  if (code.length < 6) return null;
+  const firstPageIndex = pages.findIndex((page) => page.compact.includes(code));
+  if (firstPageIndex < 0) return null;
+
+  const windowPages = pages.slice(firstPageIndex, firstPageIndex + 4);
+  const joined = windowPages.map((page) => `[[PAGE:${page.page}]]\n${page.text}`).join("\n");
+  const serviceCodePattern = /\b\d{1,2}\s*[.\s-]\s*\d{2}\s*[.\s-]\s*\d{3}\b/g;
+  const matches = [...joined.matchAll(serviceCodePattern)];
+  const startMatchIndex = matches.findIndex((match) => normalizeSearchText(match[0], true) === code);
+  if (startMatchIndex < 0) return null;
+
+  const startMatch = matches[startMatchIndex];
+  const start = startMatch.index || 0;
+  const nextMatch = matches.slice(startMatchIndex + 1).find((match) => normalizeSearchText(match[0], true) !== code);
+  const end = nextMatch?.index ?? joined.length;
+  const block = joined.slice(start, end);
+  const measurementMatch = block.match(/1\s*\)\s*([\s\S]*?)(?=2\s*\)\s*(?:o\s+item\s+remunera)?)/i);
+  const compensationMatch = block.match(/2\s*\)\s*([\s\S]*)/i);
+  const measurement = measurementMatch ? cleanCriterionParagraph(measurementMatch[1], "measurement") : "";
+  const compensation = compensationMatch ? cleanCriterionParagraph(compensationMatch[1], "compensation") : "";
+  const usedPages = [...block.matchAll(/\[\[PAGE:([^\]]+)\]\]/g)].map((match) => match[1]);
+  if (!usedPages.includes(windowPages[0].page)) usedPages.unshift(windowPages[0].page);
+  const pageLabel = [...new Set(usedPages)].join(", ");
+  const excerpt = block.replace(/\[\[PAGE:[^\]]+\]\]/g, " ").replace(/\s+/g, " ").trim();
+
+  return {
+    pages: [{ page: pageLabel, text: excerpt }],
+    method: "code",
+    matchedCode: item.referenceCode || code,
+    score: 200,
+    measurement,
+    compensation,
+  };
+}
+
 async function loadCriteriaPages(env: Env): Promise<CriteriaPage[]> {
   if (!criteriaPagesPromise) {
     criteriaPagesPromise = env.DOCUMENTS.get(MEMORIAL_CRITERIA_OBJECT_KEY)
@@ -81,7 +135,10 @@ async function loadCriteriaPages(env: Env): Promise<CriteriaPage[]> {
   return criteriaPagesPromise;
 }
 
-function criteriaPagesForItem(item: MemorialItem, pages: CriteriaPage[]): CriteriaPage[] {
+function criteriaPagesForItem(item: MemorialItem, pages: CriteriaPage[]): CriteriaMatch {
+  const exact = exactCodeBlock(item, pages);
+  if (exact) return exact;
+
   const code = referenceCode(item);
   const descriptionCompact = normalizeSearchText(item.description, true);
   const terms = descriptionTerms(item.description);
@@ -119,7 +176,15 @@ function criteriaPagesForItem(item: MemorialItem, pages: CriteriaPage[]): Criter
     }
   });
 
-  return selected.sort((left, right) => Number(left.page) - Number(right.page));
+  const sorted = selected.sort((left, right) => Number(left.page) - Number(right.page));
+  return {
+    pages: sorted.map((page) => ({ page: page.page, text: page.text })),
+    method: sorted.length ? "description" : "none",
+    matchedCode: code,
+    score: ranked[0]?.score || 0,
+    measurement: "",
+    compensation: "",
+  };
 }
 
 function cleanItem(value: unknown, index: number): MemorialItem {
@@ -163,10 +228,23 @@ export async function handleMemorialCriteria(request: Request, env: Env): Promis
   try {
     const items = rawItems.map(cleanItem);
     const pages = await loadCriteriaPages(env);
-    const contexts = items.map((item) => ({
-      sequence: item.sequence,
-      pages: criteriaPagesForItem(item, pages).map((page) => ({ page: page.page, text: page.text })),
-    }));
+    const contexts = items.map((item) => {
+      const match = criteriaPagesForItem(item, pages);
+      return {
+        sequence: item.sequence,
+        pages: match.pages,
+        match: {
+          method: match.method,
+          code: match.matchedCode,
+          pages: [...new Set(match.pages.flatMap((page) => page.page.split(",").map((value) => value.trim()).filter(Boolean)))],
+          score: Math.round(match.score),
+        },
+        directCriteria: {
+          measurement: match.measurement,
+          compensation: match.compensation,
+        },
+      };
+    });
     return Response.json({ contexts }, {
       headers: {
         "Cache-Control": "no-store",

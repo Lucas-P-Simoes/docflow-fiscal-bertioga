@@ -4433,6 +4433,105 @@ textarea::placeholder {
   gap: 18px;
 }
 
+.memorial-provenance-panel {
+  margin-bottom: 18px;
+  border: 1px solid #bdd8cb;
+  border-radius: 15px;
+  background: #f4faf6;
+}
+
+.memorial-provenance-panel > summary {
+  display: grid;
+  grid-template-columns: 38px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 14px 16px;
+  list-style: none;
+  cursor: pointer;
+}
+
+.memorial-provenance-panel > summary::-webkit-details-marker,
+.memorial-item-provenance > summary::-webkit-details-marker {
+  display: none;
+}
+
+.memorial-info-icon,
+.memorial-item-provenance > summary > span {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border: 1px solid #9fc6b3;
+  border-radius: 50%;
+  color: #ffffff;
+  background: var(--forest);
+  font-family: var(--serif);
+  font-size: 17px;
+  font-style: italic;
+  font-weight: 700;
+}
+
+.memorial-provenance-panel summary strong,
+.memorial-provenance-panel summary small {
+  display: block;
+}
+
+.memorial-provenance-panel summary strong {
+  color: var(--ink);
+  font-size: 12px;
+}
+
+.memorial-provenance-panel summary small {
+  margin-top: 3px;
+  color: var(--muted);
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.memorial-provenance-chevron {
+  color: var(--forest);
+  font-size: 19px;
+  transition: transform 160ms ease;
+}
+
+.memorial-provenance-panel[open] .memorial-provenance-chevron {
+  transform: rotate(180deg);
+}
+
+.memorial-provenance-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  padding: 0 16px 16px 66px;
+}
+
+.memorial-provenance-grid > div {
+  padding: 11px 12px;
+  border: 1px solid #d7e8df;
+  border-radius: 11px;
+  background: #ffffff;
+}
+
+.memorial-provenance-grid span,
+.memorial-provenance-grid strong {
+  display: block;
+}
+
+.memorial-provenance-grid span {
+  color: var(--muted);
+  font-size: 9px;
+  font-weight: 750;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+}
+
+.memorial-provenance-grid strong {
+  margin-top: 4px;
+  color: var(--ink-soft);
+  font-size: 10.5px;
+  line-height: 1.45;
+}
+
 .memorial-item {
   padding: 20px;
   border: 1px solid var(--line);
@@ -4447,10 +4546,65 @@ textarea::placeholder {
 
 .memorial-item > header {
   display: grid;
-  grid-template-columns: 42px minmax(0, 1fr) auto;
+  grid-template-columns: 34px 42px minmax(0, 1fr) auto;
   gap: 13px;
   align-items: start;
   margin-bottom: 18px;
+}
+
+.memorial-item-provenance {
+  position: relative;
+  z-index: 40;
+}
+
+.memorial-item-provenance > summary {
+  display: block;
+  width: 34px;
+  height: 34px;
+  list-style: none;
+  cursor: pointer;
+}
+
+.memorial-item-provenance > summary > span {
+  width: 32px;
+  height: 32px;
+  color: var(--forest-dark);
+  background: #ffffff;
+  font-size: 15px;
+}
+
+.memorial-item-provenance > div {
+  position: absolute;
+  top: 40px;
+  left: 0;
+  width: min(330px, calc(100vw - 72px));
+  padding: 14px;
+  border: 1px solid #bdd8cb;
+  border-radius: 12px;
+  background: #ffffff;
+  box-shadow: 0 14px 34px rgba(27, 64, 47, 0.18);
+}
+
+.memorial-item-provenance > div > strong {
+  display: block;
+  margin-bottom: 8px;
+  color: var(--forest-dark);
+  font-size: 11px;
+}
+
+.memorial-item-provenance > div p {
+  display: grid;
+  grid-template-columns: 105px minmax(0, 1fr);
+  gap: 8px;
+  margin: 6px 0 0;
+  color: var(--ink-soft);
+  font-size: 9.5px;
+  line-height: 1.4;
+}
+
+.memorial-item-provenance > div p span {
+  color: var(--muted);
+  font-weight: 750;
 }
 
 .memorial-item-index {
@@ -7671,9 +7825,10 @@ body {
   .document-search { height: 46px; }
   .document-search kbd { display: none; }
   .memorial-item { padding: 16px; }
-  .memorial-item > header { grid-template-columns: 38px minmax(0, 1fr); }
+  .memorial-provenance-grid { grid-template-columns: 1fr; padding-left: 16px; }
+  .memorial-item > header { grid-template-columns: 32px 38px minmax(0, 1fr); }
   .memorial-item-index { width: 38px; height: 38px; }
-  .memorial-source-status { grid-column: 2; max-width: none; justify-self: start; text-align: left; }
+  .memorial-source-status { grid-column: 3; max-width: none; justify-self: start; text-align: left; }
   .selected-spreadsheet { align-items: flex-start; }
 }
 
