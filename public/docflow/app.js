@@ -258,7 +258,7 @@ const elements = {
   actionHint: document.querySelector("#actionHint"),
   apiButton: document.querySelector("#apiButton"),
   apiButtonLabel: document.querySelector("#apiButtonLabel"),
-  apiDialog: document.querySelector("#apiDialog"),
+  apiPage: document.querySelector("#apiPage"),
   apiForm: document.querySelector("#apiForm"),
   apiKeyInput: document.querySelector("#apiKeyInput"),
   apiKeyHelp: document.querySelector("#apiKeyHelp"),
@@ -337,6 +337,10 @@ const elements = {
   saveStatus: document.querySelector("#saveStatus"),
 };
 
+// A configuração da IA é uma página do workspace. O bloco fica no HTML principal
+// para preservar os campos e listeners, e é movido para a área de conteúdo uma vez.
+elements.main.append(elements.apiPage);
+
 const persisted = readStorage("docflow-preferences", {});
 
 function createHistoryState() {
@@ -367,6 +371,7 @@ function createApiState(api = {}) {
   const selectedModel = api.model || "gpt-5.6-terra";
   const knownModels = new Set(["gpt-5.6-terra", "gpt-5.6-sol", "gpt-5.6-luna"]);
   return {
+    open: Boolean(api.open),
     allowed: Boolean(api.allowed),
     configurable: Boolean(api.configurable),
     hasKey: Boolean(api.hasKey),
@@ -481,6 +486,7 @@ let draggedKanbanCardId = "";
 let homeSearchQuery = "";
 
 function currentNavigationRoute() {
+  if (state.api.open) return { view: "api" };
   if (state.flow) {
     return {
       view: "flow",
@@ -517,7 +523,10 @@ function replaceNavigationState(route = currentNavigationRoute()) {
 function applyNavigationRoute(route) {
   if (!state.auth.user || !route) return;
   const requestedView = String(route.view || "home");
-  const view = requestedView === "admin" && !state.auth.user.isAdmin ? "home" : requestedView;
+  const protectedView = requestedView === "admin" && !state.auth.user.isAdmin
+    || requestedView === "api" && !canConfigureAI();
+  const view = protectedView ? "home" : requestedView;
+  state.api.open = view === "api";
   state.admin.open = view === "admin";
   state.processes.open = view === "processes";
   state.history.open = view === "history";
@@ -1443,7 +1452,7 @@ async function refreshCurrentCardAccess() {
       .some((key) => nextApi[key] !== state.api[key]);
     if (!cardsChanged && !apiChanged) return;
     state.auth.cardAccess = nextAccess;
-    state.api = nextApi;
+    state.api = { ...nextApi, open: state.api.open };
     if (!state.api.allowed) state.cota.useAI = false;
     updateApiBadge();
     if (!state.flow && !state.admin.open && !state.processes.open && !state.history.open && !state.kanban.open) render();
@@ -1586,19 +1595,28 @@ function renderAIStatusNotice(manualText = "Você pode continuar preenchendo man
 
 function render() {
   updateApiBadge();
-  const onDocuments = !state.admin.open && !state.processes.open && !state.history.open && !state.kanban.open;
+  const onDocuments = !state.api.open && !state.admin.open && !state.processes.open && !state.history.open && !state.kanban.open;
   [
     [elements.kanbanButton, state.kanban.open],
     [elements.processesButton, state.processes.open],
     [elements.documentsButton, onDocuments],
     [elements.adminButton, state.admin.open],
     [elements.historyButton, state.history.open],
+    [elements.apiButton, state.api.open],
   ].forEach(([button, active]) => {
     button.classList.toggle("is-active", active);
     button.setAttribute("aria-current", active ? "page" : "false");
   });
-  elements.main.classList.toggle("is-home", !state.admin.open && !state.processes.open && !state.history.open && !state.kanban.open && !state.flow);
+  elements.main.classList.toggle("is-home", !state.api.open && !state.admin.open && !state.processes.open && !state.history.open && !state.kanban.open && !state.flow);
   elements.main.classList.toggle("is-kanban", state.kanban.open);
+  elements.main.classList.toggle("is-api", state.api.open);
+  elements.view.classList.toggle("is-hidden", state.api.open);
+  elements.apiPage.classList.toggle("is-hidden", !state.api.open);
+  if (state.api.open) {
+    elements.sidebar.classList.add("is-hidden");
+    elements.actionBar.classList.add("is-hidden");
+    return;
+  }
   if (state.processes.open) {
     elements.sidebar.classList.add("is-hidden");
     elements.actionBar.classList.add("is-hidden");
@@ -2085,6 +2103,7 @@ async function loadAdminUsers({ silent = false } = {}) {
 function showAdminPanel() {
   if (!state.auth.user?.isAdmin) return;
   state.flow = null;
+  state.api.open = false;
   state.history.open = false;
   state.processes.open = false;
   state.kanban.open = false;
@@ -2303,6 +2322,7 @@ async function loadProcesses() {
 
 function showProcesses() {
   state.flow = null;
+  state.api.open = false;
   state.admin.open = false;
   state.history.open = false;
   state.kanban.open = false;
@@ -2503,6 +2523,7 @@ async function loadDocumentHistory() {
 
 function showDocumentHistory() {
   state.flow = null;
+  state.api.open = false;
   state.admin.open = false;
   state.processes.open = false;
   state.kanban.open = false;
@@ -2741,6 +2762,7 @@ async function loadKanban({ silent = false } = {}) {
 
 async function showKanban({ focusCardId = "", boardId = "" } = {}) {
   state.flow = null;
+  state.api.open = false;
   state.admin.open = false;
   state.history.open = false;
   state.processes.open = false;
@@ -5333,6 +5355,7 @@ function startFlow(flow, kind = "") {
     showToast("Este card não está liberado para a sua conta.");
     return;
   }
+  state.api.open = false;
   state.admin.open = false;
   state.history.open = false;
   state.processes.open = false;
@@ -5358,6 +5381,7 @@ function startFlow(flow, kind = "") {
 
 function goHome() {
   state.flow = null;
+  state.api.open = false;
   state.admin.open = false;
   state.history.open = false;
   state.processes.open = false;
@@ -6244,8 +6268,27 @@ function openApiConfiguration() {
   elements.apiFeedback.className = "inline-feedback is-hidden";
   elements.apiFeedback.textContent = "";
   updateApiConfigurationDialog();
-  openDialog(elements.apiDialog);
+  state.flow = null;
+  state.admin.open = false;
+  state.history.open = false;
+  state.processes.open = false;
+  state.kanban.open = false;
+  state.api.open = true;
+  closeNotificationPopover();
+  render();
+  pushNavigationState();
+  focusMain();
   setTimeout(() => elements.apiKeyInput.focus(), 80);
+}
+
+function closeApiConfiguration() {
+  if (!state.api.open) return;
+  const currentRoute = window.history.state?.[APP_HISTORY_KEY];
+  if (currentRoute?.view === "api") {
+    window.history.back();
+    return;
+  }
+  goHome();
 }
 
 function apiFormValues() {
@@ -6285,7 +6328,7 @@ async function saveApiConfiguration({ close = true } = {}) {
     elements.removeApiButton.classList.remove("is-hidden");
     updateApiBadge();
     updateApiConfigurationDialog();
-    if (close) closeDialog(elements.apiDialog);
+    if (close) closeApiConfiguration();
     showToast(`IA configurada com ${modelDisplayName(model)}.`);
     if (state.flow || state.admin.open) render();
     return true;
@@ -6344,7 +6387,7 @@ async function removeApiConfiguration() {
       model: "gpt-5.6-terra",
       customModel: "",
     };
-    closeDialog(elements.apiDialog);
+    closeApiConfiguration();
     updateApiBadge();
     if (state.flow || state.admin.open) render();
     showToast("Chave da OpenAI removida da sua conta.");
@@ -8978,7 +9021,7 @@ async function handleAction(action, target) {
     return;
   }
   if (action === "open-api") return openApiConfiguration();
-  if (action === "close-api") return closeDialog(elements.apiDialog);
+  if (action === "close-api") return closeApiConfiguration();
   if (action === "open-signatures") return openSignatureConfiguration();
   if (action === "close-signatures") return closeSignatureConfiguration();
   if (action === "reload-signatures") return loadSignatureProfiles();
@@ -9375,10 +9418,6 @@ elements.registerForm.addEventListener("submit", async (event) => {
 elements.apiForm.addEventListener("submit", async (event) => {
   event.preventDefault();
   await saveApiConfiguration();
-});
-
-elements.apiDialog.addEventListener("click", (event) => {
-  if (event.target === elements.apiDialog) closeDialog(elements.apiDialog);
 });
 
 elements.signatureProfileForm.addEventListener("submit", async (event) => {

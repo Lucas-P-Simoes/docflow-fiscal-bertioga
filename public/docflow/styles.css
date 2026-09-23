@@ -902,6 +902,10 @@ select:focus-visible,
   padding: 24px 22px 72px;
 }
 
+.main-content.is-api {
+  padding: 24px 22px 72px;
+}
+
 .sidebar:not(.is-hidden) + .main-content {
   margin-left: 282px;
   padding-right: max(42px, calc((100vw - 1240px) / 2));
@@ -4839,25 +4843,20 @@ textarea::placeholder {
   background: var(--paper);
 }
 
-.api-dialog {
-  inset: 0;
-  width: 100vw;
-  max-width: none;
-  height: 100vh;
-  height: 100dvh;
-  max-height: none;
-  margin: 0;
-  border-radius: 0;
-  overscroll-behavior: contain;
+.api-page {
+  width: min(100%, 1120px);
+  margin: 0 auto;
 }
 
-.api-dialog-card {
+.api-page-card {
   display: flex;
   flex-direction: column;
-  min-height: 100%;
   padding: 0;
-  border-radius: 0;
   overflow: hidden;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: var(--paper);
+  box-shadow: var(--shadow-sm);
 }
 
 .api-dialog-heading {
@@ -5027,11 +5026,11 @@ textarea::placeholder {
   text-decoration: underline;
 }
 
-.api-dialog .api-configuration-step .field {
+.api-page .api-configuration-step .field {
   margin-top: 11px;
 }
 
-.api-dialog .field small {
+.api-page .field small {
   font-size: 12px;
 }
 
@@ -7098,7 +7097,7 @@ textarea::placeholder {
     padding: 22px;
   }
 
-  .api-dialog-card {
+  .api-page-card {
     padding: 0;
   }
 
@@ -7286,7 +7285,8 @@ textarea::placeholder {
 .topbar .processes-button.is-active,
 .topbar .documents-button.is-active,
 .topbar .admin-button.is-active,
-.topbar .history-button.is-active {
+.topbar .history-button.is-active,
+.topbar .api-button.is-active {
   color: #0c593f;
   background: #eaf5ef;
   font-weight: 800;

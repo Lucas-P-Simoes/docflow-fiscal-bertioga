@@ -307,6 +307,8 @@ test("keeps new registrations pending and limits user approval and AI configurat
   assert.match(page, /id="adminButton"[^>]*is-hidden/);
   assert.match(page, /id="adminPendingBadge"/);
   assert.match(page, /id="apiButton"[^>]*is-hidden/);
+  assert.match(page, /<section id="apiPage"[^>]*class="api-page is-hidden"/);
+  assert.doesNotMatch(page, /<dialog id="apiDialog"/);
   assert.match(page, /configuração é exclusiva do administrador/);
   assert.match(page, /id="apiConnectionSummary"/);
   assert.match(page, /Conecte a OpenAI aos seus cards/);
@@ -316,6 +318,8 @@ test("keeps new registrations pending and limits user approval and AI configurat
   assert.match(page, /aprovação do administrador/);
   assert.match(app, /createAdminState/);
   assert.match(app, /state\.auth\.user\?\.isAdmin/);
+  assert.match(app, /if \(state\.api\.open\) return \{ view: "api" \}/);
+  assert.match(app, /elements\.main\.classList\.toggle\("is-api", state\.api\.open\)/);
   assert.match(app, /classList\.toggle\("has-pending", pendingCount > 0\)/);
   assert.match(app, /apiRequest\("\/api\/admin\/users"\)/);
   assert.match(app, /approve-admin-user/);
@@ -349,7 +353,8 @@ test("keeps new registrations pending and limits user approval and AI configurat
   assert.match(styles, /\.admin-user-item/);
   assert.match(styles, /\.admin-ai-configuration/);
   assert.match(styles, /\.api-dialog-layout/);
-  assert.match(styles, /\.api-dialog\s*\{[\s\S]*?width:\s*100vw;[\s\S]*?height:\s*100dvh;/);
+  assert.match(styles, /\.api-page\s*\{[\s\S]*?width:\s*min\(100%, 1120px\)/);
+  assert.doesNotMatch(styles, /\.api-dialog\s*\{[\s\S]*?width:\s*100vw/);
   assert.match(styles, /\.admin-card-toggle input:checked \+ \.admin-card-switch/);
   assert.match(styles, /\.admin-ai-toggle input:checked \+ \.admin-card-switch/);
   assert.match(worker, /url\.pathname === "\/api\/admin\/users"/);

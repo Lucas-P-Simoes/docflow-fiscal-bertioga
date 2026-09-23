@@ -20,7 +20,7 @@
     <title>Fiscal Bertioga</title>
     <link rel="manifest" href="manifest.webmanifest" />
     <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=20260915-shield-check" />
-    <link rel="stylesheet" href="styles.css?v=20260922-ai-fullscreen" />
+    <link rel="stylesheet" href="styles.css?v=20260923-ai-page" />
   </head>
   <body>
     <!-- Lucide icons, ISC License: https://lucide.dev/license -->
@@ -280,15 +280,15 @@
       </footer>
     </div>
 
-    <dialog id="apiDialog" class="dialog api-dialog">
-      <form id="apiForm" class="dialog-card api-dialog-card" method="dialog">
+    <section id="apiPage" class="api-page is-hidden" aria-labelledby="apiPageTitle">
+      <form id="apiForm" class="api-page-card">
         <div class="api-dialog-heading">
           <div>
             <span class="api-dialog-kicker"><svg class="lucide-icon" viewBox="0 0 24 24" aria-hidden="true"><use href="#icon-sparkles"></use></svg> Configuração da IA</span>
-            <h2>Conecte a OpenAI aos seus cards</h2>
+            <h2 id="apiPageTitle">Conecte a OpenAI aos seus cards</h2>
             <p>Uma única configuração abastece as análises de IA liberadas para a equipe.</p>
           </div>
-          <button class="icon-button" type="button" data-action="close-api" aria-label="Fechar configuração da IA">×</button>
+          <button class="icon-button" type="button" data-action="close-api" aria-label="Voltar para a página anterior">←</button>
         </div>
 
         <div id="apiConnectionSummary" class="api-connection-summary" aria-live="polite">
@@ -367,7 +367,7 @@
           <button class="button button-primary" type="submit">Salvar configuração</button>
         </div>
       </form>
-    </dialog>
+    </section>
 
     <dialog id="signatureDialog" class="dialog signature-dialog">
       <div class="dialog-card">
@@ -606,6 +606,6 @@
     <script src="vendor/docx.iife.js" defer></script>
     <script src="vendor/html2canvas.min.js" defer></script>
     <script src="vendor/jspdf.umd.min.js" defer></script>
-    <script src="app.js?v=20260922-ai-admin" defer></script>
+    <script src="app.js?v=20260923-ai-page" defer></script>
   </body>
 </html>
