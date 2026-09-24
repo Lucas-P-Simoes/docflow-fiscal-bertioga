@@ -559,10 +559,11 @@ test("builds a Termo de Referência from the supplied model and exposes every re
 
 
 test("builds a Memorial Descritivo from an uploaded budget spreadsheet and the searchable CDHU criteria", async () => {
-  const [app, template, memorialWorker, workerIndex, documentWorker, cardAccess, schema, styles] = await Promise.all([
+  const [app, template, memorialWorker, memorialBasesWorker, workerIndex, documentWorker, cardAccess, schema, styles] = await Promise.all([
     readFile(new URL("public/docflow/app.js", siteRoot), "utf8"),
     readFile(new URL("public/docflow/templates/MODELO_MEMORIAL_DESCRITIVO.docx", siteRoot)),
     readFile(new URL("worker/memorial.ts", siteRoot), "utf8"),
+    readFile(new URL("worker/memorial-bases.ts", siteRoot), "utf8"),
     readFile(new URL("worker/index.ts", siteRoot), "utf8"),
     readFile(new URL("worker/documents.ts", siteRoot), "utf8"),
     readFile(new URL("db/card-access.ts", siteRoot), "utf8"),
@@ -593,9 +594,14 @@ test("builds a Memorial Descritivo from an uploaded budget spreadsheet and the s
   assert.match(app, /sourceStatus="assisted"/);
   assert.match(app, /memória de cálculo, a linha orçamentária e as outras abas/);
   assert.match(app, /ETAPA 1 — CRITÉRIO CDHU/);
-  assert.match(app, /ETAPA 2 — COMPLEMENTO PELA PLANILHA/);
+  assert.match(app, /ETAPA 2 — COMPLEMENTO PELAS BASES E PELA PLANILHA/);
   assert.match(app, /const criteriaIndexes = batchIndexes\.filter/);
   assert.match(app, /const fallbackIndexes = batchIndexes\.filter/);
+  assert.match(app, /function renderMemorialBaseAdminPanel\(\)[\s\S]*?if \(!isConfiguredAdminUser\(state\.auth\.user\)\) return ""/);
+  assert.match(app, /data-file="memorial-bases"/);
+  assert.match(app, /apiRequest\("\/api\/memorial\/bases"/);
+  assert.match(app, /useMemorialBases: allowWorkbookFallback/);
+  assert.match(app, /Bases complementares/);
   assert.match(app, /CDHU primeiro; contexto da planilha somente quando a base oficial não completar o item/);
   assert.match(app, /MEMORIAL DESCRITIVO/);
   assert.match(app, /1\) Será medido por/);
@@ -609,12 +615,25 @@ test("builds a Memorial Descritivo from an uploaded budget spreadsheet and the s
   assert.match(memorialWorker, /directCriteria/);
   assert.match(workerIndex, /handleMemorialCriteria/);
   assert.match(workerIndex, /\/api\/memorial\/criteria/);
+  assert.match(workerIndex, /memorial_reference_files/);
+  assert.match(workerIndex, /\/api\/memorial\/bases/);
+  assert.match(memorialBasesWorker, /reference-data\/memorial\/admin-bases\//);
+  assert.match(memorialBasesWorker, /MAX_BASE_FILE_BYTES\s*=\s*10 \* 1024 \* 1024/);
+  assert.match(memorialBasesWorker, /MAX_BASE_TOTAL_BYTES\s*=\s*20 \* 1024 \* 1024/);
+  assert.match(memorialBasesWorker, /MAX_BASE_FILES\s*=\s*10/);
+  assert.match(memorialBasesWorker, /ALLOWED_EXTENSIONS.*pdf.*docx.*xlsx.*xls.*csv.*tsv.*txt/);
+  assert.match(memorialBasesWorker, /isAdministrator\(authenticated\.account\)/);
+  assert.match(memorialBasesWorker, /env\.DOCUMENTS\.put/);
+  assert.match(memorialBasesWorker, /env\.DOCUMENTS\.delete/);
+  assert.match(memorialBasesWorker, /env\.DOCUMENTS\.list/);
   assert.match(documentWorker, /"Memorial Descritivo"/);
   assert.match(cardAccess, /"memorial"/);
   assert.match(schema, /"memorial"/);
   assert.match(styles, /\.document-card\.is-memorial/);
   assert.match(styles, /\.memorial-item-list/);
   assert.match(styles, /\.memorial-filter-button/);
+  assert.match(styles, /\.memorial-base-admin-panel/);
+  assert.match(styles, /\.memorial-base-file/);
   assert.match(styles, /\.memorial-item\.is-missing[\s\S]*?background:\s*#fff7d6/);
   assert.match(styles, /\.memorial-item\.is-assisted/);
 });

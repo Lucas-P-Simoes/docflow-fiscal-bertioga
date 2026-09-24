@@ -4433,6 +4433,153 @@ textarea::placeholder {
   gap: 18px;
 }
 
+.memorial-base-admin-panel {
+  border-color: #bad4c7;
+  background: linear-gradient(180deg, #fbfdfc 0%, #f4faf6 100%);
+  box-shadow: inset 4px 0 0 var(--forest);
+}
+
+.memorial-base-admin-heading {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 18px;
+}
+
+.memorial-base-admin-heading .panel-header {
+  flex: 1;
+}
+
+.memorial-base-admin-badge {
+  flex: 0 0 auto;
+  padding: 6px 9px;
+  border: 1px solid #a9cdbb;
+  border-radius: 999px;
+  color: #175b43;
+  background: #eaf5ef;
+  font-size: 9px;
+  font-weight: 850;
+  letter-spacing: 0.055em;
+  text-transform: uppercase;
+}
+
+.memorial-base-rule {
+  margin-bottom: 14px;
+}
+
+.memorial-base-rule .memorial-info-icon {
+  flex: 0 0 auto;
+  width: 27px;
+  height: 27px;
+  font-size: 14px;
+}
+
+.memorial-base-upload {
+  min-height: 78px;
+  background: #ffffff;
+}
+
+.memorial-base-upload.is-disabled {
+  cursor: not-allowed;
+  opacity: 0.6;
+}
+
+.memorial-base-upload.is-disabled:hover {
+  border-color: #b9c5be;
+  background: #ffffff;
+}
+
+.memorial-base-capacity {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin: 8px 2px 14px;
+  color: var(--muted);
+  font-size: 9.5px;
+  font-weight: 700;
+}
+
+.memorial-base-list {
+  display: grid;
+  gap: 9px;
+}
+
+.memorial-base-file {
+  display: grid;
+  grid-template-columns: 42px minmax(0, 1fr) auto;
+  gap: 12px;
+  align-items: center;
+  padding: 11px 12px;
+  border: 1px solid #d2e5da;
+  border-radius: 12px;
+  background: #ffffff;
+}
+
+.memorial-base-file-icon {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 11px;
+  color: #ffffff;
+  background: var(--forest);
+  font-size: 8px;
+  font-weight: 900;
+  letter-spacing: 0.055em;
+}
+
+.memorial-base-file > div {
+  min-width: 0;
+}
+
+.memorial-base-file strong,
+.memorial-base-file small {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.memorial-base-file strong {
+  color: var(--ink);
+  font-size: 11.5px;
+}
+
+.memorial-base-file small {
+  margin-top: 4px;
+  color: var(--muted);
+  font-size: 9.5px;
+}
+
+.memorial-base-delete {
+  min-height: 34px;
+  padding: 0 12px;
+}
+
+.memorial-base-empty,
+.memorial-base-state {
+  display: grid;
+  place-items: center;
+  gap: 5px;
+  min-height: 84px;
+  padding: 14px;
+  border: 1px solid #d7e8df;
+  border-radius: 12px;
+  color: var(--muted);
+  background: rgba(255, 255, 255, 0.75);
+  text-align: center;
+}
+
+.memorial-base-empty strong,
+.memorial-base-state strong {
+  color: var(--ink-soft);
+  font-size: 11px;
+}
+
+.memorial-base-empty span {
+  font-size: 9.5px;
+}
+
 .memorial-provenance-panel {
   margin-bottom: 18px;
   border: 1px solid #bdd8cb;
@@ -7945,6 +8092,10 @@ body {
   .document-search kbd { display: none; }
   .memorial-item { padding: 16px; }
   .memorial-provenance-grid { grid-template-columns: 1fr; padding-left: 16px; }
+  .memorial-base-admin-heading { flex-direction: column; gap: 0; }
+  .memorial-base-file { grid-template-columns: 38px minmax(0, 1fr); }
+  .memorial-base-file-icon { width: 38px; height: 38px; }
+  .memorial-base-delete { grid-column: 2; justify-self: start; }
   .memorial-item > header { grid-template-columns: 32px 38px minmax(0, 1fr); }
   .memorial-item-index { width: 38px; height: 38px; }
   .memorial-source-status { grid-column: 3; max-width: none; justify-self: start; text-align: left; }
