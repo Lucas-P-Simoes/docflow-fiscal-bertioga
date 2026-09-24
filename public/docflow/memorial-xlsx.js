@@ -341,6 +341,32 @@
     return rows;
   }
 
+  function sheetsToIndexText(sheets, filename) {
+    const lines = [
+      `ARQUIVO-BASE: ${String(filename || "planilha")}`,
+      "Conteúdo integral organizado por aba e linha para busca técnica.",
+    ];
+    for (const sheet of sheets) {
+      lines.push("", `=== ABA: ${sheet.name} ===`);
+      for (let rowIndex = 0; rowIndex < sheet.rows.length; rowIndex += 1) {
+        const values = (sheet.rows[rowIndex] || [])
+          .map((value) => String(value || "").replace(/[\t\r\n]+/g, " ").trim());
+        if (values.some(Boolean)) lines.push(`Linha ${rowIndex + 1}: ${values.join("\t")}`);
+      }
+    }
+    return lines.join("\n");
+  }
+
+  async function indexText(file) {
+    const extension = String(file?.name || "").split(".").pop()?.toLowerCase();
+    let sheets;
+    if (extension === "xlsx") sheets = await workbookSheets(file);
+    else if (extension === "csv" || extension === "tsv") {
+      sheets = [{ name: file.name, rows: parseDelimited(await file.text(), extension === "tsv" ? "\t" : ",") }];
+    } else throw new Error("A conversão para a base permanente está disponível para XLSX, CSV e TSV.");
+    return sheetsToIndexText(sheets, file.name);
+  }
+
   async function extract(file) {
     const extension = String(file?.name || "").split(".").pop()?.toLowerCase();
     let sheets;
@@ -353,5 +379,5 @@
     return result;
   }
 
-  global.DocflowMemorialXlsx = { extract, extractBudgetFromSheets };
+  global.DocflowMemorialXlsx = { extract, extractBudgetFromSheets, indexText };
 })(typeof window !== "undefined" ? window : globalThis);
