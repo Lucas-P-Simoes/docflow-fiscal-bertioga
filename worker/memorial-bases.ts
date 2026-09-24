@@ -412,9 +412,13 @@ export async function handleMemorialBases(request: Request, env: Env): Promise<R
   if (request.method === "GET") {
     const objects = await listBaseObjects(env);
     const currentFingerprint = await credentialFingerprint(credential.apiKey);
+    let migratedExistingFile = false;
     for (const object of objects) {
       const metadata = await readBaseMetadata(env, baseIdFromKey(object.key));
-      if (metadata?.credentialFingerprint && metadata.credentialFingerprint !== currentFingerprint) {
+      if (!metadata && !migratedExistingFile) {
+        await indexMemorialBase(env, credential.apiKey, baseIdFromKey(object.key));
+        migratedExistingFile = true;
+      } else if (metadata?.credentialFingerprint && metadata.credentialFingerprint !== currentFingerprint) {
         await writeBaseMetadata(env, {
           id: metadata.id,
           indexStatus: "pending",

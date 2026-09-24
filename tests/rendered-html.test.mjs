@@ -638,6 +638,7 @@ test("builds a Memorial Descritivo from an uploaded budget spreadsheet and the s
   assert.match(memorialBasesWorker, /max_num_results:\s*8/);
   assert.match(memorialBasesWorker, /rewrite_query:\s*true/);
   assert.match(memorialBasesWorker, /indexStatus:\s*"ready"/);
+  assert.match(memorialBasesWorker, /if \(!metadata && !migratedExistingFile\)[\s\S]*?indexMemorialBase/);
   assert.match(documentWorker, /"Memorial Descritivo"/);
   assert.match(cardAccess, /"memorial"/);
   assert.match(schema, /"memorial"/);
