@@ -593,7 +593,13 @@ test("builds a Memorial Descritivo from an uploaded budget spreadsheet and the s
   assert.match(app, /MEMORIAL_TEMPLATE_URL\s*=\s*"templates\/MODELO_MEMORIAL_DESCRITIVO\.docx"/);
   assert.doesNotMatch(app, /CRITERIOS_MEDICAO_CDHU\.json/);
   assert.match(app, /MEMORIAL_STEPS\s*=\s*\["Planilha orçamentária", "Revisão dos textos introdutórios", "Revisão dos itens", "Revisão e download"\]/);
-  assert.match(app, /return \[renderMemorialUpload, renderMemorialIntroductionReview, renderMemorialItems, renderMemorialReview\]\[state\.step\]\(\)/);
+  assert.match(app, /MEMORIAL_ADMIN_STEPS\s*=\s*\["Configurações IA", \.\.\.MEMORIAL_STEPS\]/);
+  assert.match(app, /return state\.flow === "memorial" && isConfiguredAdminUser\(state\.auth\.user\)/);
+  assert.match(app, /memorialHasAdminStep\(\) \? MEMORIAL_ADMIN_STEPS : MEMORIAL_STEPS/);
+  assert.match(app, /\? \[renderMemorialAIConfiguration, renderMemorialUpload, renderMemorialIntroductionReview, renderMemorialItems, renderMemorialReview\]/);
+  assert.match(app, /function renderMemorialAIConfiguration\(\)/);
+  assert.match(app, /pageHeading\("Etapa 0", "Configurações IA"/);
+  assert.match(app, /Somente o administrador utiliza esta etapa/);
   assert.match(app, /function renderMemorialIntroductionReview\(\)/);
   assert.match(app, /pageHeading\("Etapa 2", "Revise os textos introdutórios"/);
   assert.match(app, /pageHeading\("Etapa 3", "Revise os critérios de cada item"/);

@@ -16,6 +16,7 @@ const REPORT_STEPS = ["Identificação", "Mapa e vias", "Fotografias", "Parecer 
 const ETP_STEPS = ["Identificação", "Descrição da necessidade", "Orçamento e resultados", "Revisão"];
 const TR_STEPS = ["Identificação", "Condições gerais", "Qualificação técnica", "Gestão e assinatura", "Revisão"];
 const MEMORIAL_STEPS = ["Planilha orçamentária", "Revisão dos textos introdutórios", "Revisão dos itens", "Revisão e download"];
+const MEMORIAL_ADMIN_STEPS = ["Configurações IA", ...MEMORIAL_STEPS];
 const COTA_STEPS = ["Conteúdo", "Revisão", "Assinatura e download"];
 const OFFICIAL_CORRESPONDENCE_STEPS = ["Dados do documento", "Conteúdo", "Revisão e download"];
 const CORRESPONDENCE_STEPS = ["Dados do documento", "Conteúdo", "Revisão e download"];
@@ -1726,12 +1727,24 @@ function currentData() {
   return state.correspondence;
 }
 
+function memorialHasAdminStep() {
+  return state.flow === "memorial" && isConfiguredAdminUser(state.auth.user);
+}
+
+function memorialContentStep() {
+  return state.step - (memorialHasAdminStep() ? 1 : 0);
+}
+
+function memorialStateStep(contentStep) {
+  return contentStep + (memorialHasAdminStep() ? 1 : 0);
+}
+
 function currentSteps() {
   if (state.flow === "drainage") return DRAINAGE_STEPS;
   if (state.flow === "report") return REPORT_STEPS;
   if (state.flow === "etp") return ETP_STEPS;
   if (state.flow === "tr") return TR_STEPS;
-  if (state.flow === "memorial") return MEMORIAL_STEPS;
+  if (state.flow === "memorial") return memorialHasAdminStep() ? MEMORIAL_ADMIN_STEPS : MEMORIAL_STEPS;
   if (state.flow === "cota") return COTA_STEPS;
   if (state.flow === "notification") return NOTIFICATION_STEPS;
   if (state.flow === "warning") return WARNING_STEPS;
@@ -1784,7 +1797,7 @@ function renderSidebar() {
   elements.stepNav.innerHTML = currentSteps()
     .map((label, index) => {
       const className = index === state.step ? "is-active" : index < state.step ? "is-done" : "";
-      const number = index < state.step ? "✓" : index + 1;
+      const number = index < state.step ? "✓" : memorialHasAdminStep() ? index : index + 1;
       return `<button class="step-link ${className}" type="button" data-action="go-step" data-step="${index}" ${index > state.step ? "disabled" : ""}>
         <span class="step-number">${number}</span><span class="step-label">${e(label)}</span>
       </button>`;
@@ -1794,18 +1807,21 @@ function renderSidebar() {
 
 function configureActionBar() {
   const lastStep = state.step === currentSteps().length - 1;
+  const memorialStep = state.flow === "memorial" ? memorialContentStep() : null;
   elements.backButton.disabled = false;
   elements.nextButton.disabled = false;
   elements.nextButton.innerHTML = lastStep
     ? state.flow === "drainage"
       ? `Baixar Excel <span aria-hidden="true">↓</span>`
       : `Gerar documento <span aria-hidden="true">↓</span>`
-    : state.flow === "memorial" && state.step === 0
+    : state.flow === "memorial" && memorialStep === 0
       ? `Analisar planilha <span aria-hidden="true">✦</span>`
     : `Continuar <span aria-hidden="true">→</span>`;
   elements.actionHint.textContent = lastStep
     ? state.flow === "drainage" ? "Planilha técnica com 7 abas" : "Pronto para criar o arquivo"
-    : state.flow === "memorial" && state.step === 0 ? "A IA identificará e detalhará cada item"
+    : state.flow === "memorial" && memorialStep === -1 ? "Área exclusiva do administrador"
+    : state.flow === "memorial" && memorialStep === 0 ? "A IA identificará e detalhará cada item"
+    : state.flow === "memorial" ? `Etapa ${memorialStep + 1} de ${MEMORIAL_STEPS.length}`
     : `Etapa ${state.step + 1} de ${currentSteps().length}`;
 }
 
@@ -4841,7 +4857,17 @@ function renderTrReview() {
 }
 
 function renderMemorial() {
-  return [renderMemorialUpload, renderMemorialIntroductionReview, renderMemorialItems, renderMemorialReview][state.step]();
+  const screens = memorialHasAdminStep()
+    ? [renderMemorialAIConfiguration, renderMemorialUpload, renderMemorialIntroductionReview, renderMemorialItems, renderMemorialReview]
+    : [renderMemorialUpload, renderMemorialIntroductionReview, renderMemorialItems, renderMemorialReview];
+  return screens[state.step]();
+}
+
+function renderMemorialAIConfiguration() {
+  return `${pageHeading("Etapa 0", "Configurações IA", "Área exclusiva do administrador para manter a conexão e as bases complementares usadas na elaboração do Memorial.")}
+  <div class="notice"><span class="memorial-info-icon" aria-hidden="true">i</span><span><strong>Somente o administrador utiliza esta etapa.</strong> As configurações abaixo ficam protegidas e são aplicadas às próximas análises de planilhas.</span></div>
+  ${renderAdminAIConfiguration()}
+  ${renderMemorialBaseAdminPanel()}`;
 }
 
 function formatMemorialBaseDate(value) {
@@ -4922,7 +4948,6 @@ function renderMemorialUpload() {
     ${panelHeader("Planilha da obra", "A sequência e a numeração dos itens serão preservadas no Memorial Descritivo.")}
     ${upload}
   </section>
-  ${renderMemorialBaseAdminPanel()}
   ${file ? renderMemorialProvenance() : ""}
   <section class="panel memorial-method-panel">
     ${panelHeader("Como a análise será feita", "O arquivo de 852 páginas foi transformado em uma base pesquisável para evitar o envio integral do catálogo a cada geração.")}
@@ -5751,7 +5776,7 @@ function focusMain() {
 
 async function nextStep() {
   if (!validateCurrentStep()) return;
-  if (state.flow === "memorial" && state.step === 0) {
+  if (state.flow === "memorial" && memorialContentStep() === 0) {
     await analyzeMemorialSpreadsheet({ advanceOnSuccess: true });
     return;
   }
@@ -6012,7 +6037,9 @@ function validateTrStep() {
 
 function validateMemorialStep() {
   const d = state.memorial;
-  if (state.step === 0) {
+  const contentStep = memorialContentStep();
+  if (contentStep < 0) return true;
+  if (contentStep === 0) {
     if (!d.spreadsheet?.file) {
       showFieldValidationMessage({
         title: "Anexe a planilha orçamentária",
@@ -6027,7 +6054,7 @@ function validateMemorialStep() {
       return false;
     }
   }
-  if (state.step >= 1) {
+  if (contentStep >= 1) {
     if (!d.items.length) {
       showToast("Analise a planilha antes de continuar.");
       return false;
@@ -6045,7 +6072,7 @@ function validateMemorialStep() {
       return false;
     }
   }
-  if (state.step >= 2) {
+  if (contentStep >= 2) {
     const itemFields = [];
     d.items.forEach((item, index) => {
       if (!item.measurement.trim()) itemFields.push(`[data-bind="memorial.items.${index}.measurement"]`);
@@ -7410,7 +7437,7 @@ async function analyzeMemorialSpreadsheet({ advanceOnSuccess = true, reuseItems 
     state.memorial.analysisMessage = "Análise concluída.";
     state.memorial.complete = false;
     state.generation.running = false;
-    if (advanceOnSuccess) state.step = 1;
+    if (advanceOnSuccess) state.step = memorialStateStep(1);
     render();
     pushNavigationState();
     focusMain();
