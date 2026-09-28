@@ -4764,6 +4764,28 @@ textarea::placeholder {
   background: #f6fbf9;
 }
 
+.memorial-intro-panel {
+  display: grid;
+  gap: 18px;
+}
+
+.memorial-intro-notice {
+  margin: 0;
+}
+
+.memorial-intro-fields {
+  display: grid;
+  gap: 18px;
+}
+
+.memorial-intro-fields textarea {
+  min-height: 150px;
+}
+
+.memorial-review-text {
+  white-space: pre-line;
+}
+
 .memorial-filter-bar {
   display: flex;
   flex-wrap: wrap;
@@ -4962,6 +4984,31 @@ textarea::placeholder {
   font-weight: 800;
   line-height: 1.3;
   text-align: right;
+}
+
+.memorial-item-header-actions {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 7px;
+}
+
+.memorial-item-delete {
+  min-height: 34px;
+  padding: 0 10px;
+  border-color: #e0b0ab;
+  background: #fffafa;
+  font-size: 9.5px;
+  white-space: nowrap;
+}
+
+.memorial-item-delete > span {
+  font-size: 15px;
+  line-height: 1;
+}
+
+.memorial-item-delete:hover:not(:disabled) {
+  background: #fff3f1;
 }
 
 .memorial-item.is-missing .memorial-source-status {
@@ -8165,7 +8212,8 @@ body {
   .memorial-base-actions { grid-column: 2; justify-content: flex-start; flex-wrap: wrap; }
   .memorial-item > header { grid-template-columns: 32px 38px minmax(0, 1fr); }
   .memorial-item-index { width: 38px; height: 38px; }
-  .memorial-source-status { grid-column: 3; max-width: none; justify-self: start; text-align: left; }
+  .memorial-item-header-actions { grid-column: 3; align-items: flex-start; }
+  .memorial-source-status { max-width: none; text-align: left; }
   .selected-spreadsheet { align-items: flex-start; }
 }
 
