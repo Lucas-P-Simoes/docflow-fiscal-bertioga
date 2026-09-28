@@ -592,7 +592,12 @@ test("builds a Memorial Descritivo from an uploaded budget spreadsheet and the s
   assert.ok(template.byteLength > 90_000 && template.byteLength < 120_000);
   assert.match(app, /MEMORIAL_TEMPLATE_URL\s*=\s*"templates\/MODELO_MEMORIAL_DESCRITIVO\.docx"/);
   assert.doesNotMatch(app, /CRITERIOS_MEDICAO_CDHU\.json/);
-  assert.match(app, /MEMORIAL_STEPS\s*=\s*\["Planilha orçamentária", "Revisão dos itens", "Revisão e download"\]/);
+  assert.match(app, /MEMORIAL_STEPS\s*=\s*\["Planilha orçamentária", "Revisão dos textos introdutórios", "Revisão dos itens", "Revisão e download"\]/);
+  assert.match(app, /return \[renderMemorialUpload, renderMemorialIntroductionReview, renderMemorialItems, renderMemorialReview\]\[state\.step\]\(\)/);
+  assert.match(app, /function renderMemorialIntroductionReview\(\)/);
+  assert.match(app, /pageHeading\("Etapa 2", "Revise os textos introdutórios"/);
+  assert.match(app, /pageHeading\("Etapa 3", "Revise os critérios de cada item"/);
+  assert.match(app, /pageHeading\("Etapa 4", "Revise o Memorial Descritivo"/);
   assert.match(app, /accept="\.xlsx,\.xls,\.csv,\.tsv/);
   assert.match(app, /MAX_MEMORIAL_SPREADSHEET_BYTES\s*=\s*20 \* 1024 \* 1024/);
   assert.match(app, /1 arquivo • XLSX, XLS, CSV ou TSV/);

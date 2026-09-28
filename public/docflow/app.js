@@ -15,7 +15,7 @@ if (LEGACY_DOCFLOW_PATHS.has(window.location.pathname)) {
 const REPORT_STEPS = ["Identificação", "Mapa e vias", "Fotografias", "Parecer e assinaturas", "Revisão"];
 const ETP_STEPS = ["Identificação", "Descrição da necessidade", "Orçamento e resultados", "Revisão"];
 const TR_STEPS = ["Identificação", "Condições gerais", "Qualificação técnica", "Gestão e assinatura", "Revisão"];
-const MEMORIAL_STEPS = ["Planilha orçamentária", "Revisão dos itens", "Revisão e download"];
+const MEMORIAL_STEPS = ["Planilha orçamentária", "Revisão dos textos introdutórios", "Revisão dos itens", "Revisão e download"];
 const COTA_STEPS = ["Conteúdo", "Revisão", "Assinatura e download"];
 const OFFICIAL_CORRESPONDENCE_STEPS = ["Dados do documento", "Conteúdo", "Revisão e download"];
 const CORRESPONDENCE_STEPS = ["Dados do documento", "Conteúdo", "Revisão e download"];
@@ -4841,7 +4841,7 @@ function renderTrReview() {
 }
 
 function renderMemorial() {
-  return [renderMemorialUpload, renderMemorialItems, renderMemorialReview][state.step]();
+  return [renderMemorialUpload, renderMemorialIntroductionReview, renderMemorialItems, renderMemorialReview][state.step]();
 }
 
 function formatMemorialBaseDate(value) {
@@ -4957,6 +4957,19 @@ function renderMemorialIntroductorySections() {
   </section>`;
 }
 
+function renderMemorialIntroductionReview() {
+  const d = state.memorial;
+  return `${pageHeading("Etapa 2", "Revise os textos introdutórios", "Confira e ajuste a apresentação geral do Memorial antes de revisar os critérios de cada item.")}
+  ${renderMemorialProvenance()}
+  <div class="summary-grid">
+    ${summaryCard("Obra", d.projectName || "Não identificada", d.spreadsheet?.file?.name || "Planilha")}
+    ${summaryCard("Local", d.projectLocation || "Não identificado", "Informação extraída da planilha")}
+    ${summaryCard("Itens analisados", String(d.items.length), "A revisão dos itens será a próxima etapa")}
+  </div>
+  ${renderMemorialIntroductorySections()}
+  <div class="notice"><span aria-hidden="true">✓</span><span><strong>Próxima etapa: revisão dos itens.</strong> Ao continuar, você poderá revisar os critérios técnicos e excluir individualmente os serviços que não devem constar no Memorial.</span></div>`;
+}
+
 function renderMemorialItems() {
   const d = state.memorial;
   const records = d.items.map((item, index) => ({ item, index }));
@@ -4972,9 +4985,8 @@ function renderMemorialItems() {
         ? matched
         : records;
   const attentionItems = insufficient.map(({ item }) => [memorialDisplayNumber(item.itemNumber), item.description].filter(Boolean).join(" "));
-  return `${pageHeading("Etapa 2", "Revise os critérios de cada item", "Confira a fonte localizada e ajuste a redação técnica antes de montar o Word.")}
+  return `${pageHeading("Etapa 3", "Revise os critérios de cada item", "Confira a fonte localizada, ajuste a redação técnica e exclua os itens que não devem constar no Word.")}
   ${renderMemorialProvenance()}
-  ${renderMemorialIntroductorySections()}
   <div class="summary-grid">
     ${summaryCard("Itens identificados", String(d.items.length), d.spreadsheet?.file?.name || "Planilha")}
     ${summaryCard("Com critério CDHU", String(matched.length), "Base oficial localizada")}
@@ -5056,7 +5068,7 @@ function renderMemorialReview() {
   const d = state.memorial;
   const incomplete = d.items.filter((item) => !item.measurement.trim() || !item.compensation.trim());
   const introductorySectionsReady = Boolean(d.initialConsiderations.trim() && d.preliminaryProvisions.trim());
-  return `${pageHeading("Etapa 3", "Revise o Memorial Descritivo", "O Word será montado no mesmo padrão do modelo CGBR, com os itens consolidados na ordem da planilha.")}
+  return `${pageHeading("Etapa 4", "Revise o Memorial Descritivo", "O Word será montado no mesmo padrão do modelo CGBR, com os itens consolidados na ordem da planilha.")}
   ${renderMemorialProvenance()}
   <div class="summary-grid">
     ${summaryCard("Documento", "Memorial Descritivo", d.spreadsheet?.file?.name || "Planilha")}
@@ -6024,23 +6036,30 @@ function validateMemorialStep() {
       !d.initialConsiderations.trim() && '[data-bind="memorial.initialConsiderations"]',
       !d.preliminaryProvisions.trim() && '[data-bind="memorial.preliminaryProvisions"]',
     ].filter(Boolean);
+    if (introductoryFields.length) {
+      showFieldValidationMessage({
+        title: "Complete os textos introdutórios",
+        text: "Revise as Considerações iniciais e as Disposições preliminares antes de seguir para a revisão dos itens.",
+        fields: introductoryFields,
+      });
+      return false;
+    }
+  }
+  if (state.step >= 2) {
     const itemFields = [];
     d.items.forEach((item, index) => {
       if (!item.measurement.trim()) itemFields.push(`[data-bind="memorial.items.${index}.measurement"]`);
       if (!item.compensation.trim()) itemFields.push(`[data-bind="memorial.items.${index}.compensation"]`);
     });
-    const fields = [...introductoryFields, ...itemFields];
-    if (fields.length) {
-      if (itemFields.length && d.itemFilter !== "attention") {
+    if (itemFields.length) {
+      if (d.itemFilter !== "attention") {
         d.itemFilter = "attention";
         render();
       }
       showFieldValidationMessage({
-        title: introductoryFields.length ? "Complete os textos e os itens pendentes" : "Revise os itens marcados em amarelo",
-        text: introductoryFields.length
-          ? "Revise as Considerações iniciais, as Disposições preliminares e os critérios pendentes antes de gerar o Memorial Descritivo."
-          : "O filtro Atenção foi aplicado. Todo item precisa dos critérios de medição e remuneração antes de gerar o Memorial Descritivo.",
-        fields,
+        title: "Revise os itens marcados em amarelo",
+        text: "O filtro Atenção foi aplicado. Todo item precisa dos critérios de medição e remuneração antes de gerar o Memorial Descritivo.",
+        fields: itemFields,
       });
       return false;
     }
