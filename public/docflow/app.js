@@ -10756,10 +10756,6 @@ elements.renameDialog.addEventListener("click", (event) => {
   if (event.target === elements.renameDialog) closeHistoryRename();
 });
 
-elements.pdfMergeDialog.addEventListener("click", (event) => {
-  if (event.target === elements.pdfMergeDialog) closePdfMergeDialog();
-});
-
 window.addEventListener("popstate", (event) => {
   const route = event.state?.[APP_HISTORY_KEY];
   if (route) applyNavigationRoute(route);

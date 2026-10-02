@@ -1304,6 +1304,7 @@ test("offers a resilient in-browser PDF merger with ordering controls and local 
   assert.match(page, /data-pdf-drop/);
   assert.match(page, /id="pdfMergeProgress"/);
   assert.match(page, /id="pdfMergeProgressBar"[^>]*max="100"/);
+  assert.match(page, /id="pdfMergeClearButton"[^>]*data-action="pdf-clear"[^>]*>Limpar tudo<\/button>/);
   assert.match(page, /id="pdfMergeDownload"[^>]*data-action="pdf-download-result"/);
   assert.match(page, />Baixar PDF final<\/button>/);
   assert.doesNotMatch(page, /id="pdfMergeOpen"/);
@@ -1311,6 +1312,7 @@ test("offers a resilient in-browser PDF merger with ordering controls and local 
   assert.match(styles, /\.pdf-merge-dropzone/);
   assert.match(styles, /\.pdf-merge-item\.is-drag-over/);
   assert.match(styles, /\.pdf-merge-result/);
+  assert.doesNotMatch(app, /elements\.pdfMergeDialog\.addEventListener\("click"/);
   assert.match(cardAccess, /"pdfMerge"/);
   assert.ok(vendor.byteLength > 500_000);
 

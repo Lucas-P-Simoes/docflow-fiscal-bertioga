@@ -5739,6 +5739,10 @@ textarea::placeholder {
     display: grid;
     grid-template-columns: 1fr 1fr;
   }
+
+  .pdf-merge-actions .button-primary {
+    grid-column: 1 / -1;
+  }
 }
 
 .api-page {
