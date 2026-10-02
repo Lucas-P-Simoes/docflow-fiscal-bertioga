@@ -5611,6 +5611,51 @@ textarea::placeholder {
   margin-top: 18px;
 }
 
+.pdf-merge-result {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 14px;
+  margin-top: 16px;
+  padding: 14px;
+  border: 1px solid #b9ddc9;
+  border-radius: 14px;
+  background: #eef8f2;
+}
+
+.pdf-merge-result-icon {
+  display: grid;
+  place-items: center;
+  width: 34px;
+  height: 34px;
+  border-radius: 50%;
+  color: #ffffff;
+  background: var(--forest);
+  font-size: 18px;
+  font-weight: 800;
+}
+
+.pdf-merge-result-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.pdf-merge-result-copy strong {
+  color: var(--forest-dark);
+  font-size: 15px;
+}
+
+.pdf-merge-result-copy small {
+  color: var(--ink-soft);
+  font-size: 13px;
+}
+
+.pdf-merge-result .button {
+  white-space: nowrap;
+}
+
 .pdf-merge-actions {
   margin-top: 18px;
 }
@@ -5646,6 +5691,15 @@ textarea::placeholder {
   .pdf-merge-item-actions {
     grid-column: 2 / -1;
     justify-content: flex-end;
+  }
+
+  .pdf-merge-result {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .pdf-merge-result .button {
+    grid-column: 1 / -1;
+    justify-content: center;
   }
 
   .pdf-merge-actions {

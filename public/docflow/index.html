@@ -641,9 +641,17 @@
           <input id="pdfMergeFilename" type="text" maxlength="120" value="documentos-unidos.pdf" autocomplete="off" />
         </label>
         <div id="pdfMergeFeedback" class="inline-feedback is-hidden" role="status" aria-live="polite"></div>
+        <div id="pdfMergeResult" class="pdf-merge-result is-hidden" role="status" aria-live="polite">
+          <span class="pdf-merge-result-icon" aria-hidden="true">✓</span>
+          <span class="pdf-merge-result-copy">
+            <strong>Seu PDF está pronto</strong>
+            <small id="pdfMergeResultDetails">Clique no botão para salvar o arquivo.</small>
+          </span>
+          <a id="pdfMergeDownload" class="button button-primary" href="#" download="documentos-unidos.pdf">Baixar PDF unido</a>
+        </div>
         <div class="dialog-actions pdf-merge-actions">
           <button class="button button-secondary" type="button" data-action="close-pdf-merge">Fechar</button>
-          <button id="pdfMergeButton" class="button button-primary" type="button" data-action="pdf-merge" disabled>Unir PDFs</button>
+          <button id="pdfMergeButton" class="button button-primary" type="button" data-action="pdf-merge" disabled>Gerar PDF unido</button>
         </div>
       </div>
     </dialog>
@@ -659,6 +667,6 @@
     <script src="vendor/jspdf.umd.min.js" defer></script>
     <script src="vendor/pdf-lib.min.js" defer></script>
     <script src="memorial-xlsx.js?v=20260924-memorial-rag" defer></script>
-    <script src="app.js?v=20261002-pdf-merge" defer></script>
+    <script src="app.js?v=20261002-pdf-download-fix" defer></script>
   </body>
 </html>

@@ -308,6 +308,9 @@ const elements = {
   pdfMergeSummary: document.querySelector("#pdfMergeSummary"),
   pdfMergeFilename: document.querySelector("#pdfMergeFilename"),
   pdfMergeFeedback: document.querySelector("#pdfMergeFeedback"),
+  pdfMergeResult: document.querySelector("#pdfMergeResult"),
+  pdfMergeResultDetails: document.querySelector("#pdfMergeResultDetails"),
+  pdfMergeDownload: document.querySelector("#pdfMergeDownload"),
   pdfMergeClearButton: document.querySelector("#pdfMergeClearButton"),
   pdfMergeButton: document.querySelector("#pdfMergeButton"),
   kanbanBoardDialog: document.querySelector("#kanbanBoardDialog"),
@@ -506,6 +509,7 @@ let homeSearchQuery = "";
 let pdfMergeFiles = [];
 let draggedPdfMergeId = "";
 let pdfMergeBusy = false;
+let pdfMergeResult = null;
 
 function currentNavigationRoute() {
   if (state.api.open) return { view: "api" };
@@ -1618,6 +1622,21 @@ function setPdfMergeFeedback(message = "", kind = "info") {
   elements.pdfMergeFeedback.className = `inline-feedback${message ? "" : " is-hidden"}${kind === "error" ? " is-error" : ""}`;
 }
 
+function revokePdfMergeResult() {
+  if (pdfMergeResult?.url) URL.revokeObjectURL(pdfMergeResult.url);
+  pdfMergeResult = null;
+  elements.pdfMergeResult.classList.add("is-hidden");
+  elements.pdfMergeDownload.removeAttribute("href");
+}
+
+function renderPdfMergeResult() {
+  elements.pdfMergeResult.classList.toggle("is-hidden", !pdfMergeResult);
+  if (!pdfMergeResult) return;
+  elements.pdfMergeResultDetails.textContent = `${pdfMergeResult.pageCount} ${pdfMergeResult.pageCount === 1 ? "página" : "páginas"} • ${formatPdfFileSize(pdfMergeResult.size)}`;
+  elements.pdfMergeDownload.href = pdfMergeResult.url;
+  elements.pdfMergeDownload.download = pdfMergeResult.filename;
+}
+
 function renderPdfMergeFiles() {
   const totalPages = pdfMergeFiles.reduce((sum, item) => sum + item.pageCount, 0);
   const totalBytes = pdfMergeFiles.reduce((sum, item) => sum + item.file.size, 0);
@@ -1629,6 +1648,7 @@ function renderPdfMergeFiles() {
     : "Adicione pelo menos 2 arquivos para começar.";
   elements.pdfMergeClearButton.disabled = !pdfMergeFiles.length || pdfMergeBusy;
   elements.pdfMergeButton.disabled = pdfMergeFiles.length < 2 || pdfMergeBusy;
+  renderPdfMergeResult();
   if (!pdfMergeFiles.length) {
     elements.pdfMergeList.innerHTML = `<div class="pdf-merge-empty"><strong>Sua lista está vazia</strong><span>Os arquivos aparecerão aqui na ordem do PDF final.</span></div>`;
     return;
@@ -1666,6 +1686,7 @@ function movePdfMergeFile(id, offset) {
   const [item] = next.splice(index, 1);
   next.splice(nextIndex, 0, item);
   pdfMergeFiles = next;
+  revokePdfMergeResult();
   renderPdfMergeFiles();
 }
 
@@ -1678,6 +1699,7 @@ function reorderPdfMergeFile(sourceId, targetId) {
   const [item] = next.splice(sourceIndex, 1);
   next.splice(targetIndex, 0, item);
   pdfMergeFiles = next;
+  revokePdfMergeResult();
   renderPdfMergeFiles();
 }
 
@@ -1694,6 +1716,7 @@ async function addPdfMergeFiles(fileList) {
     return;
   }
   elements.pdfMergeDropZone.classList.add("is-busy");
+  revokePdfMergeResult();
   setPdfMergeFeedback(`Verificando ${pdfFiles.length} ${pdfFiles.length === 1 ? "arquivo" : "arquivos"}…`);
   let added = 0;
   const rejected = [];
@@ -1717,6 +1740,7 @@ async function addPdfMergeFiles(fileList) {
 
 function clearPdfMergeFiles() {
   if (pdfMergeBusy) return;
+  revokePdfMergeResult();
   pdfMergeFiles = [];
   renderPdfMergeFiles();
   setPdfMergeFeedback("");
@@ -1724,6 +1748,7 @@ function clearPdfMergeFiles() {
 
 function removePdfMergeFile(id) {
   if (pdfMergeBusy) return;
+  revokePdfMergeResult();
   pdfMergeFiles = pdfMergeFiles.filter((item) => item.id !== id);
   renderPdfMergeFiles();
   setPdfMergeFeedback("");
@@ -1742,6 +1767,7 @@ async function mergePdfFiles() {
     return;
   }
   pdfMergeBusy = true;
+  revokePdfMergeResult();
   elements.pdfMergeButton.textContent = "Preparando PDF…";
   renderPdfMergeFiles();
   setPdfMergeFeedback("Unindo os arquivos na ordem escolhida…");
@@ -1755,21 +1781,22 @@ async function mergePdfFiles() {
       pages.forEach((page) => merged.addPage(page));
     }
     const output = await merged.save();
-    const url = URL.createObjectURL(new Blob([output], { type: "application/pdf" }));
-    const anchor = document.createElement("a");
-    anchor.href = url;
-    anchor.download = normalizedPdfMergeFilename();
-    document.body.append(anchor);
-    anchor.click();
-    anchor.remove();
-    window.setTimeout(() => URL.revokeObjectURL(url), 30000);
-    setPdfMergeFeedback(`PDF concluído com ${merged.getPageCount()} ${merged.getPageCount() === 1 ? "página" : "páginas"}. O download foi iniciado.`);
-    showToast("PDF unido com sucesso.");
-  } catch {
+    const safeBytes = output.buffer.slice(output.byteOffset, output.byteOffset + output.byteLength);
+    const blob = new Blob([safeBytes], { type: "application/pdf" });
+    pdfMergeResult = {
+      url: URL.createObjectURL(blob),
+      filename: normalizedPdfMergeFilename(),
+      pageCount: merged.getPageCount(),
+      size: blob.size,
+    };
+    setPdfMergeFeedback("PDF concluído. Use o botão “Baixar PDF unido” abaixo para salvar o arquivo.");
+    showToast("PDF unido e pronto para baixar.");
+  } catch (error) {
+    console.error("Falha ao unir PDFs", error);
     setPdfMergeFeedback("Não foi possível unir os arquivos. Verifique se todos os PDFs são válidos e não possuem senha.", "error");
   } finally {
     pdfMergeBusy = false;
-    elements.pdfMergeButton.textContent = "Unir PDFs";
+    elements.pdfMergeButton.textContent = "Gerar PDF unido";
     renderPdfMergeFiles();
   }
 }
@@ -10234,6 +10261,11 @@ document.addEventListener("input", (event) => {
     filterHomeDocuments();
     return;
   }
+  if (target === elements.pdfMergeFilename && pdfMergeResult) {
+    pdfMergeResult.filename = normalizedPdfMergeFilename();
+    renderPdfMergeResult();
+    return;
+  }
   clearValidationHighlight(target);
   if (target.dataset.drainageAdopted) {
     state.drainage.adopted[target.dataset.drainageAdopted] = target.value;
@@ -10560,6 +10592,7 @@ window.addEventListener("popstate", (event) => {
 
 window.addEventListener("beforeunload", () => {
   stopNotificationPolling();
+  if (pdfMergeResult?.url) URL.revokeObjectURL(pdfMergeResult.url);
   state.report.photos.forEach((photo) => URL.revokeObjectURL(photo.url));
   if (state.report.map?.url) URL.revokeObjectURL(state.report.map.url);
   if (state.tr.interventionImage?.url) URL.revokeObjectURL(state.tr.interventionImage.url);

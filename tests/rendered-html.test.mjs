@@ -1272,13 +1272,18 @@ test("offers an in-browser PDF merger with ordering controls and local download"
   assert.match(app, /async function addPdfMergeFiles/);
   assert.match(app, /async function mergePdfFiles/);
   assert.match(app, /function reorderPdfMergeFile/);
+  assert.match(app, /function revokePdfMergeResult/);
+  assert.match(app, /pdfMergeResult = \{/);
   assert.match(app, /copyPages/);
   assert.match(page, /id="pdfMergeDialog"/);
   assert.match(page, /id="pdfMergeInput"[^>]*multiple/);
   assert.match(page, /data-pdf-drop/);
+  assert.match(page, /id="pdfMergeDownload"[^>]*download="documentos-unidos\.pdf"/);
+  assert.match(page, />Baixar PDF unido<\/a>/);
   assert.match(page, /vendor\/pdf-lib\.min\.js/);
   assert.match(styles, /\.pdf-merge-dropzone/);
   assert.match(styles, /\.pdf-merge-item\.is-drag-over/);
+  assert.match(styles, /\.pdf-merge-result/);
   assert.match(cardAccess, /"pdfMerge"/);
   assert.ok(vendor.byteLength > 500_000);
 
@@ -1294,7 +1299,14 @@ test("offers an in-browser PDF merger with ordering controls and local download"
     const pages = await merged.copyPages(source, source.getPageIndices());
     pages.forEach((pdfPage) => merged.addPage(pdfPage));
   }
-  const output = await PDFDocument.load(await merged.save());
+  const mergedBytes = await merged.save();
+  const safeBytes = mergedBytes.buffer.slice(
+    mergedBytes.byteOffset,
+    mergedBytes.byteOffset + mergedBytes.byteLength,
+  );
+  const resultBlob = new Blob([safeBytes], { type: "application/pdf" });
+  assert.equal(resultBlob.type, "application/pdf");
+  const output = await PDFDocument.load(await resultBlob.arrayBuffer());
   assert.equal(output.getPageCount(), 3);
   assert.deepEqual(output.getPage(0).getSize(), { width: 300, height: 200 });
   assert.deepEqual(output.getPage(2).getSize(), { width: 200, height: 300 });
