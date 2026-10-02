@@ -185,6 +185,8 @@ test("keeps the editable and deployable DocFlow assets synchronized", async () =
   const [
     sourceApp,
     builtApp,
+    sourcePdfMergeWorker,
+    builtPdfMergeWorker,
     sourceTemplate,
     builtTemplate,
     sourceTechnicalOpinionTemplate,
@@ -204,6 +206,8 @@ test("keeps the editable and deployable DocFlow assets synchronized", async () =
   ] = await Promise.all([
     readFile(new URL("public/docflow/app.js", siteRoot)),
     readFile(new URL("dist/client/docflow/app.js", siteRoot)),
+    readFile(new URL("public/docflow/pdf-merge-worker.js", siteRoot)),
+    readFile(new URL("dist/client/docflow/pdf-merge-worker.js", siteRoot)),
     readFile(new URL("public/docflow/templates/MODELO_FOLHA_COTA.docx", siteRoot)),
     readFile(
       new URL("dist/client/docflow/templates/MODELO_FOLHA_COTA.docx", siteRoot),
@@ -233,6 +237,7 @@ test("keeps the editable and deployable DocFlow assets synchronized", async () =
   ]);
 
   assert.deepEqual(builtApp, sourceApp);
+  assert.deepEqual(builtPdfMergeWorker, sourcePdfMergeWorker);
   assert.deepEqual(builtTemplate, sourceTemplate);
   assert.deepEqual(builtTechnicalOpinionTemplate, sourceTechnicalOpinionTemplate);
   assert.deepEqual(builtEtpTemplate, sourceEtpTemplate);
@@ -1258,13 +1263,14 @@ test("publishes a shared process guide that only the administrator can manage", 
 });
 
 
-test("offers an in-browser PDF merger with ordering controls and local download", async () => {
-  const [app, page, styles, cardAccess, vendor] = await Promise.all([
+test("offers a resilient in-browser PDF merger with ordering controls and local download", async () => {
+  const [app, page, styles, cardAccess, vendor, pdfMergeWorker] = await Promise.all([
     readFile(new URL("public/docflow/app.js", siteRoot), "utf8"),
     readFile(new URL("public/docflow/index.html", siteRoot), "utf8"),
     readFile(new URL("public/docflow/styles.css", siteRoot), "utf8"),
     readFile(new URL("db/card-access.ts", siteRoot), "utf8"),
     readFile(new URL("public/docflow/vendor/pdf-lib.min.js", siteRoot)),
+    readFile(new URL("public/docflow/pdf-merge-worker.js", siteRoot), "utf8"),
   ]);
 
   assert.match(app, /key: "pdfMerge"/);
@@ -1275,15 +1281,24 @@ test("offers an in-browser PDF merger with ordering controls and local download"
   assert.match(app, /function revokePdfMergeResult/);
   assert.match(app, /function downloadPdfMergeResult/);
   assert.match(app, /function setPdfMergeProgress/);
-  assert.match(app, /function waitForPdfMergeUi/);
-  assert.match(app, /useObjectStreams: false/);
-  assert.match(app, /objectsPerTick: 20/);
-  assert.match(app, /PDFDocument\.load\(exactBlobBytes/);
-  assert.match(app, /header\.startsWith\("%PDF-"\)/);
-  assert.match(app, /trailer\.includes\("%%EOF"\)/);
+  assert.match(app, /function runPdfMergeWorker/);
+  assert.match(app, /function cancelPdfMergeJob/);
+  assert.match(app, /new Worker\(new URL\("pdf-merge-worker\.js\?v=20261002-resilient"/);
+  assert.match(app, /worker\?\.terminate\(\)/);
+  assert.match(app, /15 \* 60_000/);
+  assert.match(app, /30 \* 60_000/);
+  assert.match(app, /Cancelar processamento/);
   assert.match(app, /pdfMergeResult = \{/);
   assert.match(app, /blob,/);
-  assert.match(app, /copyPages/);
+  assert.match(pdfMergeWorker, /importScripts\("\.\/vendor\/pdf-lib\.min\.js"\)/);
+  assert.match(pdfMergeWorker, /parseSpeed: PDFLib\.ParseSpeeds\.Fastest/);
+  assert.match(pdfMergeWorker, /copyPages/);
+  assert.match(pdfMergeWorker, /useObjectStreams: false/);
+  assert.match(pdfMergeWorker, /objectsPerTick: 20/);
+  assert.match(pdfMergeWorker, /header\.startsWith\("%PDF-"\)/);
+  assert.match(pdfMergeWorker, /trailer\.includes\("%%EOF"\)/);
+  assert.match(pdfMergeWorker, /PDFDocument\.load\(output/);
+  assert.match(pdfMergeWorker, /\[output\.buffer\]/);
   assert.match(page, /id="pdfMergeDialog"/);
   assert.match(page, /id="pdfMergeInput"[^>]*multiple/);
   assert.match(page, /data-pdf-drop/);
@@ -1292,7 +1307,7 @@ test("offers an in-browser PDF merger with ordering controls and local download"
   assert.match(page, /id="pdfMergeDownload"[^>]*data-action="pdf-download-result"/);
   assert.match(page, />Baixar PDF final<\/button>/);
   assert.doesNotMatch(page, /id="pdfMergeOpen"/);
-  assert.match(page, /vendor\/pdf-lib\.min\.js/);
+  assert.doesNotMatch(page, /<script src="vendor\/pdf-lib\.min\.js"/);
   assert.match(styles, /\.pdf-merge-dropzone/);
   assert.match(styles, /\.pdf-merge-item\.is-drag-over/);
   assert.match(styles, /\.pdf-merge-result/);
@@ -1311,9 +1326,7 @@ test("offers an in-browser PDF merger with ordering controls and local download"
     const pages = await merged.copyPages(source, source.getPageIndices());
     pages.forEach((pdfPage) => merged.addPage(pdfPage));
   }
-  const firstPass = await merged.save({ useObjectStreams: false, addDefaultPage: false, objectsPerTick: 20 });
-  const normalized = await PDFDocument.load(firstPass, { updateMetadata: false });
-  const mergedBytes = await normalized.save({ useObjectStreams: false, addDefaultPage: false, objectsPerTick: 20 });
+  const mergedBytes = await merged.save({ useObjectStreams: false, addDefaultPage: false, objectsPerTick: 20 });
   const safeBytes = new Uint8Array(mergedBytes.byteLength);
   safeBytes.set(mergedBytes);
   const resultBlob = new Blob([safeBytes], { type: "application/pdf" });

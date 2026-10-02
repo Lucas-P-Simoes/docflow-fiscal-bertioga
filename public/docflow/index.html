@@ -607,7 +607,7 @@
         </div>
         <span class="eyebrow eyebrow-dark">Ferramenta de PDF</span>
         <h2 id="pdfMergeTitle">Unir arquivos PDF</h2>
-        <p class="dialog-lead">Adicione os arquivos, organize a ordem e baixe tudo em um único PDF. O processamento acontece somente neste navegador.</p>
+        <p class="dialog-lead">Adicione os arquivos, organize a ordem e baixe tudo em um único PDF. O processamento acontece somente neste navegador, sem travar a página.</p>
 
         <label id="pdfMergeDropZone" class="pdf-merge-dropzone" data-pdf-drop tabindex="0" for="pdfMergeInput">
           <span class="pdf-merge-drop-icon" aria-hidden="true">
@@ -671,8 +671,7 @@
     <script src="vendor/docx.iife.js" defer></script>
     <script src="vendor/html2canvas.min.js" defer></script>
     <script src="vendor/jspdf.umd.min.js" defer></script>
-    <script src="vendor/pdf-lib.min.js" defer></script>
     <script src="memorial-xlsx.js?v=20260924-memorial-rag" defer></script>
-    <script src="app.js?v=20261002-pdf-staged-download" defer></script>
+    <script src="app.js?v=20261002-pdf-worker-resilient" defer></script>
   </body>
 </html>
