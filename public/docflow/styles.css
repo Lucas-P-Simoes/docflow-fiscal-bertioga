@@ -5656,6 +5656,12 @@ textarea::placeholder {
   white-space: nowrap;
 }
 
+.pdf-merge-result-actions {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
 .pdf-merge-actions {
   margin-top: 18px;
 }
@@ -5697,8 +5703,13 @@ textarea::placeholder {
     grid-template-columns: auto minmax(0, 1fr);
   }
 
-  .pdf-merge-result .button {
+  .pdf-merge-result-actions {
     grid-column: 1 / -1;
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
+
+  .pdf-merge-result .button {
     justify-content: center;
   }
 

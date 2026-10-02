@@ -645,9 +645,12 @@
           <span class="pdf-merge-result-icon" aria-hidden="true">✓</span>
           <span class="pdf-merge-result-copy">
             <strong>Seu PDF está pronto</strong>
-            <small id="pdfMergeResultDetails">Clique no botão para salvar o arquivo.</small>
+            <small id="pdfMergeResultDetails">Clique em “Salvar PDF” para escolher onde guardar o arquivo.</small>
           </span>
-          <a id="pdfMergeDownload" class="button button-primary" href="#" download="documentos-unidos.pdf">Baixar PDF unido</a>
+          <span class="pdf-merge-result-actions">
+            <button id="pdfMergeDownload" class="button button-primary" type="button" data-action="pdf-download-result">Salvar PDF</button>
+            <a id="pdfMergeOpen" class="button button-secondary" href="#" target="_blank" rel="noopener">Abrir PDF</a>
+          </span>
         </div>
         <div class="dialog-actions pdf-merge-actions">
           <button class="button button-secondary" type="button" data-action="close-pdf-merge">Fechar</button>
@@ -667,6 +670,6 @@
     <script src="vendor/jspdf.umd.min.js" defer></script>
     <script src="vendor/pdf-lib.min.js" defer></script>
     <script src="memorial-xlsx.js?v=20260924-memorial-rag" defer></script>
-    <script src="app.js?v=20261002-pdf-download-fix" defer></script>
+    <script src="app.js?v=20261002-pdf-save-fix" defer></script>
   </body>
 </html>
