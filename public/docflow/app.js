@@ -308,10 +308,12 @@ const elements = {
   pdfMergeSummary: document.querySelector("#pdfMergeSummary"),
   pdfMergeFilename: document.querySelector("#pdfMergeFilename"),
   pdfMergeFeedback: document.querySelector("#pdfMergeFeedback"),
+  pdfMergeProgress: document.querySelector("#pdfMergeProgress"),
+  pdfMergeProgressLabel: document.querySelector("#pdfMergeProgressLabel"),
+  pdfMergeProgressBar: document.querySelector("#pdfMergeProgressBar"),
   pdfMergeResult: document.querySelector("#pdfMergeResult"),
   pdfMergeResultDetails: document.querySelector("#pdfMergeResultDetails"),
   pdfMergeDownload: document.querySelector("#pdfMergeDownload"),
-  pdfMergeOpen: document.querySelector("#pdfMergeOpen"),
   pdfMergeClearButton: document.querySelector("#pdfMergeClearButton"),
   pdfMergeButton: document.querySelector("#pdfMergeButton"),
   kanbanBoardDialog: document.querySelector("#kanbanBoardDialog"),
@@ -1623,8 +1625,20 @@ function setPdfMergeFeedback(message = "", kind = "info") {
   elements.pdfMergeFeedback.className = `inline-feedback${message ? "" : " is-hidden"}${kind === "error" ? " is-error" : ""}`;
 }
 
+function setPdfMergeProgress(value = 0, message = "") {
+  const visible = Boolean(message);
+  const progress = Math.max(0, Math.min(100, Math.round(value)));
+  elements.pdfMergeProgress.classList.toggle("is-hidden", !visible);
+  elements.pdfMergeProgressLabel.textContent = message;
+  elements.pdfMergeProgressBar.value = progress;
+  elements.pdfMergeProgressBar.textContent = `${progress}%`;
+}
+
+function waitForPdfMergeUi(milliseconds = 20) {
+  return new Promise((resolve) => window.setTimeout(resolve, milliseconds));
+}
+
 function revokePdfMergeResult() {
-  if (pdfMergeResult?.url) URL.revokeObjectURL(pdfMergeResult.url);
   pdfMergeResult = null;
   elements.pdfMergeResult.classList.add("is-hidden");
 }
@@ -1635,58 +1649,25 @@ function renderPdfMergeResult() {
   elements.pdfMergeResultDetails.textContent = `${pdfMergeResult.pageCount} ${pdfMergeResult.pageCount === 1 ? "página" : "páginas"} • ${formatPdfFileSize(pdfMergeResult.size)}`;
 }
 
-function openPdfMergeResult() {
-  if (!pdfMergeResult?.url) {
-    setPdfMergeFeedback("Gere o PDF unido antes de abrir.", "error");
-    return;
-  }
-  const previewWindow = window.open(pdfMergeResult.url, "_blank");
-  if (!previewWindow) {
-    setPdfMergeFeedback("O navegador bloqueou a nova guia. Use “Salvar PDF” para abrir o arquivo no computador.", "error");
-    return;
-  }
-  previewWindow.opener = null;
-}
-
-async function downloadPdfMergeResult() {
+function downloadPdfMergeResult() {
   if (!pdfMergeResult?.blob) {
-    setPdfMergeFeedback("Gere o PDF unido antes de salvar.", "error");
+    setPdfMergeFeedback("Aguarde o processamento e a verificação do PDF antes de baixar.", "error");
     return;
   }
 
-  const { blob, filename, url } = pdfMergeResult;
-  if (typeof window.showSaveFilePicker === "function") {
-    try {
-      const fileHandle = await window.showSaveFilePicker({
-        suggestedName: filename,
-        types: [{ description: "Documento PDF", accept: { "application/pdf": [".pdf"] } }],
-      });
-      const writable = await fileHandle.createWritable();
-      await writable.write(blob);
-      await writable.close();
-      setPdfMergeFeedback(`Arquivo “${filename}” salvo com sucesso.`);
-      showToast("PDF salvo no computador.");
-      return;
-    } catch (error) {
-      if (error?.name === "AbortError") return;
-      console.warn("Não foi possível abrir a janela Salvar como", error);
-    }
-  }
-
-  if (typeof navigator.msSaveOrOpenBlob === "function") {
-    navigator.msSaveOrOpenBlob(blob, filename);
-  } else {
-    const downloadLink = document.createElement("a");
-    downloadLink.href = url;
-    downloadLink.download = filename;
-    downloadLink.rel = "noopener";
-    downloadLink.style.display = "none";
-    document.body.append(downloadLink);
-    downloadLink.click();
-    downloadLink.remove();
-  }
-  setPdfMergeFeedback("Download iniciado. Se o navegador bloquear, use “Abrir PDF” e salve pela nova guia.");
-  showToast("Download do PDF iniciado.");
+  const { blob, filename } = pdfMergeResult;
+  const downloadUrl = URL.createObjectURL(blob);
+  const downloadLink = document.createElement("a");
+  downloadLink.href = downloadUrl;
+  downloadLink.download = filename;
+  downloadLink.rel = "noopener";
+  downloadLink.style.display = "none";
+  document.body.append(downloadLink);
+  downloadLink.click();
+  downloadLink.remove();
+  window.setTimeout(() => URL.revokeObjectURL(downloadUrl), 60_000);
+  setPdfMergeFeedback(`Download de “${filename}” iniciado. O arquivo foi processado e verificado antes da liberação.`);
+  showToast("Download do PDF final iniciado.");
 }
 
 function renderPdfMergeFiles() {
@@ -1820,42 +1801,64 @@ async function mergePdfFiles() {
   }
   pdfMergeBusy = true;
   revokePdfMergeResult();
-  elements.pdfMergeButton.textContent = "Preparando PDF…";
+  elements.pdfMergeButton.textContent = "Processando…";
   renderPdfMergeFiles();
-  setPdfMergeFeedback("Unindo os arquivos na ordem escolhida…");
+  setPdfMergeFeedback("");
+  setPdfMergeProgress(2, "Preparando a união dos arquivos…");
   try {
     const merged = await window.PDFLib.PDFDocument.create();
     for (let index = 0; index < pdfMergeFiles.length; index += 1) {
       const item = pdfMergeFiles[index];
-      setPdfMergeFeedback(`Adicionando ${index + 1} de ${pdfMergeFiles.length}: ${item.file.name}`);
-      const source = await window.PDFLib.PDFDocument.load(await item.file.arrayBuffer());
+      const progress = 5 + ((index + 1) / pdfMergeFiles.length) * 50;
+      setPdfMergeProgress(progress, `Lendo e adicionando ${index + 1} de ${pdfMergeFiles.length}: ${item.file.name}`);
+      await waitForPdfMergeUi();
+      const sourceBytes = new Uint8Array(await item.file.arrayBuffer());
+      const source = await window.PDFLib.PDFDocument.load(sourceBytes, { updateMetadata: false });
       const pages = await merged.copyPages(source, source.getPageIndices());
       pages.forEach((page) => merged.addPage(page));
+      await waitForPdfMergeUi();
     }
-    const output = await merged.save({ useObjectStreams: false, addDefaultPage: false });
+
+    setPdfMergeProgress(62, "Montando o arquivo PDF final…");
+    await waitForPdfMergeUi(40);
+    const firstPass = await merged.save({ useObjectStreams: false, addDefaultPage: false, objectsPerTick: 20 });
+
+    setPdfMergeProgress(76, "Normalizando o PDF para máxima compatibilidade…");
+    await waitForPdfMergeUi(40);
+    const normalizedDocument = await window.PDFLib.PDFDocument.load(firstPass, { updateMetadata: false });
+    const output = await normalizedDocument.save({ useObjectStreams: false, addDefaultPage: false, objectsPerTick: 20 });
     const safeBytes = new Uint8Array(output.byteLength);
     safeBytes.set(output);
-    const verified = await window.PDFLib.PDFDocument.load(safeBytes);
+
+    setPdfMergeProgress(90, "Verificando a integridade do arquivo completo…");
+    await waitForPdfMergeUi(40);
+    const filename = normalizedPdfMergeFilename();
+    const blob = new Blob([safeBytes], { type: "application/pdf" });
+    const exactBlobBytes = new Uint8Array(await blob.arrayBuffer());
+    const header = new TextDecoder().decode(exactBlobBytes.slice(0, 8));
+    const trailer = new TextDecoder().decode(exactBlobBytes.slice(-2048));
+    const verified = await window.PDFLib.PDFDocument.load(exactBlobBytes, { updateMetadata: false });
     const pageCount = verified.getPageCount();
-    if (!pageCount || pageCount !== merged.getPageCount()) {
+    if (!header.startsWith("%PDF-") || !trailer.includes("%%EOF") || !pageCount || pageCount !== merged.getPageCount()) {
       throw new Error("O PDF final não passou na verificação de integridade.");
     }
-    const filename = normalizedPdfMergeFilename();
-    const blob = new File([safeBytes], filename, { type: "application/pdf", lastModified: Date.now() });
     pdfMergeResult = {
       blob,
-      url: URL.createObjectURL(blob),
       filename,
       pageCount,
       size: blob.size,
     };
-    setPdfMergeFeedback("PDF concluído e verificado. Use “Salvar PDF” para guardar ou “Abrir PDF” para visualizar.");
-    showToast("PDF unido e pronto para salvar.");
+    setPdfMergeProgress(100, "PDF processado e verificado com sucesso.");
+    await waitForPdfMergeUi(180);
+    setPdfMergeFeedback("Processamento concluído. O botão de download foi liberado.");
+    showToast("PDF final pronto para baixar.");
   } catch (error) {
     console.error("Falha ao unir PDFs", error);
-    setPdfMergeFeedback("Não foi possível unir os arquivos. Verifique se todos os PDFs são válidos e não possuem senha.", "error");
+    revokePdfMergeResult();
+    setPdfMergeFeedback("Não foi possível concluir e validar o PDF. Verifique se os arquivos são válidos, não possuem senha e tente novamente.", "error");
   } finally {
     pdfMergeBusy = false;
+    setPdfMergeProgress();
     elements.pdfMergeButton.textContent = "Gerar PDF unido";
     renderPdfMergeFiles();
   }
@@ -10112,7 +10115,6 @@ async function handleAction(action, target) {
   if (action === "pdf-move-down") return movePdfMergeFile(target.dataset.id, 1);
   if (action === "pdf-merge") return mergePdfFiles();
   if (action === "pdf-download-result") return downloadPdfMergeResult();
-  if (action === "pdf-open-result") return openPdfMergeResult();
   if (action === "delete-history") return confirmHistoryDelete(target.dataset.id);
   if (action === "logout") return logout();
   if (action === "start-report") return startFlow("report");

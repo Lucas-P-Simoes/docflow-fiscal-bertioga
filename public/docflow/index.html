@@ -641,15 +641,18 @@
           <input id="pdfMergeFilename" type="text" maxlength="120" value="documentos-unidos.pdf" autocomplete="off" />
         </label>
         <div id="pdfMergeFeedback" class="inline-feedback is-hidden" role="status" aria-live="polite"></div>
+        <div id="pdfMergeProgress" class="pdf-merge-progress is-hidden" role="status" aria-live="polite">
+          <span id="pdfMergeProgressLabel">Preparando os arquivos…</span>
+          <progress id="pdfMergeProgressBar" max="100" value="0">0%</progress>
+        </div>
         <div id="pdfMergeResult" class="pdf-merge-result is-hidden" role="status" aria-live="polite">
           <span class="pdf-merge-result-icon" aria-hidden="true">✓</span>
           <span class="pdf-merge-result-copy">
             <strong>Seu PDF está pronto</strong>
-            <small id="pdfMergeResultDetails">Clique em “Salvar PDF” para escolher onde guardar o arquivo.</small>
+            <small id="pdfMergeResultDetails">O download será liberado depois da verificação.</small>
           </span>
           <span class="pdf-merge-result-actions">
-            <button id="pdfMergeDownload" class="button button-primary" type="button" data-action="pdf-download-result">Salvar PDF</button>
-            <button id="pdfMergeOpen" class="button button-secondary" type="button" data-action="pdf-open-result">Abrir PDF</button>
+            <button id="pdfMergeDownload" class="button button-primary" type="button" data-action="pdf-download-result">Baixar PDF final</button>
           </span>
         </div>
         <div class="dialog-actions pdf-merge-actions">
@@ -670,6 +673,6 @@
     <script src="vendor/jspdf.umd.min.js" defer></script>
     <script src="vendor/pdf-lib.min.js" defer></script>
     <script src="memorial-xlsx.js?v=20260924-memorial-rag" defer></script>
-    <script src="app.js?v=20261002-pdf-compatibility-fix" defer></script>
+    <script src="app.js?v=20261002-pdf-staged-download" defer></script>
   </body>
 </html>
