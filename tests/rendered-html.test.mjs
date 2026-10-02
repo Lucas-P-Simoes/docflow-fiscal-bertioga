@@ -1274,8 +1274,12 @@ test("offers an in-browser PDF merger with ordering controls and local download"
   assert.match(app, /function reorderPdfMergeFile/);
   assert.match(app, /function revokePdfMergeResult/);
   assert.match(app, /async function downloadPdfMergeResult/);
+  assert.match(app, /function openPdfMergeResult/);
   assert.match(app, /showSaveFilePicker/);
   assert.match(app, /createWritable/);
+  assert.match(app, /useObjectStreams: false/);
+  assert.match(app, /PDFDocument\.load\(safeBytes\)/);
+  assert.match(app, /new File\(\[safeBytes\]/);
   assert.match(app, /pdfMergeResult = \{/);
   assert.match(app, /blob,/);
   assert.match(app, /copyPages/);
@@ -1284,8 +1288,8 @@ test("offers an in-browser PDF merger with ordering controls and local download"
   assert.match(page, /data-pdf-drop/);
   assert.match(page, /id="pdfMergeDownload"[^>]*data-action="pdf-download-result"/);
   assert.match(page, />Salvar PDF<\/button>/);
-  assert.match(page, /id="pdfMergeOpen"[^>]*target="_blank"/);
-  assert.match(page, />Abrir PDF<\/a>/);
+  assert.match(page, /id="pdfMergeOpen"[^>]*data-action="pdf-open-result"/);
+  assert.match(page, />Abrir PDF<\/button>/);
   assert.match(page, /vendor\/pdf-lib\.min\.js/);
   assert.match(styles, /\.pdf-merge-dropzone/);
   assert.match(styles, /\.pdf-merge-item\.is-drag-over/);
@@ -1305,13 +1309,13 @@ test("offers an in-browser PDF merger with ordering controls and local download"
     const pages = await merged.copyPages(source, source.getPageIndices());
     pages.forEach((pdfPage) => merged.addPage(pdfPage));
   }
-  const mergedBytes = await merged.save();
-  const safeBytes = mergedBytes.buffer.slice(
-    mergedBytes.byteOffset,
-    mergedBytes.byteOffset + mergedBytes.byteLength,
-  );
+  const mergedBytes = await merged.save({ useObjectStreams: false, addDefaultPage: false });
+  const safeBytes = new Uint8Array(mergedBytes.byteLength);
+  safeBytes.set(mergedBytes);
   const resultBlob = new Blob([safeBytes], { type: "application/pdf" });
   assert.equal(resultBlob.type, "application/pdf");
+  assert.match(new TextDecoder().decode(safeBytes.slice(0, 8)), /^%PDF-/);
+  assert.match(new TextDecoder().decode(safeBytes.slice(-1024)), /%%EOF/);
   const output = await PDFDocument.load(await resultBlob.arrayBuffer());
   assert.equal(output.getPageCount(), 3);
   assert.deepEqual(output.getPage(0).getSize(), { width: 300, height: 200 });

@@ -1627,14 +1627,25 @@ function revokePdfMergeResult() {
   if (pdfMergeResult?.url) URL.revokeObjectURL(pdfMergeResult.url);
   pdfMergeResult = null;
   elements.pdfMergeResult.classList.add("is-hidden");
-  elements.pdfMergeOpen.removeAttribute("href");
 }
 
 function renderPdfMergeResult() {
   elements.pdfMergeResult.classList.toggle("is-hidden", !pdfMergeResult);
   if (!pdfMergeResult) return;
   elements.pdfMergeResultDetails.textContent = `${pdfMergeResult.pageCount} ${pdfMergeResult.pageCount === 1 ? "página" : "páginas"} • ${formatPdfFileSize(pdfMergeResult.size)}`;
-  elements.pdfMergeOpen.href = pdfMergeResult.url;
+}
+
+function openPdfMergeResult() {
+  if (!pdfMergeResult?.url) {
+    setPdfMergeFeedback("Gere o PDF unido antes de abrir.", "error");
+    return;
+  }
+  const previewWindow = window.open(pdfMergeResult.url, "_blank");
+  if (!previewWindow) {
+    setPdfMergeFeedback("O navegador bloqueou a nova guia. Use “Salvar PDF” para abrir o arquivo no computador.", "error");
+    return;
+  }
+  previewWindow.opener = null;
 }
 
 async function downloadPdfMergeResult() {
@@ -1821,17 +1832,24 @@ async function mergePdfFiles() {
       const pages = await merged.copyPages(source, source.getPageIndices());
       pages.forEach((page) => merged.addPage(page));
     }
-    const output = await merged.save();
-    const safeBytes = output.buffer.slice(output.byteOffset, output.byteOffset + output.byteLength);
-    const blob = new Blob([safeBytes], { type: "application/pdf" });
+    const output = await merged.save({ useObjectStreams: false, addDefaultPage: false });
+    const safeBytes = new Uint8Array(output.byteLength);
+    safeBytes.set(output);
+    const verified = await window.PDFLib.PDFDocument.load(safeBytes);
+    const pageCount = verified.getPageCount();
+    if (!pageCount || pageCount !== merged.getPageCount()) {
+      throw new Error("O PDF final não passou na verificação de integridade.");
+    }
+    const filename = normalizedPdfMergeFilename();
+    const blob = new File([safeBytes], filename, { type: "application/pdf", lastModified: Date.now() });
     pdfMergeResult = {
       blob,
       url: URL.createObjectURL(blob),
-      filename: normalizedPdfMergeFilename(),
-      pageCount: merged.getPageCount(),
+      filename,
+      pageCount,
       size: blob.size,
     };
-    setPdfMergeFeedback("PDF concluído. Use “Salvar PDF” para escolher onde guardar o arquivo.");
+    setPdfMergeFeedback("PDF concluído e verificado. Use “Salvar PDF” para guardar ou “Abrir PDF” para visualizar.");
     showToast("PDF unido e pronto para salvar.");
   } catch (error) {
     console.error("Falha ao unir PDFs", error);
@@ -10094,6 +10112,7 @@ async function handleAction(action, target) {
   if (action === "pdf-move-down") return movePdfMergeFile(target.dataset.id, 1);
   if (action === "pdf-merge") return mergePdfFiles();
   if (action === "pdf-download-result") return downloadPdfMergeResult();
+  if (action === "pdf-open-result") return openPdfMergeResult();
   if (action === "delete-history") return confirmHistoryDelete(target.dataset.id);
   if (action === "logout") return logout();
   if (action === "start-report") return startFlow("report");
