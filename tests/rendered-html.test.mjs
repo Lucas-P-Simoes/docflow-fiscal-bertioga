@@ -1279,6 +1279,7 @@ test("offers a resilient in-browser PDF merger with ordering controls and local 
   assert.match(app, /async function mergePdfFiles/);
   assert.match(app, /function reorderPdfMergeFile/);
   assert.match(app, /function revokePdfMergeResult/);
+  assert.match(app, /elements\.pdfMergeFilename\.value = "documentos-unidos\.pdf"/);
   assert.match(app, /function downloadPdfMergeResult/);
   assert.match(app, /function setPdfMergeProgress/);
   assert.match(app, /function runPdfMergeWorker/);

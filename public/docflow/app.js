@@ -1904,6 +1904,10 @@ function clearPdfMergeFiles() {
   if (pdfMergeBusy) return;
   revokePdfMergeResult();
   pdfMergeFiles = [];
+  draggedPdfMergeId = "";
+  elements.pdfMergeInput.value = "";
+  elements.pdfMergeFilename.value = "documentos-unidos.pdf";
+  setPdfMergeProgress();
   renderPdfMergeFiles();
   setPdfMergeFeedback("");
 }
