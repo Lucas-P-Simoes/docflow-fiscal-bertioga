@@ -8,6 +8,7 @@ export const HOME_CARD_KEYS = [
   "oficio",
   "notification",
   "warning",
+  "pdfMerge",
 ] as const;
 
 export type HomeCardKey = (typeof HOME_CARD_KEYS)[number];

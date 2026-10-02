@@ -428,7 +428,7 @@ test("labels every available document, including the technical opinion, ETP, TR 
     readFile(new URL("public/docflow/styles.css", siteRoot), "utf8"),
   ]);
 
-  assert.equal((app.match(/card-status is-ready/g) || []).length, 9);
+  assert.equal((app.match(/card-status is-ready/g) || []).length, 10);
   assert.equal((app.match(/card-status is-development/g) || []).length, 0);
   assert.match(app, /data-action="start-report">[\s\S]*?card-status is-ready">Pronto<\/span>[\s\S]*?<h3>Parecer técnico<\/h3>/);
   assert.match(app, /data-action="start-etp">[\s\S]*?card-status is-ready">Pronto<\/span>[\s\S]*?<h3>Estudo Técnico Preliminar<\/h3>/);
@@ -439,6 +439,7 @@ test("labels every available document, including the technical opinion, ETP, TR 
   assert.match(app, /data-kind="oficio">[\s\S]*?card-status is-ready">Pronto<\/span>[\s\S]*?<h3>Ofício<\/h3>/);
   assert.match(app, /data-action="start-notification">[\s\S]*?card-status is-ready">Pronto<\/span>[\s\S]*?<h3>Notificação<\/h3>/);
   assert.match(app, /data-action="start-warning">[\s\S]*?card-status is-ready">Pronto<\/span>[\s\S]*?<h3>Advertência<\/h3>/);
+  assert.match(app, /data-action="open-pdf-merge">[\s\S]*?card-status is-ready">Pronto<\/span>[\s\S]*?<h3>Unir arquivos PDF<\/h3>/);
   assert.doesNotMatch(app, /data-action="start-drainage"/);
   assert.match(styles, /\.card-status\s*\{/);
   assert.match(styles, /\.card-status\.is-ready\s*\{/);
@@ -1254,4 +1255,47 @@ test("publishes a shared process guide that only the administrator can manage", 
   assert.match(migration, /CREATE TABLE `content_seeds`/);
   assert.match(migration, /idx_process_guides_updated_at/);
   assert.match(migration, /PRAGMA optimize/);
+});
+
+
+test("offers an in-browser PDF merger with ordering controls and local download", async () => {
+  const [app, page, styles, cardAccess, vendor] = await Promise.all([
+    readFile(new URL("public/docflow/app.js", siteRoot), "utf8"),
+    readFile(new URL("public/docflow/index.html", siteRoot), "utf8"),
+    readFile(new URL("public/docflow/styles.css", siteRoot), "utf8"),
+    readFile(new URL("db/card-access.ts", siteRoot), "utf8"),
+    readFile(new URL("public/docflow/vendor/pdf-lib.min.js", siteRoot)),
+  ]);
+
+  assert.match(app, /key: "pdfMerge"/);
+  assert.match(app, /data-action="open-pdf-merge"/);
+  assert.match(app, /async function addPdfMergeFiles/);
+  assert.match(app, /async function mergePdfFiles/);
+  assert.match(app, /function reorderPdfMergeFile/);
+  assert.match(app, /copyPages/);
+  assert.match(page, /id="pdfMergeDialog"/);
+  assert.match(page, /id="pdfMergeInput"[^>]*multiple/);
+  assert.match(page, /data-pdf-drop/);
+  assert.match(page, /vendor\/pdf-lib\.min\.js/);
+  assert.match(styles, /\.pdf-merge-dropzone/);
+  assert.match(styles, /\.pdf-merge-item\.is-drag-over/);
+  assert.match(cardAccess, /"pdfMerge"/);
+  assert.ok(vendor.byteLength > 500_000);
+
+  const { PDFDocument } = await import("pdf-lib");
+  const first = await PDFDocument.create();
+  first.addPage([200, 300]);
+  const second = await PDFDocument.create();
+  second.addPage([300, 200]);
+  second.addPage([400, 400]);
+  const merged = await PDFDocument.create();
+  for (const bytes of [await second.save(), await first.save()]) {
+    const source = await PDFDocument.load(bytes);
+    const pages = await merged.copyPages(source, source.getPageIndices());
+    pages.forEach((pdfPage) => merged.addPage(pdfPage));
+  }
+  const output = await PDFDocument.load(await merged.save());
+  assert.equal(output.getPageCount(), 3);
+  assert.deepEqual(output.getPage(0).getSize(), { width: 300, height: 200 });
+  assert.deepEqual(output.getPage(2).getSize(), { width: 200, height: 300 });
 });

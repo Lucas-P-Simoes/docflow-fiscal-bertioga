@@ -597,6 +597,57 @@
       </form>
     </dialog>
 
+    <dialog id="pdfMergeDialog" class="dialog pdf-merge-dialog" aria-labelledby="pdfMergeTitle">
+      <div class="dialog-card pdf-merge-card">
+        <div class="dialog-topline">
+          <span class="dialog-icon pdf-merge-dialog-icon" aria-hidden="true">
+            <svg class="lucide-icon" viewBox="0 0 24 24"><use href="#icon-files"></use></svg>
+          </span>
+          <button class="icon-button" type="button" data-action="close-pdf-merge" aria-label="Fechar ferramenta de unir PDFs">×</button>
+        </div>
+        <span class="eyebrow eyebrow-dark">Ferramenta de PDF</span>
+        <h2 id="pdfMergeTitle">Unir arquivos PDF</h2>
+        <p class="dialog-lead">Adicione os arquivos, organize a ordem e baixe tudo em um único PDF. O processamento acontece somente neste navegador.</p>
+
+        <label id="pdfMergeDropZone" class="pdf-merge-dropzone" data-pdf-drop tabindex="0" for="pdfMergeInput">
+          <span class="pdf-merge-drop-icon" aria-hidden="true">
+            <svg class="lucide-icon" viewBox="0 0 24 24"><use href="#icon-files"></use></svg>
+          </span>
+          <span class="pdf-merge-drop-copy">
+            <strong>Arraste seus PDFs para cá</strong>
+            <small>ou clique para selecionar no computador</small>
+          </span>
+          <span class="button button-secondary pdf-merge-select-label">Selecionar PDFs</span>
+          <input id="pdfMergeInput" class="sr-only" type="file" multiple accept="application/pdf,.pdf" />
+        </label>
+
+        <div class="pdf-merge-toolbar">
+          <div>
+            <strong id="pdfMergeCount">Nenhum PDF adicionado</strong>
+            <span id="pdfMergeSummary">Adicione pelo menos 2 arquivos para começar.</span>
+          </div>
+          <button id="pdfMergeClearButton" class="button button-quiet" type="button" data-action="pdf-clear" disabled>Limpar lista</button>
+        </div>
+
+        <div id="pdfMergeList" class="pdf-merge-list" aria-live="polite">
+          <div class="pdf-merge-empty">
+            <strong>Sua lista está vazia</strong>
+            <span>Os arquivos aparecerão aqui na ordem do PDF final.</span>
+          </div>
+        </div>
+
+        <label class="field pdf-merge-name-field" for="pdfMergeFilename">
+          <span>Nome do arquivo final</span>
+          <input id="pdfMergeFilename" type="text" maxlength="120" value="documentos-unidos.pdf" autocomplete="off" />
+        </label>
+        <div id="pdfMergeFeedback" class="inline-feedback is-hidden" role="status" aria-live="polite"></div>
+        <div class="dialog-actions pdf-merge-actions">
+          <button class="button button-secondary" type="button" data-action="close-pdf-merge">Fechar</button>
+          <button id="pdfMergeButton" class="button button-primary" type="button" data-action="pdf-merge" disabled>Unir PDFs</button>
+        </div>
+      </div>
+    </dialog>
+
     <div id="toast" class="toast" role="status" aria-live="polite"></div>
 
     <noscript>Ative o JavaScript para usar o Fiscal Bertioga.</noscript>
@@ -606,7 +657,8 @@
     <script src="vendor/docx.iife.js" defer></script>
     <script src="vendor/html2canvas.min.js" defer></script>
     <script src="vendor/jspdf.umd.min.js" defer></script>
+    <script src="vendor/pdf-lib.min.js" defer></script>
     <script src="memorial-xlsx.js?v=20260924-memorial-rag" defer></script>
-    <script src="app.js?v=20260928-memorial-admin-step" defer></script>
+    <script src="app.js?v=20261002-pdf-merge" defer></script>
   </body>
 </html>

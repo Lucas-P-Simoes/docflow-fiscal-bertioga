@@ -55,6 +55,7 @@ const HOME_CARD_OPTIONS = [
   { key: "oficio", label: "Ofício", mark: "O" },
   { key: "notification", label: "Notificação", mark: "N" },
   { key: "warning", label: "Advertência", mark: "A" },
+  { key: "pdfMerge", label: "Unir PDFs", mark: "PDF" },
 ];
 const CORRESPONDENCE_TYPES = {
   memorando: {
@@ -299,6 +300,16 @@ const elements = {
   renameInput: document.querySelector("#renameInput"),
   renameFeedback: document.querySelector("#renameFeedback"),
   renameSubmitButton: document.querySelector("#renameSubmitButton"),
+  pdfMergeDialog: document.querySelector("#pdfMergeDialog"),
+  pdfMergeDropZone: document.querySelector("#pdfMergeDropZone"),
+  pdfMergeInput: document.querySelector("#pdfMergeInput"),
+  pdfMergeList: document.querySelector("#pdfMergeList"),
+  pdfMergeCount: document.querySelector("#pdfMergeCount"),
+  pdfMergeSummary: document.querySelector("#pdfMergeSummary"),
+  pdfMergeFilename: document.querySelector("#pdfMergeFilename"),
+  pdfMergeFeedback: document.querySelector("#pdfMergeFeedback"),
+  pdfMergeClearButton: document.querySelector("#pdfMergeClearButton"),
+  pdfMergeButton: document.querySelector("#pdfMergeButton"),
   kanbanBoardDialog: document.querySelector("#kanbanBoardDialog"),
   kanbanBoardForm: document.querySelector("#kanbanBoardForm"),
   kanbanBoardFormTitle: document.querySelector("#kanbanBoardFormTitle"),
@@ -492,6 +503,9 @@ let pendingSignatureTarget = null;
 let notificationPollTimer = null;
 let draggedKanbanCardId = "";
 let homeSearchQuery = "";
+let pdfMergeFiles = [];
+let draggedPdfMergeId = "";
+let pdfMergeBusy = false;
 
 function currentNavigationRoute() {
   if (state.api.open) return { view: "api" };
@@ -1593,6 +1607,173 @@ function closeDialog(dialog) {
   else dialog.removeAttribute("open");
 }
 
+function formatPdfFileSize(bytes) {
+  if (!Number.isFinite(bytes) || bytes <= 0) return "0 KB";
+  if (bytes < 1024 * 1024) return `${Math.max(1, Math.round(bytes / 1024))} KB`;
+  return `${(bytes / (1024 * 1024)).toFixed(bytes < 10 * 1024 * 1024 ? 1 : 0)} MB`;
+}
+
+function setPdfMergeFeedback(message = "", kind = "info") {
+  elements.pdfMergeFeedback.textContent = message;
+  elements.pdfMergeFeedback.className = `inline-feedback${message ? "" : " is-hidden"}${kind === "error" ? " is-error" : ""}`;
+}
+
+function renderPdfMergeFiles() {
+  const totalPages = pdfMergeFiles.reduce((sum, item) => sum + item.pageCount, 0);
+  const totalBytes = pdfMergeFiles.reduce((sum, item) => sum + item.file.size, 0);
+  elements.pdfMergeCount.textContent = pdfMergeFiles.length
+    ? `${pdfMergeFiles.length} ${pdfMergeFiles.length === 1 ? "PDF adicionado" : "PDFs adicionados"}`
+    : "Nenhum PDF adicionado";
+  elements.pdfMergeSummary.textContent = pdfMergeFiles.length
+    ? `${totalPages} ${totalPages === 1 ? "página" : "páginas"} • ${formatPdfFileSize(totalBytes)} no total`
+    : "Adicione pelo menos 2 arquivos para começar.";
+  elements.pdfMergeClearButton.disabled = !pdfMergeFiles.length || pdfMergeBusy;
+  elements.pdfMergeButton.disabled = pdfMergeFiles.length < 2 || pdfMergeBusy;
+  if (!pdfMergeFiles.length) {
+    elements.pdfMergeList.innerHTML = `<div class="pdf-merge-empty"><strong>Sua lista está vazia</strong><span>Os arquivos aparecerão aqui na ordem do PDF final.</span></div>`;
+    return;
+  }
+  elements.pdfMergeList.innerHTML = pdfMergeFiles.map((item, index) => `<article class="pdf-merge-item" draggable="true" data-pdf-item-id="${e(item.id)}">
+    <span class="pdf-merge-handle" aria-hidden="true" title="Arraste para reordenar">⋮⋮</span>
+    <span class="pdf-merge-order" aria-hidden="true">${index + 1}</span>
+    <span class="pdf-merge-file-copy"><strong>${e(item.file.name)}</strong><small>${item.pageCount} ${item.pageCount === 1 ? "página" : "páginas"} • ${formatPdfFileSize(item.file.size)}</small></span>
+    <span class="pdf-merge-item-actions">
+      <button class="icon-button" type="button" data-action="pdf-move-up" data-id="${e(item.id)}" aria-label="Mover ${e(item.file.name)} para cima" title="Mover para cima" ${index === 0 ? "disabled" : ""}>↑</button>
+      <button class="icon-button" type="button" data-action="pdf-move-down" data-id="${e(item.id)}" aria-label="Mover ${e(item.file.name)} para baixo" title="Mover para baixo" ${index === pdfMergeFiles.length - 1 ? "disabled" : ""}>↓</button>
+      <button class="icon-button pdf-merge-remove" type="button" data-action="pdf-remove" data-id="${e(item.id)}" aria-label="Remover ${e(item.file.name)}" title="Remover">×</button>
+    </span>
+  </article>`).join("");
+}
+
+function openPdfMergeDialog() {
+  if (!canAccessHomeCard("pdfMerge")) return;
+  renderPdfMergeFiles();
+  setPdfMergeFeedback("");
+  openDialog(elements.pdfMergeDialog);
+  requestAnimationFrame(() => elements.pdfMergeDropZone.focus());
+}
+
+function closePdfMergeDialog() {
+  closeDialog(elements.pdfMergeDialog);
+}
+
+function movePdfMergeFile(id, offset) {
+  if (pdfMergeBusy) return;
+  const index = pdfMergeFiles.findIndex((item) => item.id === id);
+  const nextIndex = index + offset;
+  if (index < 0 || nextIndex < 0 || nextIndex >= pdfMergeFiles.length) return;
+  const next = [...pdfMergeFiles];
+  const [item] = next.splice(index, 1);
+  next.splice(nextIndex, 0, item);
+  pdfMergeFiles = next;
+  renderPdfMergeFiles();
+}
+
+function reorderPdfMergeFile(sourceId, targetId) {
+  if (!sourceId || sourceId === targetId || pdfMergeBusy) return;
+  const sourceIndex = pdfMergeFiles.findIndex((item) => item.id === sourceId);
+  const targetIndex = pdfMergeFiles.findIndex((item) => item.id === targetId);
+  if (sourceIndex < 0 || targetIndex < 0) return;
+  const next = [...pdfMergeFiles];
+  const [item] = next.splice(sourceIndex, 1);
+  next.splice(targetIndex, 0, item);
+  pdfMergeFiles = next;
+  renderPdfMergeFiles();
+}
+
+async function addPdfMergeFiles(fileList) {
+  if (pdfMergeBusy) return;
+  const files = [...(fileList || [])];
+  const pdfFiles = files.filter((file) => file.type === "application/pdf" || /\.pdf$/i.test(file.name));
+  if (!pdfFiles.length) {
+    setPdfMergeFeedback("Selecione arquivos no formato PDF.", "error");
+    return;
+  }
+  if (!window.PDFLib?.PDFDocument) {
+    setPdfMergeFeedback("A ferramenta de PDF não foi carregada. Atualize a página e tente novamente.", "error");
+    return;
+  }
+  elements.pdfMergeDropZone.classList.add("is-busy");
+  setPdfMergeFeedback(`Verificando ${pdfFiles.length} ${pdfFiles.length === 1 ? "arquivo" : "arquivos"}…`);
+  let added = 0;
+  const rejected = [];
+  for (const file of pdfFiles) {
+    try {
+      const source = await window.PDFLib.PDFDocument.load(await file.arrayBuffer());
+      pdfMergeFiles.push({ id: makeId("pdf"), file, pageCount: source.getPageCount() });
+      added += 1;
+    } catch {
+      rejected.push(file.name);
+    }
+  }
+  elements.pdfMergeDropZone.classList.remove("is-busy", "is-dragging");
+  renderPdfMergeFiles();
+  if (rejected.length) {
+    setPdfMergeFeedback(`${rejected.length} ${rejected.length === 1 ? "arquivo não pôde" : "arquivos não puderam"} ser lido. Verifique se o PDF é válido e não possui senha.`, "error");
+  } else {
+    setPdfMergeFeedback(`${added} ${added === 1 ? "PDF adicionado" : "PDFs adicionados"}. Agora organize a ordem desejada.`);
+  }
+}
+
+function clearPdfMergeFiles() {
+  if (pdfMergeBusy) return;
+  pdfMergeFiles = [];
+  renderPdfMergeFiles();
+  setPdfMergeFeedback("");
+}
+
+function removePdfMergeFile(id) {
+  if (pdfMergeBusy) return;
+  pdfMergeFiles = pdfMergeFiles.filter((item) => item.id !== id);
+  renderPdfMergeFiles();
+  setPdfMergeFeedback("");
+}
+
+function normalizedPdfMergeFilename() {
+  const raw = elements.pdfMergeFilename.value.trim().replace(/[<>:"/\\|?*\u0000-\u001f]/g, "-");
+  const name = raw || "documentos-unidos.pdf";
+  return /\.pdf$/i.test(name) ? name : `${name}.pdf`;
+}
+
+async function mergePdfFiles() {
+  if (pdfMergeBusy || pdfMergeFiles.length < 2) return;
+  if (!window.PDFLib?.PDFDocument) {
+    setPdfMergeFeedback("A ferramenta de PDF não foi carregada. Atualize a página e tente novamente.", "error");
+    return;
+  }
+  pdfMergeBusy = true;
+  elements.pdfMergeButton.textContent = "Preparando PDF…";
+  renderPdfMergeFiles();
+  setPdfMergeFeedback("Unindo os arquivos na ordem escolhida…");
+  try {
+    const merged = await window.PDFLib.PDFDocument.create();
+    for (let index = 0; index < pdfMergeFiles.length; index += 1) {
+      const item = pdfMergeFiles[index];
+      setPdfMergeFeedback(`Adicionando ${index + 1} de ${pdfMergeFiles.length}: ${item.file.name}`);
+      const source = await window.PDFLib.PDFDocument.load(await item.file.arrayBuffer());
+      const pages = await merged.copyPages(source, source.getPageIndices());
+      pages.forEach((page) => merged.addPage(page));
+    }
+    const output = await merged.save();
+    const url = URL.createObjectURL(new Blob([output], { type: "application/pdf" }));
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = normalizedPdfMergeFilename();
+    document.body.append(anchor);
+    anchor.click();
+    anchor.remove();
+    window.setTimeout(() => URL.revokeObjectURL(url), 30000);
+    setPdfMergeFeedback(`PDF concluído com ${merged.getPageCount()} ${merged.getPageCount() === 1 ? "página" : "páginas"}. O download foi iniciado.`);
+    showToast("PDF unido com sucesso.");
+  } catch {
+    setPdfMergeFeedback("Não foi possível unir os arquivos. Verifique se todos os PDFs são válidos e não possuem senha.", "error");
+  } finally {
+    pdfMergeBusy = false;
+    elements.pdfMergeButton.textContent = "Unir PDFs";
+    renderPdfMergeFiles();
+  }
+}
+
 function pageHeading(kicker, title, description) {
   return `<header class="page-heading">
     <span class="eyebrow eyebrow-dark">${e(kicker)}</span>
@@ -1967,6 +2148,13 @@ function renderHome() {
         <h3>Advertência</h3>
         <p>Gere advertências padronizadas.</p>
         <span class="card-link">Criar advertência <span aria-hidden="true">→</span></span>
+      </article>
+      <article class="document-card is-pdf" tabindex="0" role="button" ${homeCardVisibilityAttribute("pdfMerge")} data-card-key="pdfMerge" data-action="open-pdf-merge">
+        <span class="card-status is-ready">Pronto</span>
+        <span class="card-number" aria-hidden="true">10</span><span class="card-icon" aria-hidden="true">${lucideIcon("files")}</span>
+        <h3>Unir arquivos PDF</h3>
+        <p>Selecione, arraste e organize PDFs para gerar um único arquivo.</p>
+        <span class="card-link">Organizar PDFs <span aria-hidden="true">→</span></span>
       </article>
     </div>
     <div id="homeSearchEmpty" class="home-search-empty" hidden>Nenhum tipo de documento encontrado.</div>
@@ -9829,6 +10017,13 @@ async function handleAction(action, target) {
   if (action === "download-history-pdf") return downloadHistoryPdf(target.dataset.id);
   if (action === "rename-history") return openHistoryRename(target.dataset.id);
   if (action === "close-rename") return closeHistoryRename();
+  if (action === "open-pdf-merge") return openPdfMergeDialog();
+  if (action === "close-pdf-merge") return closePdfMergeDialog();
+  if (action === "pdf-clear") return clearPdfMergeFiles();
+  if (action === "pdf-remove") return removePdfMergeFile(target.dataset.id);
+  if (action === "pdf-move-up") return movePdfMergeFile(target.dataset.id, -1);
+  if (action === "pdf-move-down") return movePdfMergeFile(target.dataset.id, 1);
+  if (action === "pdf-merge") return mergePdfFiles();
   if (action === "delete-history") return confirmHistoryDelete(target.dataset.id);
   if (action === "logout") return logout();
   if (action === "start-report") return startFlow("report");
@@ -10098,6 +10293,11 @@ document.addEventListener("input", (event) => {
 document.addEventListener("change", (event) => {
   const target = event.target;
   clearValidationHighlight(target);
+  if (target === elements.pdfMergeInput) {
+    void addPdfMergeFiles(target.files);
+    target.value = "";
+    return;
+  }
   if (target.dataset.adminAiUser) {
     void setAdminUserAiAccess(target.dataset.adminAiUser, target.checked);
     return;
@@ -10189,6 +10389,18 @@ document.addEventListener("change", (event) => {
 });
 
 document.addEventListener("dragover", (event) => {
+  const pdfMergeItem = event.target.closest("[data-pdf-item-id]");
+  if (pdfMergeItem && draggedPdfMergeId) {
+    event.preventDefault();
+    pdfMergeItem.classList.add("is-drag-over");
+    return;
+  }
+  const pdfMergeDropZone = event.target.closest("[data-pdf-drop]");
+  if (pdfMergeDropZone) {
+    event.preventDefault();
+    pdfMergeDropZone.classList.add("is-dragging");
+    return;
+  }
   const kanbanColumn = event.target.closest("[data-kanban-column]");
   if (kanbanColumn && draggedKanbanCardId) {
     event.preventDefault();
@@ -10202,6 +10414,8 @@ document.addEventListener("dragover", (event) => {
 });
 
 document.addEventListener("dragleave", (event) => {
+  event.target.closest("[data-pdf-item-id]")?.classList.remove("is-drag-over");
+  event.target.closest("[data-pdf-drop]")?.classList.remove("is-dragging");
   const kanbanColumn = event.target.closest("[data-kanban-column]");
   if (kanbanColumn) kanbanColumn.classList.remove("is-drag-over");
   const dropZone = event.target.closest("[data-drop]");
@@ -10209,6 +10423,21 @@ document.addEventListener("dragleave", (event) => {
 });
 
 document.addEventListener("drop", (event) => {
+  const pdfMergeItem = event.target.closest("[data-pdf-item-id]");
+  if (pdfMergeItem && draggedPdfMergeId) {
+    event.preventDefault();
+    reorderPdfMergeFile(draggedPdfMergeId, pdfMergeItem.dataset.pdfItemId);
+    draggedPdfMergeId = "";
+    document.querySelectorAll(".pdf-merge-item.is-drag-over").forEach((item) => item.classList.remove("is-drag-over"));
+    return;
+  }
+  const pdfMergeDropZone = event.target.closest("[data-pdf-drop]");
+  if (pdfMergeDropZone) {
+    event.preventDefault();
+    pdfMergeDropZone.classList.remove("is-dragging");
+    void addPdfMergeFiles(event.dataTransfer.files);
+    return;
+  }
   const kanbanColumn = event.target.closest("[data-kanban-column]");
   if (kanbanColumn && draggedKanbanCardId) {
     event.preventDefault();
@@ -10226,6 +10455,16 @@ document.addEventListener("drop", (event) => {
 });
 
 document.addEventListener("dragstart", (event) => {
+  const pdfMergeItem = event.target.closest("[data-pdf-item-id]");
+  if (pdfMergeItem && !pdfMergeBusy) {
+    draggedPdfMergeId = pdfMergeItem.dataset.pdfItemId;
+    pdfMergeItem.classList.add("is-dragging");
+    if (event.dataTransfer) {
+      event.dataTransfer.effectAllowed = "move";
+      event.dataTransfer.setData("text/plain", draggedPdfMergeId);
+    }
+    return;
+  }
   const card = event.target.closest("[data-kanban-card-id]");
   if (!card || !state.kanban.board?.canEdit) {
     event.preventDefault();
@@ -10240,6 +10479,9 @@ document.addEventListener("dragstart", (event) => {
 });
 
 document.addEventListener("dragend", (event) => {
+  event.target.closest("[data-pdf-item-id]")?.classList.remove("is-dragging");
+  document.querySelectorAll(".pdf-merge-item.is-drag-over").forEach((item) => item.classList.remove("is-drag-over"));
+  draggedPdfMergeId = "";
   event.target.closest("[data-kanban-card-id]")?.classList.remove("is-dragging");
   document.querySelectorAll("[data-kanban-column].is-drag-over").forEach((column) => column.classList.remove("is-drag-over"));
   draggedKanbanCardId = "";
@@ -10305,6 +10547,10 @@ elements.kanbanBoardDialog.addEventListener("click", (event) => {
 
 elements.renameDialog.addEventListener("click", (event) => {
   if (event.target === elements.renameDialog) closeHistoryRename();
+});
+
+elements.pdfMergeDialog.addEventListener("click", (event) => {
+  if (event.target === elements.pdfMergeDialog) closePdfMergeDialog();
 });
 
 window.addEventListener("popstate", (event) => {

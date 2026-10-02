@@ -3150,6 +3150,11 @@ select:focus-visible,
   background: #f8ecdc;
 }
 
+.document-card.is-pdf .card-icon {
+  color: #9f2f32;
+  background: #fde9e9;
+}
+
 .document-card h3 {
   margin: 24px 0 9px;
   font-family: var(--serif);
@@ -5375,6 +5380,278 @@ textarea::placeholder {
   padding: 28px;
   border-radius: 22px;
   background: var(--paper);
+}
+
+.pdf-merge-dialog {
+  width: min(calc(100% - 32px), 760px);
+}
+
+.pdf-merge-card h2 {
+  margin: 9px 0 6px;
+  font-family: var(--serif);
+  font-size: clamp(28px, 4vw, 36px);
+  font-weight: 500;
+  letter-spacing: -0.03em;
+}
+
+.pdf-merge-dialog-icon {
+  display: grid;
+  place-items: center;
+  width: 42px;
+  height: 42px;
+  border-radius: 13px;
+  color: #9f2f32;
+  background: #fde9e9;
+}
+
+.pdf-merge-dropzone {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 16px;
+  min-height: 118px;
+  margin-top: 24px;
+  padding: 22px;
+  border: 2px dashed #b8c8bf;
+  border-radius: 18px;
+  background: #f7faf8;
+  cursor: pointer;
+  transition: border-color 160ms ease, background 160ms ease, transform 160ms ease;
+}
+
+.pdf-merge-dropzone:hover,
+.pdf-merge-dropzone.is-dragging {
+  border-color: var(--forest);
+  background: var(--forest-soft);
+}
+
+.pdf-merge-dropzone.is-dragging {
+  transform: scale(1.01);
+}
+
+.pdf-merge-dropzone.is-busy {
+  cursor: wait;
+  opacity: 0.72;
+}
+
+.pdf-merge-drop-icon {
+  display: grid;
+  place-items: center;
+  width: 50px;
+  height: 50px;
+  border-radius: 15px;
+  color: var(--forest-dark);
+  background: #ffffff;
+  box-shadow: var(--shadow-sm);
+}
+
+.pdf-merge-drop-icon .lucide-icon {
+  width: 24px;
+  height: 24px;
+}
+
+.pdf-merge-drop-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.pdf-merge-drop-copy strong {
+  font-size: 17px;
+}
+
+.pdf-merge-drop-copy small {
+  color: var(--muted);
+  font-size: 14px;
+  line-height: 1.45;
+}
+
+.pdf-merge-select-label {
+  pointer-events: none;
+  white-space: nowrap;
+}
+
+.pdf-merge-toolbar {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 20px;
+  margin-top: 24px;
+}
+
+.pdf-merge-toolbar > div {
+  display: flex;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.pdf-merge-toolbar strong {
+  font-size: 15px;
+}
+
+.pdf-merge-toolbar span {
+  color: var(--muted);
+  font-size: 14px;
+}
+
+.pdf-merge-list {
+  display: flex;
+  max-height: min(340px, 38vh);
+  margin-top: 12px;
+  overflow-y: auto;
+  flex-direction: column;
+  gap: 8px;
+  scrollbar-gutter: stable;
+}
+
+.pdf-merge-empty {
+  display: flex;
+  min-height: 112px;
+  align-items: center;
+  justify-content: center;
+  flex-direction: column;
+  gap: 5px;
+  padding: 20px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  color: var(--muted);
+  background: #fbfcfb;
+  text-align: center;
+}
+
+.pdf-merge-empty strong {
+  color: var(--ink-soft);
+  font-size: 15px;
+}
+
+.pdf-merge-empty span {
+  font-size: 14px;
+}
+
+.pdf-merge-item {
+  display: grid;
+  grid-template-columns: auto auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 12px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  background: #ffffff;
+  transition: border-color 150ms ease, box-shadow 150ms ease, opacity 150ms ease;
+}
+
+.pdf-merge-item.is-dragging {
+  opacity: 0.48;
+}
+
+.pdf-merge-item.is-drag-over {
+  border-color: var(--forest);
+  box-shadow: 0 0 0 3px rgba(31, 107, 80, 0.12);
+}
+
+.pdf-merge-handle {
+  color: #8b9992;
+  cursor: grab;
+  font-size: 18px;
+  letter-spacing: -4px;
+}
+
+.pdf-merge-order {
+  display: grid;
+  place-items: center;
+  width: 30px;
+  height: 30px;
+  border-radius: 9px;
+  color: var(--forest-dark);
+  background: var(--forest-soft);
+  font-size: 13px;
+  font-weight: 800;
+}
+
+.pdf-merge-file-copy {
+  display: flex;
+  min-width: 0;
+  flex-direction: column;
+  gap: 3px;
+}
+
+.pdf-merge-file-copy strong {
+  overflow: hidden;
+  font-size: 14px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.pdf-merge-file-copy small {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.pdf-merge-item-actions {
+  display: inline-flex;
+  gap: 4px;
+}
+
+.pdf-merge-item-actions .icon-button {
+  width: 34px;
+  height: 34px;
+}
+
+.pdf-merge-item-actions .icon-button:disabled {
+  cursor: default;
+  opacity: 0.35;
+}
+
+.pdf-merge-remove {
+  color: var(--red);
+}
+
+.pdf-merge-name-field {
+  margin-top: 18px;
+}
+
+.pdf-merge-actions {
+  margin-top: 18px;
+}
+
+.pdf-merge-actions .button-primary {
+  min-width: 148px;
+}
+
+@media (max-width: 620px) {
+  .pdf-merge-card {
+    padding: 22px 18px;
+  }
+
+  .pdf-merge-dropzone {
+    grid-template-columns: auto minmax(0, 1fr);
+    min-height: 142px;
+    padding: 18px;
+  }
+
+  .pdf-merge-select-label {
+    grid-column: 1 / -1;
+    justify-content: center;
+  }
+
+  .pdf-merge-toolbar {
+    align-items: flex-start;
+  }
+
+  .pdf-merge-item {
+    grid-template-columns: auto auto minmax(0, 1fr);
+  }
+
+  .pdf-merge-item-actions {
+    grid-column: 2 / -1;
+    justify-content: flex-end;
+  }
+
+  .pdf-merge-actions {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+  }
 }
 
 .api-page {
